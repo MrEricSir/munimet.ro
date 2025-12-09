@@ -7,6 +7,11 @@ ML-powered real-time monitoring system for SF Muni Metro subway status. Download
 See [SETUP.md](SETUP.md) for detailed setup instructions and troubleshooting.
 
 ```bash
+# 0. Get the training data and model (1.1GB via git-annex)
+git annex init "your-laptop"
+git annex enableremote google-cloud  # Configure with GCS_SETUP.md
+git annex get models/trained_model/  # Or get all: git annex get .
+
 # 1. Train the model (see training/README.md)
 cd training
 python3 -m venv venv
@@ -21,6 +26,8 @@ cd ../api
 docker-compose up -d
 open http://localhost:8000
 ```
+
+**Note**: Large files (training images, labels, model) are stored with git-annex. See [GCS_SETUP.md](GCS_SETUP.md) to configure Google Cloud Storage backend.
 
 ## Project Structure
 
@@ -46,20 +53,24 @@ munimetro/
 ├── tests/                 # Test suite → See tests/README.md
 │   └── test_frontend.py   # Frontend integration tests
 │
-├── data/                  # Runtime data (gitignored)
-│   ├── muni_snapshots/    # Downloaded status images
-│   ├── training_labels.json  # Labeled training data
-│   └── cache/             # API cache files
+├── data/                  # Training data (tracked with git-annex)
+│   ├── muni_snapshots/    # 2,601 status images (268MB)
+│   ├── training_labels.json  # Labeled training data (570KB)
+│   └── cache/             # API cache files (gitignored)
 │
-└── models/                # Trained models (gitignored)
-    └── trained_model/     # BLIP model + classifier weights
+└── models/                # Trained models (tracked with git-annex)
+    └── trained_model/     # BLIP model + classifier weights (856MB)
 ```
 
 ## Documentation
 
+- **[Setup Guide](SETUP.md)** - Virtual environment setup and troubleshooting
 - **[Training Guide](training/README.md)** - Download images, label data, train models
 - **[API & Deployment Guide](api/README.md)** - Run API locally or deploy to Google Cloud Run
 - **[Testing Guide](tests/README.md)** - Run automated tests
+- **[GCS Setup Guide](GCS_SETUP.md)** - Configure Google Cloud Storage for git-annex
+- **[Storage Comparison](STORAGE_COMPARISON.md)** - Analysis of storage options for large files
+- **[Data Management Guide](DATA_MANAGEMENT.md)** - Legacy guide (see GCS_SETUP.md instead)
 
 ## Workflow
 
@@ -82,6 +93,7 @@ munimetro/
 - **Training**: Python 3.13+, PyTorch, Transformers, Pillow, tkinter
 - **API**: Docker & Docker Compose (or Python 3.13+ for local development)
 - **Cloud Deployment**: Google Cloud SDK (optional)
+- **Data Management**: git-annex (for accessing training data/models from cloud storage)
 
 ## License
 
