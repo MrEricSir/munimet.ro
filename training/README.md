@@ -4,6 +4,26 @@ Collect Muni status images, label them, and train a vision-language model to cla
 
 ## Setup
 
+### Option 1: Use Existing Training Data (Recommended for collaborators)
+
+If cloning this repo, download the pre-labeled training data via git-annex:
+
+```bash
+# Initialize git-annex
+git annex init "your-laptop"
+
+# Configure Google Cloud Storage remote (see GCS_SETUP.md)
+git annex enableremote google-cloud
+
+# Download training data (268MB images + 570KB labels)
+git annex get data/
+
+# IMPORTANT: Unlock labels file to make it editable
+git annex unlock data/training_labels.json
+```
+
+### Option 2: Start Fresh
+
 ```bash
 # Create virtual environment
 python3 -m venv venv
@@ -57,6 +77,12 @@ python label_images.py
 4. Aim for 50-100+ labeled images for good accuracy
 
 Labels saved to: `../data/training_labels.json`
+
+**Note for git-annex users**: The labels file is tracked in git-annex but kept unlocked for editing. After labeling, commit your changes:
+```bash
+git add data/training_labels.json
+git commit -m "Update training labels"
+```
 
 ## Step 3: Train Model
 

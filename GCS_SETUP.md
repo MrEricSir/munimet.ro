@@ -155,10 +155,15 @@ git annex get models/trained_model/
 # Option C: Get only the training data (for retraining)
 git annex get data/
 
-# 5. Verify files are available
+# 5. If editing training labels, unlock the file
+git annex unlock data/training_labels.json
+
+# 6. Verify files are available
 ls -lh data/muni_snapshots/ | head
 ls -lh models/trained_model/
 ```
+
+**Important**: `training_labels.json` must be unlocked to edit it with `label_images.py`. The file stays tracked in git-annex but becomes writable.
 
 ---
 
