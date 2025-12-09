@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Cache writer service - downloads images and generates predictions
+  # Runs continuously to keep cache fresh
+  cache-writer:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    container_name: muni-cache-writer
+    volumes:
+      # Mount trained model (read-only)
+      - ../models/trained_model:/app/models/trained_model:ro
+      # Mount cache directory (read-write, shared with API)
+      - cache-data:/app/data/cache
+      # Mount snapshots directory
+      - snapshot-data:/app/data/muni_snapshots
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      python check_status.py
+      --continuous
+      --write-cache
+      --interval 60
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/data/cache/latest_status.json"]
+      interval: 120s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+  # Lightweight API service - serves cached results only
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    container_name: muni-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount cache directory (read-only, shared with cache-writer)
+      - cache-data:/app/data/cache:ro
+    environment:
+      # Disable fallback mode for lightweight operation
+      - ENABLE_FALLBACK=false
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - cache-writer
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  # Named volumes for persistent data
+  cache-data:
+    driver: local
+  snapshot-data:
+    driver: local

@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+*.venv
+muni_venv/
+muni_ml_venv/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data directories (large files, regenerate locally)
+data/muni_snapshots/
+data/cache/
+
+# Trained models (large files, use Git LFS or regenerate)
+models/trained_model/
+
+# Training labels (optional - commit if you want to share)
+# data/training_labels.json
+
+# Logs
+*.log
+
+# Archives and backups
+*.zip
+*.tar.gz
+*.bak
+
+# Claude Code
+.claude/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Environment variables
+.env
+.env.local

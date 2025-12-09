@@ -1,0 +1,85 @@
+# SF Muni Metro Status Monitor
+
+ML-powered real-time monitoring system for SF Muni Metro subway status. Downloads status board images, trains vision-language models to classify and describe status, and serves predictions via a production-ready web API.
+
+## Quick Start
+
+```bash
+# 1. Train the model (see training/README.md)
+cd training
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements_ml.txt
+python download_muni_image.py  # Collect data
+python label_images.py          # Label images
+python train_model.py           # Train model
+
+# 2. Run the API (see api/README.md)
+cd ../api
+docker-compose up -d
+open http://localhost:8000
+```
+
+## Project Structure
+
+```
+munimetro/
+├── lib/                    # Shared library code
+│   └── muni_lib.py        # Core functions for download & prediction
+│
+├── training/              # Data collection & ML training → See training/README.md
+│   ├── download_muni_image.py  # Download status images
+│   ├── label_images.py         # GUI for labeling images
+│   ├── train_model.py          # Train BLIP vision-language model
+│   └── requirements_ml.txt     # ML dependencies
+│
+├── api/                   # Production web API & deployment → See api/README.md
+│   ├── api.py             # Falcon web API
+│   ├── check_status.py    # Download + predict combined
+│   ├── predict_status.py  # Standalone prediction script
+│   ├── index.html         # Web dashboard (8.6KB, vanilla JS)
+│   ├── Dockerfile         # Production container image
+│   └── docker-compose.yml # Local deployment orchestration
+│
+├── tests/                 # Test suite → See tests/README.md
+│   └── test_frontend.py   # Frontend integration tests
+│
+├── data/                  # Runtime data (gitignored)
+│   ├── muni_snapshots/    # Downloaded status images
+│   ├── training_labels.json  # Labeled training data
+│   └── cache/             # API cache files
+│
+└── models/                # Trained models (gitignored)
+    └── trained_model/     # BLIP model + classifier weights
+```
+
+## Documentation
+
+- **[Training Guide](training/README.md)** - Download images, label data, train models
+- **[API & Deployment Guide](api/README.md)** - Run API locally or deploy to Google Cloud Run
+- **[Testing Guide](tests/README.md)** - Run automated tests
+
+## Workflow
+
+1. **Data Collection** - Run `download_muni_image.py` to collect status images over time
+2. **Labeling** - Use `label_images.py` GUI to label 50-100+ images with status + descriptions
+3. **Training** - Run `train_model.py` to fine-tune BLIP model on your labeled data
+4. **Deployment** - Use Docker to deploy the API locally or to Google Cloud Run
+5. **Monitoring** - Access real-time status via web dashboard or API endpoints
+
+## Features
+
+- **ML-Powered Classification** - BLIP vision-language model classifies status (🟢/🟡/🔴) and generates descriptions
+- **Production-Ready API** - Falcon web framework with health checks, caching, and graceful degradation
+- **Lightweight Frontend** - 8.6KB vanilla JavaScript dashboard with zero dependencies
+- **Containerized Deployment** - Multi-stage Docker build with security best practices
+- **Smart Caching** - Best-of-two status logic smooths transient failures (~30ms response time)
+
+## Requirements
+
+- **Training**: Python 3.13+, PyTorch, Transformers, Pillow, tkinter
+- **API**: Docker & Docker Compose (or Python 3.13+ for local development)
+- **Cloud Deployment**: Google Cloud SDK (optional)
+
+## License
+
+MIT

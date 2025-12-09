@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+*.venv
+
+# Downloaded data (use volume mounts)
+data/
+
+# Models (use volume mounts)
+models/
+
+# Tests (not needed in production)
+tests/
+
+# IDE and OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Archives and backups
+*.zip
+*.tar.gz
+*.bak
+
+# Claude Code
+.claude/
+
+# Documentation (already in image via COPY)
+README.md

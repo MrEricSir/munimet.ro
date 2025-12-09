@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SF Muni Status</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #2d3748;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .status-display {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .status-icon {
+            font-size: 80px;
+            margin-bottom: 15px;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .status-text {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-text.green { color: #48bb78; }
+        .status-text.yellow { color: #ecc94b; }
+        .status-text.red { color: #f56565; }
+
+        .description {
+            font-size: 16px;
+            color: #4a5568;
+            margin-bottom: 15px;
+        }
+
+        .confidence {
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .metadata {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #4a5568;
+            margin-bottom: 15px;
+        }
+
+        .metadata-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .metadata-label {
+            font-size: 11px;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .probabilities {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .prob-bar {
+            flex: 1;
+            background: #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
+            height: 8px;
+            position: relative;
+        }
+
+        .prob-fill {
+            height: 100%;
+            transition: width 0.5s ease-out;
+        }
+
+        .prob-fill.green { background: #48bb78; }
+        .prob-fill.yellow { background: #ecc94b; }
+        .prob-fill.red { background: #f56565; }
+
+        .prob-label {
+            font-size: 11px;
+            color: #718096;
+            margin-bottom: 4px;
+            text-align: center;
+        }
+
+        .prob-value {
+            font-size: 10px;
+            color: #a0aec0;
+            text-align: center;
+            margin-top: 2px;
+        }
+
+        .error {
+            background: #fff5f5;
+            border: 1px solid #fc8181;
+            border-radius: 8px;
+            padding: 20px;
+            color: #c53030;
+            text-align: center;
+        }
+
+        .loading {
+            text-align: center;
+            color: #718096;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .refresh-info {
+            text-align: center;
+            font-size: 12px;
+            color: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SF Muni Metro Status</h1>
+        <p class="subtitle">Real-time subway system status</p>
+
+        <div id="app">
+            <div class="loading">
+                <div class="spinner"></div>
+                Loading status...
+            </div>
+        </div>
+
+        <div class="refresh-info">
+            Auto-refreshes every 30 seconds
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/status';
+        const REFRESH_INTERVAL = 30000; // 30 seconds
+
+        const statusEmojis = {
+            'green': '🟢',
+            'yellow': '🟡',
+            'red': '🔴'
+        };
+
+        async function fetchStatus() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderStatus(data);
+                } else {
+                    renderError(data.error || 'Failed to fetch status');
+                }
+            } catch (error) {
+                renderError('Network error: ' + error.message);
+            }
+        }
+
+        function renderStatus(data) {
+            const emoji = statusEmojis[data.status] || '⚪';
+            const timestamp = new Date(data.timestamp).toLocaleString();
+            const cacheAge = data.cache_age ? `${data.cache_age}s ago` : 'Live';
+
+            const html = `
+                <div class="status-display">
+                    <div class="status-icon">${emoji}</div>
+                    <div class="status-text ${data.status}">${data.status}</div>
+                    <div class="description">${data.description}</div>
+                    <div class="confidence">Confidence: ${(data.confidence * 100).toFixed(1)}%</div>
+                </div>
+
+                <div class="metadata">
+                    <div class="metadata-item">
+                        <span class="metadata-label">Last Updated</span>
+                        <span>${timestamp}</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Cache Age</span>
+                        <span>${cacheAge}</span>
+                    </div>
+                    ${data.is_best_of_two ? `
+                    <div class="metadata-item">
+                        <span class="metadata-label">Status</span>
+                        <span>Best of 2 ✓</span>
+                    </div>
+                    ` : ''}
+                </div>
+
+                ${data.status_history && data.status_history.length > 1 ? `
+                <div style="text-align: center; font-size: 12px; color: #718096; margin-bottom: 15px;">
+                    Recent: ${data.status_history.map(s => statusEmojis[s.status] || '⚪').join(' → ')}
+                </div>
+                ` : ''}
+
+                <div class="probabilities">
+                    <div style="flex: 1;">
+                        <div class="prob-label">Green</div>
+                        <div class="prob-bar">
+                            <div class="prob-fill green" style="width: ${data.probabilities.green * 100}%"></div>
+                        </div>
+                        <div class="prob-value">${(data.probabilities.green * 100).toFixed(1)}%</div>
+                    </div>
+                    <div style="flex: 1;">
+                        <div class="prob-label">Yellow</div>
+                        <div class="prob-bar">
+                            <div class="prob-fill yellow" style="width: ${data.probabilities.yellow * 100}%"></div>
+                        </div>
+                        <div class="prob-value">${(data.probabilities.yellow * 100).toFixed(1)}%</div>
+                    </div>
+                    <div style="flex: 1;">
+                        <div class="prob-label">Red</div>
+                        <div class="prob-bar">
+                            <div class="prob-fill red" style="width: ${data.probabilities.red * 100}%"></div>
+                        </div>
+                        <div class="prob-value">${(data.probabilities.red * 100).toFixed(1)}%</div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('app').innerHTML = html;
+        }
+
+        function renderError(message) {
+            const html = `
+                <div class="error">
+                    <strong>Error</strong><br>
+                    ${message}
+                </div>
+            `;
+            document.getElementById('app').innerHTML = html;
+        }
+
+        // Initial fetch
+        fetchStatus();
+
+        // Auto-refresh
+        setInterval(fetchStatus, REFRESH_INTERVAL);
+    </script>
+</body>
+</html>
