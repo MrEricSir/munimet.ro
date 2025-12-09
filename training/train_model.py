@@ -25,8 +25,8 @@ from tqdm import tqdm
 import numpy as np
 
 # Configuration
-LABELS_FILE = "data/training_labels.json"
-MODEL_OUTPUT_DIR = "models/trained_model"
+LABELS_FILE = "../data/training_labels.json"
+MODEL_OUTPUT_DIR = "../models/trained_model"
 BATCH_SIZE = 4
 EPOCHS = 10
 LEARNING_RATE = 5e-5
