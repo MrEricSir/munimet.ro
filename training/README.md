@@ -67,6 +67,7 @@ python label_images.py
 - `Ctrl+Enter` - Save & next
 - `Ctrl+←/→` - Navigate images
 - `Ctrl+Shift+←/→` - Jump to unlabeled images
+- `Ctrl+G` - Jump to specific index (then type index and press Enter)
 - `Delete` - Delete current image
 
 ### Labeling Tips

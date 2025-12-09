@@ -185,7 +185,7 @@ class ImageLabeler:
         self.clear_status_button.grid(row=0, column=4, padx=10)
 
         # Description frame
-        desc_frame = ttk.LabelFrame(main_frame, text="Image Description - Ctrl+Enter: Save & Next | Ctrl+←/→: Navigate", padding="10")
+        desc_frame = ttk.LabelFrame(main_frame, text="Image Description - Ctrl+Enter: Save & Next | Ctrl+←/→: Navigate | Ctrl+G: Jump to Index", padding="10")
         desc_frame.grid(row=3, column=0, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         desc_frame.columnconfigure(0, weight=1)
 
@@ -235,6 +235,17 @@ class ImageLabeler:
         self.delete_button = ttk.Button(button_frame, text="🗑️ Delete Image (Del)", command=self.delete_current_image)
         self.delete_button.grid(row=1, column=3, padx=20, pady=5)
 
+        # Row 3: Jump to index
+        ttk.Label(button_frame, text="Jump to Index:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.E)
+
+        self.jump_entry = ttk.Entry(button_frame, width=10)
+        self.jump_entry.grid(row=2, column=1, padx=5, pady=5)
+
+        self.jump_button = ttk.Button(button_frame, text="Go (Ctrl+G)", command=self.jump_to_index)
+        self.jump_button.grid(row=2, column=2, padx=5, pady=5)
+
+        ttk.Label(button_frame, text="(0-based indexing)", foreground="gray", font=('Arial', 9)).grid(row=2, column=3, padx=5, pady=5, sticky=tk.W)
+
         # Status bar
         self.status_label = ttk.Label(main_frame, text="", foreground="gray")
         self.status_label.grid(row=5, column=0, pady=5)
@@ -256,6 +267,10 @@ class ImageLabeler:
         # Delete key shortcut
         self.root.bind('<Delete>', lambda e: self.delete_current_image())
         self.root.bind('<Control-d>', lambda e: self.delete_current_image())
+
+        # Jump to index shortcuts
+        self.root.bind('<Control-g>', lambda e: self.jump_entry.focus())
+        self.jump_entry.bind('<Return>', lambda e: self.jump_to_index())
 
     def set_green_status(self, event=None):
         """Set status to green and auto-fill 'Normal' if text is empty."""
@@ -409,6 +424,36 @@ class ImageLabeler:
         if self.current_index > 0:
             self.current_index -= 1
             self.display_image()
+
+    def jump_to_index(self):
+        """Jump to a specific image by index."""
+        try:
+            index_str = self.jump_entry.get().strip()
+            if not index_str:
+                messagebox.showwarning("Invalid Index", "Please enter an index number.")
+                return
+
+            index = int(index_str)
+
+            # Validate index range
+            if index < 0 or index >= len(self.image_files):
+                messagebox.showerror(
+                    "Invalid Index",
+                    f"Index must be between 0 and {len(self.image_files) - 1}.\n"
+                    f"Total images: {len(self.image_files)}"
+                )
+                return
+
+            # Jump to the index
+            self.current_index = index
+            self.display_image()
+            self.status_label.config(text=f"Jumped to index {index}", foreground="blue")
+
+            # Clear the entry field
+            self.jump_entry.delete(0, tk.END)
+
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid number.")
 
     def next_unlabeled(self):
         """Skip to next unlabeled image (missing description and/or status)."""
