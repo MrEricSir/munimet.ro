@@ -1,0 +1,17 @@
+# Training Requirements
+# Install with: pip install -r requirements.txt
+
+# Basic dependencies for downloading and labeling
+requests>=2.32.0
+pillow>=10.0.0
+
+# ML training dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+numpy>=1.24.0
+tqdm>=4.65.0
+
+# Note: tkinter required for label_images.py GUI
+# macOS: brew install python-tk@3.13
+# Ubuntu/Debian: sudo apt-get install python3-tk

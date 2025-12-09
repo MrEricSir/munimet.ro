@@ -24,15 +24,12 @@ muni_ml_venv/
 *~
 .DS_Store
 
-# Data directories (large files, regenerate locally)
-data/muni_snapshots/
+# Runtime cache (not version controlled)
 data/cache/
 
-# Trained models (large files, use Git LFS or regenerate)
-models/trained_model/
-
-# Training labels (optional - commit if you want to share)
-# data/training_labels.json
+# Large files tracked with git-annex (see STORAGE_COMPARISON.md)
+# Note: data/muni_snapshots/, data/training_labels.json, and models/trained_model/
+# are tracked with git-annex, which stores them as symlinks in Git
 
 # Logs
 *.log

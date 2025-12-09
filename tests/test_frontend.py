@@ -117,7 +117,9 @@ class MockAPIHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(current_response).encode())
         elif self.path == "/":
             # Serve the frontend
-            with open("index.html", "r") as f:
+            import os
+            html_path = os.path.join(os.path.dirname(__file__), "..", "api", "index.html")
+            with open(html_path, "r") as f:
                 html = f.read()
                 # Replace API URL to point to our test server
                 html = html.replace("const API_URL = '/status';",

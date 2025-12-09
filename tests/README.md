@@ -5,23 +5,51 @@ Automated tests for the Muni Status Monitor web frontend.
 ## Setup
 
 ```bash
-# Install dependencies (requires Chrome)
-pip install selenium
+cd ~/Development/munimetro/tests
+
+# Install test dependencies (requires Chrome)
+pip install -r requirements.txt
 
 # macOS - Install Chrome if not already installed
 brew install --cask google-chrome
 ```
 
+**Note**: These tests use a mock API server, so you **don't** need the actual API running. The tests are self-contained.
+
 ## Running Tests
 
 ```bash
-# Make sure API is running first
-cd ../api
-docker-compose up -d
+# Run from the tests directory
+cd ~/Development/munimetro/tests
+python3 test_frontend.py
+```
 
-# Run frontend tests
-cd ../tests
-python test_frontend.py
+**Expected output:**
+```
+============================================================
+Muni Status Dashboard - Frontend Tests
+============================================================
+
+Starting mock API server...
+✓ Mock server running on http://localhost:8888
+
+Initializing Selenium WebDriver...
+✓ WebDriver ready
+
+Running tests...
+------------------------------------------------------------
+✓ Green status test passed
+✓ Yellow status test passed
+✓ Red status test passed
+✓ Best of two (green + yellow) test passed
+✓ Best of two (green + red) test passed
+✓ Error display test passed
+✓ Probability bars test passed
+------------------------------------------------------------
+
+============================================================
+✓ All tests passed!
+============================================================
 ```
 
 ## What's Tested
@@ -48,25 +76,55 @@ Tests run a mock API server that serves predefined status responses, then uses S
 
 ## Troubleshooting
 
+**FileNotFoundError: index.html**
+
+**Cause**: Running tests from wrong directory
+
+**Solution**:
+```bash
+# Make sure you're in the tests directory
+cd ~/Development/munimetro/tests
+pwd  # Should show .../munimetro/tests
+
+python3 test_frontend.py
+```
+
 **Chrome driver errors:**
 ```bash
 # Update Chrome
 brew update && brew upgrade google-chrome
 
-# Or install specific chromedriver version
+# Or update selenium
 pip install --upgrade selenium
 ```
 
-**API not running:**
+**"WebDriver not found" or "chromedriver not found":**
+
+**Solution**:
 ```bash
-cd ../api
-docker-compose up -d
+# Selenium 4+ automatically manages chromedriver
+pip install --upgrade selenium
+
+# If still having issues, explicitly install chromedriver
+brew install chromedriver
 ```
 
-**Tests failing:**
-- Check that port 8000 is available
-- Verify API health: `curl http://localhost:8000/health`
-- Check Docker containers are running: `docker-compose ps`
+**Port 8888 already in use:**
+
+**Cause**: Another process using the test server port
+
+**Solution**:
+```bash
+# Find and kill the process
+lsof -ti:8888 | xargs kill
+
+# Or change TEST_PORT in test_frontend.py
+```
+
+**Tests hang or timeout:**
+- Check Chrome is installed: `which google-chrome-stable || which chrome`
+- Try running in non-headless mode (comment out `--headless=new` in test file)
+- Check firewall isn't blocking localhost connections
 
 ## Writing New Tests
 

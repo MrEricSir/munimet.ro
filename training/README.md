@@ -10,7 +10,7 @@ python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements_ml.txt
+pip install -r requirements.txt
 
 # Install tkinter for labeling GUI (macOS)
 brew install python-tk@3.13

@@ -4,11 +4,14 @@ ML-powered real-time monitoring system for SF Muni Metro subway status. Download
 
 ## Quick Start
 
+See [SETUP.md](SETUP.md) for detailed setup instructions and troubleshooting.
+
 ```bash
 # 1. Train the model (see training/README.md)
 cd training
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements_ml.txt
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 python download_muni_image.py  # Collect data
 python label_images.py          # Label images
 python train_model.py           # Train model

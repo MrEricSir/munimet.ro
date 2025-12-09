@@ -17,9 +17,9 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy requirements and install Python dependencies
-COPY training/requirements_ml.txt .
+COPY api/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements_ml.txt
+    pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Runtime stage - minimal production image
 FROM python:3.13-slim-bookworm

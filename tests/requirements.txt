@@ -1,0 +1,5 @@
+# Test Requirements
+# Install with: pip install -r requirements.txt
+
+# Selenium for browser automation testing
+selenium>=4.15.0
