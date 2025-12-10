@@ -28,11 +28,13 @@ muni_ml_venv/
 artifacts/runtime/
 
 # Generated artifacts - training data and models (tracked via git-annex symlinks)
-# Note: artifacts/training_data/ and artifacts/models/ contain git-annex symlinks
-# The actual files are stored in .git/annex/objects/ and synced to cloud storage
-# .gitignore prevents accidental commits of actual files (not symlinks)
-artifacts/training_data/
-artifacts/models/
+# Note: Git-annex symlinks are tracked in git, but actual files are in .git/annex/objects/
+# This prevents accidental commits of actual files while allowing symlinks and unlocked files
+# Exception: labels.json is unlocked (actual file) and should be tracked by git
+artifacts/training_data/images/*
+!artifacts/training_data/images/.gitkeep
+artifacts/models/v1/*
+!artifacts/models/v1/.gitkeep
 
 # Logs
 *.log
