@@ -13,12 +13,29 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: radial-gradient(#bbb, #777);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
+            transition: background 1.5s ease-in-out;
+        }
+
+        body.status-green {
+            background: radial-gradient(#cfc, #7f7);
+        }
+
+        body.status-yellow {
+            background: radial-gradient(#eef, #ee4);
+        }
+
+        body.status-red {
+            background: radial-gradient(#fcc, #f77);
+        }
+
+        body.status-error {
+            background: radial-gradient(#bbb, #777);
         }
 
         .container {
@@ -55,6 +72,15 @@
         .status-icon {
             font-size: 80px;
             margin-bottom: 15px;
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+        }
+
+        .status-icon.fade-out {
+            opacity: 0;
+            transform: scale(0.8);
+        }
+
+        .status-icon.fade-in {
             animation: fadeIn 0.5s ease-in;
         }
 
@@ -69,6 +95,7 @@
         .status-text.green { color: #48bb78; }
         .status-text.yellow { color: #ecc94b; }
         .status-text.red { color: #f56565; }
+        .status-text.error { color: #718096; }
 
         .description {
             font-size: 16px;
@@ -143,15 +170,6 @@
             margin-top: 2px;
         }
 
-        .error {
-            background: #fff5f5;
-            border: 1px solid #fc8181;
-            border-radius: 8px;
-            padding: 20px;
-            color: #c53030;
-            text-align: center;
-        }
-
         .loading {
             text-align: center;
             color: #718096;
@@ -209,8 +227,11 @@
         const statusEmojis = {
             'green': '🟢',
             'yellow': '🟡',
-            'red': '🔴'
+            'red': '🔴',
+            'error': '✖️'
         };
+
+        let previousStatus = null;
 
         async function fetchStatus() {
             try {
@@ -227,14 +248,31 @@
             }
         }
 
+        function updateBodyBackground(status) {
+            // Remove all status classes
+            document.body.classList.remove('status-green', 'status-yellow', 'status-red', 'status-error');
+            // Add new status class
+            document.body.classList.add(`status-${status}`);
+        }
+
         function renderStatus(data) {
             const emoji = statusEmojis[data.status] || '⚪';
             const timestamp = new Date(data.timestamp).toLocaleString();
             const cacheAge = data.cache_age ? `${data.cache_age}s ago` : 'Live';
 
+            // Check if status has changed
+            const statusChanged = previousStatus !== null && previousStatus !== data.status;
+            const iconClass = statusChanged ? 'status-icon fade-in' : 'status-icon';
+
+            // Update background
+            updateBodyBackground(data.status);
+
+            // Update previous status
+            previousStatus = data.status;
+
             const html = `
                 <div class="status-display">
-                    <div class="status-icon">${emoji}</div>
+                    <div class="${iconClass}">${emoji}</div>
                     <div class="status-text ${data.status}">${data.status}</div>
                     <div class="description">${data.description}</div>
                     <div class="confidence">Confidence: ${(data.confidence * 100).toFixed(1)}%</div>
@@ -292,10 +330,23 @@
         }
 
         function renderError(message) {
+            const emoji = statusEmojis['error'];
+
+            // Check if status has changed
+            const statusChanged = previousStatus !== null && previousStatus !== 'error';
+            const iconClass = statusChanged ? 'status-icon fade-in' : 'status-icon';
+
+            // Update background
+            updateBodyBackground('error');
+
+            // Update previous status
+            previousStatus = 'error';
+
             const html = `
-                <div class="error">
-                    <strong>Error</strong><br>
-                    ${message}
+                <div class="status-display">
+                    <div class="${iconClass}">${emoji}</div>
+                    <div class="status-text error">Error</div>
+                    <div class="description">${message}</div>
                 </div>
             `;
             document.getElementById('app').innerHTML = html;
