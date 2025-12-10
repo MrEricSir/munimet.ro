@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Cache writer service - downloads images and generates predictions
   # Runs continuously to keep cache fresh

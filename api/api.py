@@ -16,12 +16,17 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Path resolution - get absolute paths relative to project root
+API_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = API_DIR.parent
+
 # Add parent directory to path for lib imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(PROJECT_ROOT))
 from lib.muni_lib import download_muni_image, predict_muni_status, load_muni_model
 
 # Configuration
-CACHE_FILE = "data/cache/latest_status.json"
+CACHE_FILE = str(PROJECT_ROOT / "data" / "cache" / "latest_status.json")
+SNAPSHOT_DIR = str(PROJECT_ROOT / "data" / "muni_snapshots")
 CACHE_MAX_AGE = 300  # seconds (5 minutes) - fallback if cache is stale
 ENABLE_FALLBACK = os.getenv('ENABLE_FALLBACK', 'true').lower() == 'true'
 
@@ -123,7 +128,7 @@ class StatusResource:
 
         # Fallback mode: download and predict
         download_result = download_muni_image(
-            output_folder="data/muni_snapshots",
+            output_folder=SNAPSHOT_DIR,
             validate_dimensions=True
         )
 
@@ -198,7 +203,7 @@ class IndexResource:
         resp.content_type = 'text/html'
 
         # Read and serve index.html
-        index_path = os.path.join(os.path.dirname(__file__), 'index.html')
+        index_path = str(API_DIR / 'index.html')
         try:
             with open(index_path, 'r') as f:
                 resp.text = f.read()

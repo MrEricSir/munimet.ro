@@ -16,13 +16,18 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+# Path resolution - get absolute paths relative to project root
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+
 # Add parent directory to path for lib imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(PROJECT_ROOT))
 from lib.muni_lib import download_muni_image, predict_muni_status
 
 # Configuration
-CACHE_DIR = "data/cache"
-CACHE_FILE = os.path.join(CACHE_DIR, "latest_status.json")
+CACHE_DIR = str(PROJECT_ROOT / "data" / "cache")
+CACHE_FILE = str(PROJECT_ROOT / "data" / "cache" / "latest_status.json")
+SNAPSHOT_DIR = str(PROJECT_ROOT / "data" / "muni_snapshots")
 DEFAULT_INTERVAL = 30  # seconds
 
 
@@ -44,7 +49,7 @@ def check_status(write_cache=False, model=None, processor=None, label_to_status=
 
     # Download image
     print("Downloading latest snapshot...")
-    result = download_muni_image(output_folder="data/muni_snapshots", validate_dimensions=True)
+    result = download_muni_image(output_folder=SNAPSHOT_DIR, validate_dimensions=True)
 
     if not result['success']:
         print(f"❌ Download failed: {result['error']}")

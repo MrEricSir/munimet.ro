@@ -13,6 +13,7 @@ import time
 import json
 from datetime import datetime
 from urllib.parse import urljoin
+from pathlib import Path
 from PIL import Image
 
 # Lazy imports for ML dependencies (only needed for prediction)
@@ -20,13 +21,18 @@ from PIL import Image
 # These are imported inside functions to avoid cross-environment dependencies
 
 
+# Path resolution - get absolute paths relative to project root
+# This works regardless of where the script is run from
+LIB_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = LIB_DIR.parent
+
 # Configuration constants
 WEBPAGE_URL = "http://sfmunicentral.com/Enterprise/MetroLO.htm"
 IMAGE_ID = "snapshotImage"
 WAIT_TIME = 10
 EXPECTED_WIDTH = 1860
 EXPECTED_HEIGHT = 800
-MODEL_DIR = "models/trained_model"
+MODEL_DIR = str(PROJECT_ROOT / "models" / "trained_model")
 
 
 def _get_classifier_class():

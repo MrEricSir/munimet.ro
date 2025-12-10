@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SF Muni Status</title>
+    <title>MuniMet.ro</title>
     <style>
         * {
             margin: 0;
@@ -39,9 +39,6 @@
         }
 
         .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             max-width: 500px;
             width: 100%;
             padding: 40px;
@@ -186,14 +183,18 @@
             margin: 0 auto 15px;
         }
 
+        #app {
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        #app.fade-out {
+            opacity: 0;
+        }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.8); }
-            to { opacity: 1; transform: scale(1); }
         }
 
         .refresh-info {
@@ -205,7 +206,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>SF Muni Metro Status</h1>
+        <h1>Muni Metro Subway Status</h1>
         <p class="subtitle">Real-time subway system status</p>
 
         <div id="app">
@@ -260,15 +261,12 @@
             const timestamp = new Date(data.timestamp).toLocaleString();
             const cacheAge = data.cache_age ? `${data.cache_age}s ago` : 'Live';
 
-            // Check if status has changed
+            // Check if status has changed or first load
+            const isFirstLoad = previousStatus === null;
             const statusChanged = previousStatus !== null && previousStatus !== data.status;
+            const shouldAnimate = isFirstLoad || statusChanged;
+
             const iconClass = statusChanged ? 'status-icon fade-in' : 'status-icon';
-
-            // Update background
-            updateBodyBackground(data.status);
-
-            // Update previous status
-            previousStatus = data.status;
 
             const html = `
                 <div class="status-display">
@@ -326,21 +324,38 @@
                 </div>
             `;
 
-            document.getElementById('app').innerHTML = html;
+            const app = document.getElementById('app');
+
+            if (shouldAnimate) {
+                // Fade out
+                app.classList.add('fade-out');
+
+                // Wait for fade-out animation, then update content
+                setTimeout(() => {
+                    updateBodyBackground(data.status);
+                    app.innerHTML = html;
+                    previousStatus = data.status;
+
+                    // Trigger fade-in by removing fade-out class
+                    app.classList.remove('fade-out');
+                }, 500);
+            } else {
+                // No animation needed, just update
+                updateBodyBackground(data.status);
+                app.innerHTML = html;
+                previousStatus = data.status;
+            }
         }
 
         function renderError(message) {
             const emoji = statusEmojis['error'];
 
-            // Check if status has changed
+            // Check if status has changed or first load
+            const isFirstLoad = previousStatus === null;
             const statusChanged = previousStatus !== null && previousStatus !== 'error';
+            const shouldAnimate = isFirstLoad || statusChanged;
+
             const iconClass = statusChanged ? 'status-icon fade-in' : 'status-icon';
-
-            // Update background
-            updateBodyBackground('error');
-
-            // Update previous status
-            previousStatus = 'error';
 
             const html = `
                 <div class="status-display">
@@ -349,7 +364,28 @@
                     <div class="description">${message}</div>
                 </div>
             `;
-            document.getElementById('app').innerHTML = html;
+
+            const app = document.getElementById('app');
+
+            if (shouldAnimate) {
+                // Fade out
+                app.classList.add('fade-out');
+
+                // Wait for fade-out animation, then update content
+                setTimeout(() => {
+                    updateBodyBackground('error');
+                    app.innerHTML = html;
+                    previousStatus = 'error';
+
+                    // Trigger fade-in by removing fade-out class
+                    app.classList.remove('fade-out');
+                }, 500);
+            } else {
+                // No animation needed, just update
+                updateBodyBackground('error');
+                app.innerHTML = html;
+                previousStatus = 'error';
+            }
         }
 
         // Initial fetch
