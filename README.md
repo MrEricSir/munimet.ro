@@ -4,30 +4,57 @@ ML-powered real-time monitoring system for SF Muni Metro subway status. Download
 
 ## Quick Start
 
-See [SETUP.md](SETUP.md) for detailed setup instructions and troubleshooting.
+### For New Users (First Time Setup)
+
+This project uses **git-annex** to manage large files (1.1GB of training data and models) stored in Google Cloud Storage.
 
 ```bash
-# 0. Get the training data and model (1.1GB via git-annex)
-git annex init "your-laptop"
-git annex enableremote google-cloud  # Configure with GCS_SETUP.md
-git annex get models/trained_model/  # Or get all: git annex get .
+# 1. Install git-annex (one-time setup)
+brew install git-annex rclone git-annex-remote-rclone
 
-# 1. Train the model (see training/README.md)
+# 2. Clone the repository
+git clone <your-repo-url>
+cd munimetro
+
+# 3. Initialize git-annex and download files from cloud
+git annex init "your-laptop"
+git annex enableremote google-cloud  # Authenticates with Google Cloud
+git annex get models/trained_model/  # Download model (856MB)
+# Optional: git annex get data/        # Download all training data (268MB)
+
+# 4. Train the model (see training/README.md)
 cd training
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python download_muni_image.py  # Collect data
+python download_muni_image.py  # Collect new data
 python label_images.py          # Label images
 python train_model.py           # Train model
 
-# 2. Run the API (see api/README.md)
+# 5. Run the API (see api/README.md)
 cd ../api
 docker-compose up -d
 open http://localhost:8000
 ```
 
-**Note**: Large files (training images, labels, model) are stored with git-annex. See [GCS_SETUP.md](GCS_SETUP.md) to configure Google Cloud Storage backend.
+### Adding New Training Data
+
+When you collect new snapshots or update labels:
+
+```bash
+# New images are automatically tracked by git-annex
+git annex add data/muni_snapshots/*.jpg
+
+# Upload to Google Cloud Storage
+git annex copy data/muni_snapshots/ --to=google-cloud
+
+# Commit the changes
+git add data/
+git commit -m "Add new training snapshots"
+git push
+```
+
+See [DATA_MANAGEMENT.md](DATA_MANAGEMENT.md) for complete git-annex workflow.
 
 ## Project Structure
 
@@ -68,8 +95,7 @@ munimetro/
 - **[Training Guide](training/README.md)** - Download images, label data, train models
 - **[API & Deployment Guide](api/README.md)** - Run API locally or deploy to Google Cloud Run
 - **[Testing Guide](tests/README.md)** - Run automated tests
-- **[Data Management Guide](DATA_MANAGEMENT.md)** - Using git-annex with Google Cloud Storage
-- **[GCS Setup Guide](GCS_SETUP.md)** - Detailed Google Cloud Storage configuration
+- **[Data Management Guide](DATA_MANAGEMENT.md)** - Complete git-annex workflow and commands
 
 ## Workflow
 

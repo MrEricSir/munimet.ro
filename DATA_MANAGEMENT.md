@@ -2,12 +2,22 @@
 
 This project uses **git-annex with Google Cloud Storage** to manage large files (training data and models).
 
+## Quick Reference
+
+| What you want to do | Command |
+|---------------------|---------|
+| Download model from cloud | `git annex get models/trained_model/` |
+| Download training data | `git annex get data/muni_snapshots/` |
+| Upload new snapshots to cloud | `git annex copy data/muni_snapshots/ --to=google-cloud` |
+| Check what's in cloud | `git annex whereis` |
+| Free up local disk space | `git annex drop data/muni_snapshots/` |
+
 ## Current Data Size
 
 ```bash
-268MB  data/muni_snapshots/       # 2,601 training images
-856MB  models/trained_model/      # BLIP model + classifier
-570KB  data/training_labels.json  # Training labels
+~270MB  data/muni_snapshots/       # 2,600+ training images
+856MB   models/trained_model/      # BLIP model + classifier
+570KB   data/training_labels.json  # Training labels (unlocked for editing)
 ```
 
 **Total: ~1.1GB** tracked with git-annex, stored in Google Cloud Storage (FREE - under 5GB tier).
@@ -16,11 +26,68 @@ This project uses **git-annex with Google Cloud Storage** to manage large files 
 
 Large files are tracked as symlinks in Git, with actual content stored in Google Cloud Storage:
 
-- **In Git**: Small symlink files (~200 bytes each)
-- **In GCS**: Actual large files (bucket: gs://munimetro-annex/)
-- **Local**: Files you've downloaded via `git annex get`
+- **In Git**: Small symlink files (~200 bytes each) - fast to clone and pull
+- **In GCS**: Actual large files (bucket: gs://munimetro-annex/) - permanent storage
+- **Local**: Files you've downloaded via `git annex get` - on-demand
 
-This keeps the Git repository small while making large files available on demand.
+This keeps the Git repository small (~10MB) while making large files (1.1GB) available on-demand.
+
+---
+
+## Daily Workflow (Project Owner)
+
+### Collecting New Training Data
+
+```bash
+# 1. Run download script to collect new snapshots
+cd training
+python download_muni_image.py
+
+# 2. New images are automatically tracked by git-annex
+cd ..
+git annex add data/muni_snapshots/
+
+# 3. Upload to Google Cloud Storage (runs in background)
+git annex copy data/muni_snapshots/ --to=google-cloud --jobs=4
+
+# 4. Commit and push the symlinks
+git add data/muni_snapshots/
+git commit -m "Add new training snapshots"
+git push
+```
+
+### Updating Training Labels
+
+```bash
+# training_labels.json is "unlocked" - you can edit it directly
+cd training
+python label_images.py  # This modifies data/training_labels.json
+
+# After labeling, commit and upload
+cd ..
+git add data/training_labels.json
+git commit -m "Update training labels"
+git annex copy data/training_labels.json --to=google-cloud
+git push
+```
+
+### Training and Uploading New Model
+
+```bash
+# 1. Train the model
+cd training
+python train_model.py  # Saves to models/trained_model/
+
+# 2. Add and upload new model files
+cd ..
+git annex add models/trained_model/
+git annex copy models/trained_model/ --to=google-cloud
+
+# 3. Commit and push
+git add models/
+git commit -m "Update trained model"
+git push
+```
 
 ---
 
@@ -77,56 +144,6 @@ Now you can modify the file with `label_images.py`.
 
 ---
 
-## For Project Owner
-
-### Adding New Files
-
-When you add new images or update the model, git-annex handles it automatically:
-
-```bash
-# Add files (git-annex tracks them automatically)
-git annex add data/muni_snapshots/new_image.jpg
-
-# Upload to Google Cloud Storage
-git annex copy data/muni_snapshots/new_image.jpg --to=google-cloud
-
-# Commit the symlink
-git add data/muni_snapshots/new_image.jpg
-git commit -m "Add new training image"
-```
-
-### Uploading All Changes
-
-```bash
-# Upload everything not yet in cloud storage
-git annex copy --to=google-cloud --jobs=4
-```
-
-### Checking File Locations
-
-```bash
-# See where files are stored
-git annex whereis data/muni_snapshots/
-
-# See what's available locally
-git annex find --in=here
-
-# See what's in Google Cloud
-git annex find --in=google-cloud
-```
-
-### Freeing Up Local Disk Space
-
-```bash
-# Remove local copies (keeps them in cloud)
-git annex drop data/muni_snapshots/
-
-# Get them back later
-git annex get data/muni_snapshots/
-```
-
----
-
 ## Useful Commands
 
 | Command | Purpose |
@@ -143,13 +160,11 @@ git annex get data/muni_snapshots/
 
 ## Storage Details
 
-- **Bucket**: gs://munimetro-annex
+- **Backend**: Google Cloud Storage (gs://munimetro-annex)
 - **Region**: us-west1 (close to San Francisco)
 - **Cost**: $0/month (under Google Cloud's 5GB free tier)
+- **Current Usage**: ~1.1GB (training data + models)
 - **Chunking**: 50MiB chunks for efficient transfer
-- **Encryption**: None (data is not sensitive)
-
-For more details on the setup, see [GCS_SETUP.md](GCS_SETUP.md).
 
 ---
 
@@ -168,13 +183,15 @@ gcloud auth application-default login
 
 ### Files showing as broken symlinks
 ```bash
-# Download the files
+# Download the files from cloud
 git annex get .
 ```
 
-### Want to switch to a different storage backend?
-git-annex supports multiple remotes. You can add S3, another GCS bucket, or even a local USB drive:
+### Check what's uploaded to cloud
 ```bash
-git annex initremote backup-usb type=directory directory=/Volumes/backup/munimetro encryption=none
-git annex copy --to=backup-usb
+# Show files and their locations
+git annex whereis
+
+# Count files in cloud
+git annex find --in=google-cloud | wc -l
 ```
