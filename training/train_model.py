@@ -30,7 +30,9 @@ MODEL_OUTPUT_DIR = "../models/trained_model"
 BATCH_SIZE = 4
 EPOCHS = 10
 LEARNING_RATE = 5e-5
-TRAIN_SPLIT = 0.8  # 80% train, 20% validation
+TRAIN_SPLIT = 0.7   # 70% train
+VAL_SPLIT = 0.15    # 15% validation
+TEST_SPLIT = 0.15   # 15% test (holdout set, never used during training)
 MAX_LENGTH = 128
 
 
@@ -114,11 +116,46 @@ def load_training_data():
     return filtered_data
 
 
-def split_data(data, train_ratio=0.8):
-    """Split data into train and validation sets."""
-    np.random.shuffle(data)
-    split_idx = int(len(data) * train_ratio)
-    return data[:split_idx], data[split_idx:]
+def split_data(data, train_ratio=0.7, val_ratio=0.15):
+    """Split data into train, validation, and test sets with stratification.
+
+    Args:
+        data: List of labeled samples
+        train_ratio: Proportion for training (default 0.7)
+        val_ratio: Proportion for validation (default 0.15)
+
+    Returns:
+        train_data, val_data, test_data (remaining samples go to test)
+    """
+    # Stratify by status to ensure balanced representation
+    status_groups = {}
+    for item in data:
+        status = item.get('status', '')
+        if status not in status_groups:
+            status_groups[status] = []
+        status_groups[status].append(item)
+
+    train_data = []
+    val_data = []
+    test_data = []
+
+    # Split each status group proportionally
+    for status, items in status_groups.items():
+        np.random.shuffle(items)
+        n = len(items)
+        train_end = int(n * train_ratio)
+        val_end = train_end + int(n * val_ratio)
+
+        train_data.extend(items[:train_end])
+        val_data.extend(items[train_end:val_end])
+        test_data.extend(items[val_end:])
+
+    # Shuffle the combined splits
+    np.random.shuffle(train_data)
+    np.random.shuffle(val_data)
+    np.random.shuffle(test_data)
+
+    return train_data, val_data, test_data
 
 
 class MuniClassifier(nn.Module):
@@ -171,19 +208,33 @@ def train_model():
     print(f"Using device: {device}")
 
     # Load data
-    print("\n[1/5] Loading training data...")
+    print("\n[1/6] Loading training data...")
     all_data = load_training_data()
 
     if len(all_data) == 0:
         print("ERROR: No training data found. Please label some images first.")
         return
 
-    train_data, val_data = split_data(all_data, TRAIN_SPLIT)
+    train_data, val_data, test_data = split_data(all_data, TRAIN_SPLIT, VAL_SPLIT)
     print(f"Training samples: {len(train_data)}")
     print(f"Validation samples: {len(val_data)}")
+    print(f"Test samples: {len(test_data)} (holdout set)")
+
+    # Show class distribution
+    def count_statuses(data):
+        counts = {}
+        for item in data:
+            status = item.get('status', 'unknown')
+            counts[status] = counts.get(status, 0) + 1
+        return counts
+
+    print("\nClass distribution:")
+    print(f"  Train: {count_statuses(train_data)}")
+    print(f"  Val:   {count_statuses(val_data)}")
+    print(f"  Test:  {count_statuses(test_data)}")
 
     # Load model and processor
-    print("\n[2/5] Loading pre-trained BLIP model...")
+    print("\n[2/6] Loading pre-trained BLIP model...")
     model_name = "Salesforce/blip-image-captioning-base"
     processor = BlipProcessor.from_pretrained(model_name, use_fast=True)
     base_model = BlipForConditionalGeneration.from_pretrained(model_name)
@@ -193,12 +244,14 @@ def train_model():
     model = model.to(device)
 
     # Create datasets
-    print("\n[3/5] Preparing datasets...")
+    print("\n[3/6] Preparing datasets...")
     train_dataset = MuniDataset(train_data, processor)
     val_dataset = MuniDataset(val_data, processor)
+    test_dataset = MuniDataset(test_data, processor)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # Setup optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
@@ -213,7 +266,7 @@ def train_model():
     classification_criterion = nn.CrossEntropyLoss(ignore_index=-1)
 
     # Training loop
-    print(f"\n[4/5] Training model for {EPOCHS} epochs...")
+    print(f"\n[4/6] Training model for {EPOCHS} epochs...")
     print()
 
     best_val_loss = float('inf')
@@ -338,9 +391,58 @@ def train_model():
                     'label_to_status': train_dataset.label_to_status
                 }, f, indent=2)
 
-    print("\n[5/5] Training complete!")
+    print("\n[5/6] Evaluating on test set (holdout)...")
+
+    # Load best model for testing
+    model.eval()
+    test_loss = 0
+    test_caption_loss = 0
+    test_status_loss = 0
+    correct_status = 0
+    total_status = 0
+
+    with torch.no_grad():
+        pbar = tqdm(test_loader, desc="Testing")
+        for batch in pbar:
+            pixel_values = batch['pixel_values'].to(device)
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            status_labels = batch['status_label'].to(device)
+
+            caption_outputs, status_logits = model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=input_ids
+            )
+
+            caption_loss = caption_outputs.loss
+            status_loss = classification_criterion(status_logits, status_labels)
+            loss = caption_loss + 0.5 * status_loss
+
+            test_loss += loss.item()
+            test_caption_loss += caption_loss.item()
+            test_status_loss += status_loss.item()
+
+            # Calculate status accuracy
+            predictions = torch.argmax(status_logits, dim=1)
+            mask = status_labels != -1
+            if mask.sum() > 0:
+                correct_status += (predictions[mask] == status_labels[mask]).sum().item()
+                total_status += mask.sum().item()
+
+    avg_test_loss = test_loss / len(test_loader)
+    test_accuracy = correct_status / total_status if total_status > 0 else 0
+
+    print(f"\nTest Set Results:")
+    print(f"  Test Loss: {avg_test_loss:.4f}")
+    print(f"  Test Status Accuracy: {test_accuracy:.2%}")
+    print()
+
+    print("\n[6/6] Training complete!")
     print(f"Model saved to: {MODEL_OUTPUT_DIR}")
     print(f"Best validation loss: {best_val_loss:.4f}")
+    print(f"Final test accuracy: {test_accuracy:.2%}")
 
 
 if __name__ == "__main__":
