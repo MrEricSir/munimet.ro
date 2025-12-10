@@ -9,52 +9,32 @@ ML-powered real-time monitoring system for SF Muni Metro subway status. Download
 This project uses **git-annex** to manage large files (1.1GB of training data and models) stored in Google Cloud Storage.
 
 ```bash
-# 1. Install git-annex (one-time setup)
-brew install git-annex rclone git-annex-remote-rclone
-
-# 2. Clone the repository
+# 1. Clone the repository
 git clone <your-repo-url>
 cd munimetro
 
-# 3. Initialize git-annex and download files from cloud
+# 2. Set up git-annex and download data (see artifacts/README.md)
+brew install git-annex rclone git-annex-remote-rclone
 git annex init "your-laptop"
-git annex enableremote google-cloud  # Authenticates with Google Cloud
-git annex get artifacts/models/v1/  # Download model (856MB)
-# Optional: git annex get data/        # Download all training data (268MB)
+git annex enableremote google-cloud
+git annex get artifacts/models/v1/        # Download model (856MB)
 
-# 4. Train the model (see training/README.md)
+# 3. Train the model (see training/README.md)
 cd training
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python download_muni_image.py  # Collect new data
+python download_muni_image.py  # Collect data
 python label_images.py          # Label images
 python train_model.py           # Train model
 
-# 5. Run the API (see api/README.md)
+# 4. Run the API (see api/README.md)
 cd ../api
 docker-compose up -d
 open http://localhost:8000
 ```
 
-### Adding New Training Data
-
-When you collect new snapshots or update labels:
-
-```bash
-# New images are automatically tracked by git-annex
-git annex add artifacts/training_data/images/*.jpg
-
-# Upload to Google Cloud Storage
-git annex copy artifacts/training_data/images/ --to=google-cloud
-
-# Commit the changes
-git add data/
-git commit -m "Add new training snapshots"
-git push
-```
-
-See [DATA_MANAGEMENT.md](DATA_MANAGEMENT.md) for complete git-annex workflow.
+See **[artifacts/README.md](artifacts/README.md)** for complete data management workflow.
 
 ## Project Structure
 
@@ -67,7 +47,7 @@ munimetro/
 │   ├── download_muni_image.py  # Download status images
 │   ├── label_images.py         # GUI for labeling images
 │   ├── train_model.py          # Train BLIP vision-language model
-│   └── requirements_ml.txt     # ML dependencies
+│   └── requirements.txt        # ML dependencies
 │
 ├── api/                   # Production web API & deployment → See api/README.md
 │   ├── api.py             # Falcon web API
@@ -80,22 +60,25 @@ munimetro/
 ├── tests/                 # Test suite → See tests/README.md
 │   └── test_frontend.py   # Frontend integration tests
 │
-├── data/                  # Training data (tracked with git-annex)
-│   ├── muni_snapshots/    # 2,601 status images (268MB)
-│   ├── training_labels.json  # Labeled training data (570KB)
-│   └── cache/             # API cache files (gitignored)
-│
-└── models/                # Trained models (tracked with git-annex)
-    └── trained_model/     # BLIP model + classifier weights (856MB)
+└── artifacts/             # Generated data → See artifacts/README.md
+    ├── training_data/     # ML training dataset (git-annex tracked)
+    │   ├── images/        # 2,666 labeled snapshots (~270MB)
+    │   └── labels.json    # Training labels (570KB, unlocked)
+    ├── models/            # Trained models (git-annex tracked)
+    │   └── v1/            # BLIP model + classifier (856MB)
+    └── runtime/           # Transient runtime data (gitignored)
+        ├── cache/         # API response cache
+        └── downloads/     # Recent snapshots for predictions
 ```
 
 ## Documentation
 
-- **[Setup Guide](SETUP.md)** - Virtual environment setup and troubleshooting
+- **[Data Management](artifacts/README.md)** - Git-annex workflows for training data and models
 - **[Training Guide](training/README.md)** - Download images, label data, train models
-- **[API & Deployment Guide](api/README.md)** - Run API locally or deploy to Google Cloud Run
-- **[Testing Guide](tests/README.md)** - Run automated tests
-- **[Data Management Guide](DATA_MANAGEMENT.md)** - Complete git-annex workflow and commands
+- **[API & Deployment](api/README.md)** - Run API locally or deploy to Google Cloud Run
+- **[Testing](tests/README.md)** - Run automated tests
+- **[Setup](SETUP.md)** - Virtual environment setup and troubleshooting
+- **[GCS Setup](GCS_SETUP.md)** - Initial Google Cloud Storage configuration
 
 ## Workflow
 

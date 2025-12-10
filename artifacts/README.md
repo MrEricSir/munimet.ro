@@ -24,57 +24,178 @@ The `training_data/` and `models/` directories use **git-annex** for efficient l
 - **Actual files**: Stored in `.git/annex/objects/` and synced to Google Cloud Storage
 - **Selective download**: Download only the files you need
 
-### Quick Start
-
-#### Download all training data and models
+### Current Data Size
 
 ```bash
-# Download training images and labels
-git annex get artifacts/training_data/
-
-# Download trained model
-git annex get artifacts/models/
+~270MB  artifacts/training_data/images/    # 2,666 training images
+856MB   artifacts/models/v1/               # BLIP model + classifier
+570KB   artifacts/training_data/labels.json  # Training labels (unlocked for editing)
 ```
 
-#### Check what's available
+**Total: ~1.1GB** tracked with git-annex, stored in Google Cloud Storage (FREE - under 5GB tier).
+
+---
+
+## Quick Start
+
+### For New Collaborators
+
+After cloning the repository, initialize git-annex and download the files you need:
+
+```bash
+# 1. Initialize git-annex
+git annex init "your-laptop-name"
+
+# 2. Enable Google Cloud Storage remote (authenticates via browser)
+git annex enableremote google-cloud
+
+# 3. Download what you need
+git annex get artifacts/models/v1/                    # For running API (856MB)
+git annex get artifacts/training_data/                # For training (270MB)
+```
+
+### Check what's available
 
 ```bash
 # See which files are present locally vs in cloud
-git annex whereis artifacts/training_data/images/
+git annex whereis artifacts/training_data/
 git annex whereis artifacts/models/v1/
+
+# Show repository stats
+git annex info
 ```
 
-#### Upload new data to cloud
+---
+
+## Daily Workflows
+
+### Collecting New Training Data
 
 ```bash
-# After adding new training images or models
-git annex add artifacts/training_data/images/*.jpg
-git commit -m "Add new training images"
-git annex copy artifacts/training_data/ --to=google-cloud
+# 1. Download new snapshots
+cd training
+python download_muni_image.py
+
+# 2. Add to git-annex and upload to cloud
+cd ..
+git annex add artifacts/training_data/images/
+git annex copy artifacts/training_data/images/ --to=google-cloud --jobs=4
+
+# 3. Commit and push
+git commit -m "Add new training snapshots"
 git push
 ```
 
-#### Free up local disk space
+### Updating Training Labels
+
+The `labels.json` file is **unlocked** in git-annex, so you can edit it directly:
 
 ```bash
-# Remove local copies (symlinks remain)
+# Labels file is already unlocked - just edit it
+cd training
+python label_images.py  # Modifies artifacts/training_data/labels.json
+
+# After labeling, commit and upload
+cd ..
+git add artifacts/training_data/labels.json
+git commit -m "Update training labels"
+git annex copy artifacts/training_data/labels.json --to=google-cloud
+git push
+```
+
+**Why unlocked?** The labels file needs to be writable for the labeling workflow. Git-annex `unlock` makes annexed files editable while still tracking them in the annex for cloud storage.
+
+If you ever need to unlock other files for editing:
+```bash
+git annex unlock <file>
+```
+
+### Training and Uploading New Model
+
+```bash
+# 1. Train the model
+cd training
+python train_model.py  # Saves to artifacts/models/v1/
+
+# 2. Add and upload new model files
+cd ..
+git annex add artifacts/models/v1/
+git annex copy artifacts/models/v1/ --to=google-cloud
+
+# 3. Commit and push
+git commit -m "Update trained model"
+git push
+```
+
+---
+
+## Useful Commands
+
+| Command | Purpose |
+|---------|---------|
+| `git annex get <file>` | Download file from cloud |
+| `git annex drop <file>` | Remove local copy (keeps in cloud) |
+| `git annex copy --to=google-cloud` | Upload files to cloud |
+| `git annex whereis <file>` | Show where file is stored |
+| `git annex unlock <file>` | Make file editable |
+| `git annex sync --content` | Sync everything |
+| `git annex info` | Show repository stats |
+
+### Free up local disk space
+
+```bash
+# Remove local copies (symlinks remain, files stay in cloud)
 git annex drop artifacts/training_data/images/
 git annex drop artifacts/models/
 
-# Files are still safely stored in cloud!
+# Download them again anytime with:
+git annex get artifacts/training_data/
 ```
 
-## Runtime Data
+---
 
-The `runtime/` directory contains transient data:
+## Storage Details
 
-- **cache/**: API response cache for improved performance
-- **downloads/**: Recent snapshot downloads for real-time predictions
+- **Backend**: Google Cloud Storage (gs://munimetro-annex)
+- **Region**: us-west1 (close to San Francisco)
+- **Cost**: $0/month (under Google Cloud's 5GB free tier)
+- **Current Usage**: ~1.1GB (training data + models)
+- **Chunking**: 50MiB chunks for efficient transfer
 
-This data is **gitignored** and not tracked by git-annex. It's regenerated as needed.
+---
+
+## Troubleshooting
+
+### "Remote not available"
+```bash
+git annex enableremote google-cloud
+```
+
+### "Permission denied"
+```bash
+# Re-authenticate with Google Cloud
+gcloud auth application-default login
+```
+
+### Files showing as broken symlinks
+```bash
+# Download the files from cloud
+git annex get .
+```
+
+### Check what's uploaded to cloud
+```bash
+# Show files and their locations
+git annex whereis
+
+# Count files in cloud
+git annex find --in=google-cloud | wc -l
+```
+
+---
 
 ## More Information
 
 - Full git-annex setup guide: [`../GCS_SETUP.md`](../GCS_SETUP.md)
-- Data management commands: [`../DATA_MANAGEMENT.md`](../DATA_MANAGEMENT.md)
 - Training workflow: [`../training/README.md`](../training/README.md)
+- API deployment: [`../api/README.md`](../api/README.md)
