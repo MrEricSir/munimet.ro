@@ -25,9 +25,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from lib.muni_lib import download_muni_image, predict_muni_status
 
 # Configuration
-CACHE_DIR = str(PROJECT_ROOT / "data" / "cache")
-CACHE_FILE = str(PROJECT_ROOT / "data" / "cache" / "latest_status.json")
-SNAPSHOT_DIR = str(PROJECT_ROOT / "data" / "muni_snapshots")
+CACHE_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "cache")
+CACHE_FILE = str(PROJECT_ROOT / "artifacts" / "runtime" / "cache" / "latest_status.json")
+SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 DEFAULT_INTERVAL = 30  # seconds
 
 

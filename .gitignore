@@ -24,12 +24,15 @@ muni_ml_venv/
 *~
 .DS_Store
 
-# Runtime cache (not version controlled)
-data/cache/
+# Generated artifacts - runtime data (not version controlled)
+artifacts/runtime/
 
-# Large files tracked with git-annex (see STORAGE_COMPARISON.md)
-# Note: data/muni_snapshots/, data/training_labels.json, and models/trained_model/
-# are tracked with git-annex, which stores them as symlinks in Git
+# Generated artifacts - training data and models (tracked via git-annex symlinks)
+# Note: artifacts/training_data/ and artifacts/models/ contain git-annex symlinks
+# The actual files are stored in .git/annex/objects/ and synced to cloud storage
+# .gitignore prevents accidental commits of actual files (not symlinks)
+artifacts/training_data/
+artifacts/models/
 
 # Logs
 *.log

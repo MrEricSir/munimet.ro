@@ -25,8 +25,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from lib.muni_lib import download_muni_image, predict_muni_status, load_muni_model
 
 # Configuration
-CACHE_FILE = str(PROJECT_ROOT / "data" / "cache" / "latest_status.json")
-SNAPSHOT_DIR = str(PROJECT_ROOT / "data" / "muni_snapshots")
+CACHE_FILE = str(PROJECT_ROOT / "artifacts" / "runtime" / "cache" / "latest_status.json")
+SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 CACHE_MAX_AGE = 300  # seconds (5 minutes) - fallback if cache is stale
 ENABLE_FALLBACK = os.getenv('ENABLE_FALLBACK', 'true').lower() == 'true'
 

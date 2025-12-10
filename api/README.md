@@ -81,7 +81,7 @@ Get current Muni status (best of last 2 checks)
     "yellow": 0.0002,
     "red": 0.0
   },
-  "image_path": "../data/muni_snapshots/muni_snapshot_20251208_143638.jpg",
+  "image_path": "../artifacts/training_data/images/muni_snapshot_20251208_143638.jpg",
   "image_dimensions": {"width": 1860, "height": 800},
   "timestamp": "2025-12-08T14:36:28.364915",
   "cached": true,
@@ -118,7 +118,7 @@ Get current Muni status (best of last 2 checks)
 ### Prerequisites
 
 1. Docker installed - [Install Docker Desktop](https://www.docker.com/products/docker-desktop) or use Colima
-2. Trained model in `../models/trained_model/`
+2. Trained model in `../artifacts/models/v1/`
 
 ### Security Features
 
@@ -153,7 +153,7 @@ docker-compose up -d
 
 | Volume | Purpose | Mount Mode |
 |--------|---------|------------|
-| `../models/trained_model/` | ML model files | Read-only (`:ro`) |
+| `../artifacts/models/v1/` | ML model files | Read-only (`:ro`) |
 | `cache-data` (named volume) | Cached predictions | Read-write (API: read-only) |
 | `snapshot-data` (named volume) | Downloaded images | Read-write |
 
@@ -200,7 +200,7 @@ docker push ${REGION}-docker.pkg.dev/${PROJECT_ID}/muni-status/api:latest
 gsutil mb -l $REGION gs://${PROJECT_ID}-muni-models
 
 # Upload model
-gsutil -m cp -r models/trained_model/* gs://${PROJECT_ID}-muni-models/trained_model/
+gsutil -m cp -r artifacts/models/v1/* gs://${PROJECT_ID}-muni-artifacts/models/v1/
 ```
 
 ### Step 5: Deploy to Cloud Run
@@ -257,7 +257,7 @@ gcloud run services logs read muni-api --region $REGION --limit 50
 **Container won't start:**
 ```bash
 docker logs muni-api
-ls -la ../models/trained_model/  # Verify model exists
+ls -la ../artifacts/models/v1/  # Verify model exists
 ```
 
 **Health check failing:**
@@ -269,7 +269,7 @@ docker exec muni-api ps aux | grep gunicorn
 **Cache not updating:**
 ```bash
 docker logs muni-cache-writer
-docker exec muni-cache-writer ls -la ../data/cache/
+docker exec muni-cache-writer ls -la ../artifacts/runtime/cache/
 ```
 
 **Port already in use:**

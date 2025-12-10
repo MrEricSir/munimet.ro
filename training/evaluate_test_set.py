@@ -16,8 +16,8 @@ from transformers import BlipProcessor, BlipForConditionalGeneration
 from tqdm import tqdm
 
 # Configuration
-LABELS_FILE = "../data/training_labels.json"
-MODEL_DIR = "../models/trained_model"
+LABELS_FILE = "../artifacts/training_data/labels.json"
+MODEL_DIR = "../artifacts/models/v1"
 BATCH_SIZE = 4
 TRAIN_SPLIT = 0.7
 VAL_SPLIT = 0.15

@@ -19,7 +19,7 @@ cd munimetro
 # 3. Initialize git-annex and download files from cloud
 git annex init "your-laptop"
 git annex enableremote google-cloud  # Authenticates with Google Cloud
-git annex get models/trained_model/  # Download model (856MB)
+git annex get artifacts/models/v1/  # Download model (856MB)
 # Optional: git annex get data/        # Download all training data (268MB)
 
 # 4. Train the model (see training/README.md)
@@ -43,10 +43,10 @@ When you collect new snapshots or update labels:
 
 ```bash
 # New images are automatically tracked by git-annex
-git annex add data/muni_snapshots/*.jpg
+git annex add artifacts/training_data/images/*.jpg
 
 # Upload to Google Cloud Storage
-git annex copy data/muni_snapshots/ --to=google-cloud
+git annex copy artifacts/training_data/images/ --to=google-cloud
 
 # Commit the changes
 git add data/

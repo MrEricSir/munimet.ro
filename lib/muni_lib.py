@@ -32,7 +32,7 @@ IMAGE_ID = "snapshotImage"
 WAIT_TIME = 10
 EXPECTED_WIDTH = 1860
 EXPECTED_HEIGHT = 800
-MODEL_DIR = str(PROJECT_ROOT / "models" / "trained_model")
+MODEL_DIR = str(PROJECT_ROOT / "artifacts" / "models" / "v1")
 
 
 def _get_classifier_class():

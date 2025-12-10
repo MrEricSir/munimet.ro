@@ -6,18 +6,18 @@ This project uses **git-annex with Google Cloud Storage** to manage large files 
 
 | What you want to do | Command |
 |---------------------|---------|
-| Download model from cloud | `git annex get models/trained_model/` |
-| Download training data | `git annex get data/muni_snapshots/` |
-| Upload new snapshots to cloud | `git annex copy data/muni_snapshots/ --to=google-cloud` |
+| Download model from cloud | `git annex get artifacts/models/v1/` |
+| Download training data | `git annex get artifacts/training_data/images/` |
+| Upload new snapshots to cloud | `git annex copy artifacts/training_data/images/ --to=google-cloud` |
 | Check what's in cloud | `git annex whereis` |
-| Free up local disk space | `git annex drop data/muni_snapshots/` |
+| Free up local disk space | `git annex drop artifacts/training_data/images/` |
 
 ## Current Data Size
 
 ```bash
-~270MB  data/muni_snapshots/       # 2,600+ training images
-856MB   models/trained_model/      # BLIP model + classifier
-570KB   data/training_labels.json  # Training labels (unlocked for editing)
+~270MB  artifacts/training_data/images/       # 2,600+ training images
+856MB   artifacts/models/v1/      # BLIP model + classifier
+570KB   artifacts/training_data/labels.json  # Training labels (unlocked for editing)
 ```
 
 **Total: ~1.1GB** tracked with git-annex, stored in Google Cloud Storage (FREE - under 5GB tier).
@@ -45,13 +45,13 @@ python download_muni_image.py
 
 # 2. New images are automatically tracked by git-annex
 cd ..
-git annex add data/muni_snapshots/
+git annex add artifacts/training_data/images/
 
 # 3. Upload to Google Cloud Storage (runs in background)
-git annex copy data/muni_snapshots/ --to=google-cloud --jobs=4
+git annex copy artifacts/training_data/images/ --to=google-cloud --jobs=4
 
 # 4. Commit and push the symlinks
-git add data/muni_snapshots/
+git add artifacts/training_data/images/
 git commit -m "Add new training snapshots"
 git push
 ```
@@ -61,13 +61,13 @@ git push
 ```bash
 # training_labels.json is "unlocked" - you can edit it directly
 cd training
-python label_images.py  # This modifies data/training_labels.json
+python label_images.py  # This modifies artifacts/training_data/labels.json
 
 # After labeling, commit and upload
 cd ..
-git add data/training_labels.json
+git add artifacts/training_data/labels.json
 git commit -m "Update training labels"
-git annex copy data/training_labels.json --to=google-cloud
+git annex copy artifacts/training_data/labels.json --to=google-cloud
 git push
 ```
 
@@ -76,12 +76,12 @@ git push
 ```bash
 # 1. Train the model
 cd training
-python train_model.py  # Saves to models/trained_model/
+python train_model.py  # Saves to artifacts/models/v1/
 
 # 2. Add and upload new model files
 cd ..
-git annex add models/trained_model/
-git annex copy models/trained_model/ --to=google-cloud
+git annex add artifacts/models/v1/
+git annex copy artifacts/models/v1/ --to=google-cloud
 
 # 3. Commit and push
 git add models/
@@ -123,13 +123,13 @@ This will prompt you to authenticate with Google Cloud via your browser.
 git annex get .
 
 # Option B: Get only the model (for running the API)
-git annex get models/trained_model/
+git annex get artifacts/models/v1/
 
 # Option C: Get only training data (for retraining)
 git annex get data/
 
 # Option D: Get specific file
-git annex get data/muni_snapshots/muni_snapshot_20251206_134756.jpg
+git annex get artifacts/training_data/images/muni_snapshot_20251206_134756.jpg
 ```
 
 ### 5. (Optional) Unlock Labels for Editing
@@ -137,7 +137,7 @@ git annex get data/muni_snapshots/muni_snapshot_20251206_134756.jpg
 If you want to edit training labels:
 
 ```bash
-git annex unlock data/training_labels.json
+git annex unlock artifacts/training_data/labels.json
 ```
 
 Now you can modify the file with `label_images.py`.

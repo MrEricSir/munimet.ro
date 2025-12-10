@@ -83,9 +83,9 @@ Once the remote is configured, upload your annexed files:
 git annex copy --to=google-cloud
 
 # Or copy specific directories
-git annex copy data/muni_snapshots/ --to=google-cloud
-git annex copy models/trained_model/ --to=google-cloud
-git annex copy data/training_labels.json --to=google-cloud
+git annex copy artifacts/training_data/images/ --to=google-cloud
+git annex copy artifacts/models/v1/ --to=google-cloud
+git annex copy artifacts/training_data/labels.json --to=google-cloud
 
 # Check what's been uploaded
 git annex whereis
@@ -115,17 +115,17 @@ git annex enableremote google-cloud
 git annex get .
 
 # Option B: Get only the model (for API usage)
-git annex get models/trained_model/
+git annex get artifacts/models/v1/
 
 # Option C: Get only the training data (for retraining)
 git annex get data/
 
 # 5. If editing training labels, unlock the file
-git annex unlock data/training_labels.json
+git annex unlock artifacts/training_data/labels.json
 
 # 6. Verify files are available
-ls -lh data/muni_snapshots/ | head
-ls -lh models/trained_model/
+ls -lh artifacts/training_data/images/ | head
+ls -lh artifacts/models/v1/
 ```
 
 **Important**: `training_labels.json` must be unlocked to edit it with `label_images.py`. The file stays tracked in git-annex but becomes writable.
@@ -137,7 +137,7 @@ ls -lh models/trained_model/
 ### Check file locations
 ```bash
 # See where files are stored (local, cloud, both)
-git annex whereis data/muni_snapshots/
+git annex whereis artifacts/training_data/images/
 
 # See what's available locally
 git annex find --in=here
@@ -149,10 +149,10 @@ git annex find --in=google-cloud
 ### Free up local disk space
 ```bash
 # Remove local copies (keeps them in cloud)
-git annex drop data/muni_snapshots/
+git annex drop artifacts/training_data/images/
 
 # Get them back later
-git annex get data/muni_snapshots/
+git annex get artifacts/training_data/images/
 ```
 
 ### Sync with cloud

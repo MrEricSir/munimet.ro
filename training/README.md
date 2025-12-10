@@ -19,7 +19,7 @@ git annex enableremote google-cloud
 git annex get data/
 
 # IMPORTANT: Unlock labels file to make it editable
-git annex unlock data/training_labels.json
+git annex unlock artifacts/training_data/labels.json
 ```
 
 ### Option 2: Start Fresh
@@ -45,7 +45,7 @@ python download_muni_image.py
 ```
 
 - Downloads snapshots every 5 minutes from http://sfmunicentral.com/Enterprise/MetroLO.htm
-- Saves to `../data/muni_snapshots/` folder
+- Saves to `../artifacts/training_data/images/` folder
 - Validates image dimensions (1860×800px)
 - Press `Ctrl+C` to stop
 
@@ -77,11 +77,11 @@ python label_images.py
 3. Save with `Ctrl+Enter` to move to next image
 4. Aim for 50-100+ labeled images for good accuracy
 
-Labels saved to: `../data/training_labels.json`
+Labels saved to: `../artifacts/training_data/labels.json`
 
 **Note for git-annex users**: The labels file is tracked in git-annex but kept unlocked for editing. After labeling, commit your changes:
 ```bash
-git add data/training_labels.json
+git add artifacts/training_data/labels.json
 git commit -m "Update training labels"
 ```
 
@@ -94,13 +94,13 @@ python train_model.py
 ```
 
 **What it does:**
-- Loads labeled data from `../data/training_labels.json`
+- Loads labeled data from `../artifacts/training_data/labels.json`
 - Fine-tunes BLIP-2 vision-language model
 - Trains status classifier (green/yellow/red)
 - Learns to generate natural language descriptions
 - Takes 5-20 minutes depending on data size and hardware
 
-**Model saved to:** `../models/trained_model/`
+**Model saved to:** `../artifacts/models/v1/`
 
 ### Training Configuration
 
@@ -121,7 +121,7 @@ All scripts use `lib/muni_lib.py` for core functionality:
 from lib.muni_lib import download_muni_image, predict_muni_status
 
 # Download image
-result = download_muni_image(output_folder="../data/muni_snapshots")
+result = download_muni_image(output_folder="../artifacts/training_data/images")
 
 # Predict status
 prediction = predict_muni_status(result['filepath'])

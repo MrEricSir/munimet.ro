@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib.muni_lib import download_muni_image
 
 # Configuration
-OUTPUT_FOLDER = "../data/muni_snapshots"
+OUTPUT_FOLDER = "../artifacts/training_data/images"
 SLEEP_INTERVAL = 300  # Seconds between downloads
 
 

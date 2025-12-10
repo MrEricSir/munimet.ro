@@ -13,8 +13,8 @@ from datetime import datetime
 from pathlib import Path
 
 # Configuration
-IMAGE_FOLDER = "../data/muni_snapshots"
-LABELS_FILE = "../data/training_labels.json"
+IMAGE_FOLDER = "../artifacts/training_data/images"
+LABELS_FILE = "../artifacts/training_data/labels.json"
 MAX_IMAGE_WIDTH = 1200
 MAX_IMAGE_HEIGHT = 800
 
