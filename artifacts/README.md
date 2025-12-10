@@ -52,6 +52,9 @@ git annex enableremote google-cloud
 # 3. Download what you need
 git annex get artifacts/models/v1/                    # For running API (856MB)
 git annex get artifacts/training_data/                # For training (270MB)
+
+# 4. Unlock labels.json for editing (required for labeling workflow)
+git annex unlock artifacts/training_data/labels.json
 ```
 
 ### Check what's available
@@ -88,10 +91,13 @@ git push
 
 ### Updating Training Labels
 
-The `labels.json` file is **unlocked** in git-annex, so you can edit it directly:
+The `labels.json` file must be **unlocked** in git-annex to be editable:
 
 ```bash
-# Labels file is already unlocked - just edit it
+# First time only: Unlock the labels file (if not already unlocked)
+git annex unlock artifacts/training_data/labels.json
+
+# Edit labels using the labeling tool
 cd training
 python label_images.py  # Modifies artifacts/training_data/labels.json
 
@@ -103,12 +109,9 @@ git annex copy artifacts/training_data/labels.json --to=google-cloud
 git push
 ```
 
-**Why unlocked?** The labels file needs to be writable for the labeling workflow. Git-annex `unlock` makes annexed files editable while still tracking them in the annex for cloud storage.
+**Why unlock?** The labels file needs to be writable for the labeling workflow. Git-annex `unlock` replaces the read-only symlink with the actual file, making it editable while still tracking it for cloud storage.
 
-If you ever need to unlock other files for editing:
-```bash
-git annex unlock <file>
-```
+**Note**: Once unlocked, the file stays unlocked across commits, so you only need to unlock it once per repository clone.
 
 ### Training and Uploading New Model
 
