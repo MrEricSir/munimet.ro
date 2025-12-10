@@ -2,10 +2,14 @@
 
 This guide explains how to configure Google Cloud Storage (GCS) as the remote backend for git-annex to store your 1.1GB of training data and models.
 
+**Status**: ✅ **Already configured** for the munimetro project! This doc explains the setup for reference and for collaborators.
+
 ## Prerequisites
 
 - Google Cloud account
 - `gcloud` CLI installed (`brew install google-cloud-sdk`)
+- `rclone` installed (`brew install rclone`)
+- `git-annex-remote-rclone` installed (`brew install git-annex-remote-rclone`)
 - Git-annex already initialized (done)
 
 ## Why Google Cloud Storage?
@@ -17,94 +21,55 @@ This guide explains how to configure Google Cloud Storage (GCS) as the remote ba
 
 ---
 
-## Setup Steps
+## Setup Steps (Already Completed)
 
-### 1. Install Google Cloud SDK (if not already installed)
+The munimetro project is already set up with GCS. Here's what was done:
+
+### 1. Install Required Tools
 
 ```bash
-brew install google-cloud-sdk
+brew install google-cloud-sdk rclone git-annex-remote-rclone
 ```
 
 ### 2. Authenticate with Google Cloud
 
 ```bash
 gcloud auth login
-gcloud auth application-default login
+gcloud config set project munimetro
 ```
 
-### 3. Create a Google Cloud Project
-
-```bash
-# Set your project ID (choose a unique name)
-export PROJECT_ID="munimetro-data"
-
-# Create project
-gcloud projects create $PROJECT_ID --name="Muni Metro Data"
-
-# Set as active project
-gcloud config set project $PROJECT_ID
-```
-
-### 4. Enable Cloud Storage API
+### 3. Enable API and Create Bucket
 
 ```bash
 gcloud services enable storage-api.googleapis.com
+gsutil mb -p munimetro -l us-west1 gs://munimetro-annex
 ```
 
-### 5. Create a GCS Bucket
+### 4. Configure rclone for GCS
 
 ```bash
-# Choose a globally unique bucket name
-export BUCKET_NAME="munimetro-annex-$(whoami)"
-
-# Create bucket in us-west region (close to SF)
-gsutil mb -l us-west1 gs://$BUCKET_NAME
-
-# Verify bucket was created
-gsutil ls
+rclone config create munimetro-gcs gcs project_number=munimetro bucket_policy_only=true
+# This opens a browser for OAuth authentication
 ```
 
-### 6. Configure git-annex to use GCS
+### 5. Initialize git-annex Remote
 
 ```bash
-# Initialize GCS remote in git-annex
 git annex initremote google-cloud \
   type=external \
   externaltype=rclone \
-  target=google-cloud \
-  prefix=munimetro/ \
-  chunk=100MiB \
-  encryption=none
-
-# Alternative: Using gcrypt for encryption
-# git annex initremote google-cloud \
-#   type=gcrypt \
-#   gitrepo=gcrypt::rclone://google-cloud:munimetro-data \
-#   encryption=shared
+  target=munimetro-gcs \
+  prefix=munimetro-annex \
+  chunk=50MiB \
+  encryption=none \
+  rclone_layout=lower
 ```
 
-**Note**: The above uses `rclone` as a bridge. Install it first:
+### 6. Upload Files
 
 ```bash
-brew install rclone
-rclone config  # Follow prompts to configure Google Drive/GCS
-```
-
-### 7. Alternative: Direct GCS Setup (Simpler)
-
-If the rclone method seems complex, use the `git-annex-remote-googledrive` special remote:
-
-```bash
-# Install the special remote
-brew install git-annex-remote-googledrive
-
-# Configure it
-git annex initremote google \
-  type=external \
-  externaltype=googledrive \
-  prefix=munimetro/ \
-  root_folder_id=YOUR_FOLDER_ID \
-  encryption=none
+# Upload all annexed files (1.1GB - takes ~10-20 minutes)
+git annex copy --to=google-cloud --jobs=4
 ```
 
 ---
