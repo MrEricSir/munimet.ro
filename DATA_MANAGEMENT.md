@@ -1,300 +1,180 @@
 # Data Management Guide
 
-This document explains how to handle large files (training data, images, models) in the Muni Status Monitor project.
+This project uses **git-annex with Google Cloud Storage** to manage large files (training data and models).
 
 ## Current Data Size
 
 ```bash
-267MB  data/muni_snapshots/       # 2,601 images
+268MB  data/muni_snapshots/       # 2,601 training images
 856MB  models/trained_model/      # BLIP model + classifier
-570KB  data/training_labels.json  # Training labels (should be committed)
+570KB  data/training_labels.json  # Training labels
 ```
 
-**Total: ~1.1GB** of data that shouldn't be committed to Git.
+**Total: ~1.1GB** tracked with git-annex, stored in Google Cloud Storage (FREE - under 5GB tier).
 
-## What's Currently Excluded from Git
+## How It Works
 
-The `.gitignore` file excludes:
-```
-data/muni_snapshots/    # Downloaded images
-data/cache/             # API cache files
-models/trained_model/   # Trained ML model
-```
+Large files are tracked as symlinks in Git, with actual content stored in Google Cloud Storage:
 
-**Note**: `data/training_labels.json` is **not** ignored by default. You can commit this if you want to share your training labels with collaborators.
+- **In Git**: Small symlink files (~200 bytes each)
+- **In GCS**: Actual large files (bucket: gs://munimetro-annex/)
+- **Local**: Files you've downloaded via `git annex get`
 
-## Storage Alternatives
+This keeps the Git repository small while making large files available on demand.
 
-### Option 1: Git LFS (Git Large File Storage) ⭐ Recommended
+---
 
-**Best for**: Sharing models and data with collaborators
+## For Collaborators
 
-**Setup**:
+When you clone this repository, you'll see symlinks for large files. Follow these steps to get the actual files:
+
+### 1. Install Prerequisites
+
 ```bash
-cd ~/Development/munimetro
-
-# Install Git LFS
-brew install git-lfs
-git lfs install
-
-# Track large files
-git lfs track "models/trained_model/**"
-git lfs track "data/training_labels.json"
-
-# Add .gitattributes
-git add .gitattributes
-git commit -m "Add Git LFS tracking for models"
-
-# Now you can commit the model
-git add models/trained_model/
-git commit -m "Add trained BLIP model"
+brew install git-annex rclone git-annex-remote-rclone
 ```
 
-**Pros**:
-- Seamless Git workflow
-- Version history for models
-- Easy collaboration
-- GitHub/GitLab support
+### 2. Initialize git-annex
 
-**Cons**:
-- Costs money on GitHub after 1GB free storage
-- Slower cloning for new contributors
-- Requires Git LFS installed on all machines
-
-**Cost**: GitHub LFS: $5/month for 50GB, GitLab: 10GB free per repo
-
----
-
-### Option 2: Cloud Storage (S3, GCS, Dropbox)
-
-**Best for**: Personal projects, avoiding Git LFS costs
-
-**Setup with Google Cloud Storage**:
 ```bash
-# Upload model
-gsutil -m cp -r models/trained_model/* gs://your-bucket/munimetro/models/trained_model/
-
-# Download on new machine
-gsutil -m cp -r gs://your-bucket/munimetro/models/trained_model/* models/trained_model/
+cd munimetro
+git annex init "your-laptop-name"
 ```
 
-**Setup with AWS S3**:
+### 3. Enable Google Cloud Storage Remote
+
 ```bash
-# Upload
-aws s3 sync models/trained_model/ s3://your-bucket/munimetro/models/trained_model/
-
-# Download
-aws s3 sync s3://your-bucket/munimetro/models/trained_model/ models/trained_model/
+git annex enableremote google-cloud
 ```
 
-**Setup with Dropbox/Drive**:
+This will prompt you to authenticate with Google Cloud via your browser.
+
+### 4. Download Files You Need
+
 ```bash
-# Create symlinks to shared folder
-ln -s ~/Dropbox/munimetro/models/trained_model models/trained_model
-ln -s ~/Dropbox/munimetro/data/training_labels.json data/training_labels.json
+# Option A: Get everything (1.1GB)
+git annex get .
+
+# Option B: Get only the model (for running the API)
+git annex get models/trained_model/
+
+# Option C: Get only training data (for retraining)
+git annex get data/
+
+# Option D: Get specific file
+git annex get data/muni_snapshots/muni_snapshot_20251206_134756.jpg
 ```
 
-**Pros**:
-- No extra tooling needed
-- Can use existing cloud storage
-- More storage for less money
-- Easy to share via URL
+### 5. (Optional) Unlock Labels for Editing
 
-**Cons**:
-- Manual download step for new clones
-- Not versioned with code
-- Need separate credentials/setup
+If you want to edit training labels:
 
----
-
-### Option 3: DVC (Data Version Control)
-
-**Best for**: ML teams, data scientists, production ML
-
-**Setup**:
 ```bash
-# Install DVC
-pip install dvc
-
-# Initialize DVC
-dvc init
-
-# Add remote (S3, GCS, Azure, etc.)
-dvc remote add -d storage s3://your-bucket/munimetro-dvc
-
-# Track large files
-dvc add models/trained_model/
-dvc add data/training_labels.json
-
-# Commit DVC metadata
-git add models/trained_model.dvc data/training_labels.json.dvc .dvc
-git commit -m "Track data with DVC"
-
-# Push data to remote
-dvc push
-
-# On new machine, pull data
-git clone your-repo
-dvc pull
+git annex unlock data/training_labels.json
 ```
 
-**Pros**:
-- Built specifically for ML workflows
-- Version models alongside code
-- Supports experiments and pipelines
-- Works with any cloud storage
-- More cost-effective than Git LFS
-
-**Cons**:
-- Adds complexity (new tool to learn)
-- Requires DVC installed on all machines
-- Not as seamless as Git LFS
+Now you can modify the file with `label_images.py`.
 
 ---
 
-### Option 4: Regenerate on Each Machine (Current Approach)
+## For Project Owner
 
-**Best for**: Small teams, learning projects
+### Adding New Files
 
-**Current setup** - `.gitignore` excludes large files:
+When you add new images or update the model, git-annex handles it automatically:
+
 ```bash
-# Clone repo
-git clone your-repo
+# Add files (git-annex tracks them automatically)
+git annex add data/muni_snapshots/new_image.jpg
 
-# Download images yourself
-cd training
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-python download_muni_image.py  # Run for hours/days
+# Upload to Google Cloud Storage
+git annex copy data/muni_snapshots/new_image.jpg --to=google-cloud
 
-# Label images
-python label_images.py  # Label 50-100+ images
-
-# Train model
-python train_model.py  # Takes 5-20 minutes
+# Commit the symlink
+git add data/muni_snapshots/new_image.jpg
+git commit -m "Add new training image"
 ```
 
-**Pros**:
-- No extra tools or costs
-- Clean Git repo
-- Learn the full workflow
-- Always fresh data
+### Uploading All Changes
 
-**Cons**:
-- Time-consuming for new contributors
-- Need to collect data yourself
-- Can't reproduce exact model versions
-- Not practical for production
-
----
-
-### Option 5: Hugging Face Hub 🤗
-
-**Best for**: Sharing ML models publicly
-
-**Setup**:
 ```bash
-# Install Hugging Face CLI
-pip install huggingface_hub
-
-# Login
-huggingface-cli login
-
-# Upload model
-huggingface-cli upload your-username/muni-status-model ./models/trained_model/
-
-# Download model
-from huggingface_hub import snapshot_download
-snapshot_download(repo_id="your-username/muni-status-model", local_dir="./models/trained_model/")
+# Upload everything not yet in cloud storage
+git annex copy --to=google-cloud --jobs=4
 ```
 
-**Pros**:
-- Free unlimited storage for public models
-- Designed for ML models
-- Great discovery/sharing features
-- Automatic model cards
+### Checking File Locations
 
-**Cons**:
-- Public by default (private repos cost money)
-- Overkill for personal projects
-- Need HuggingFace account
+```bash
+# See where files are stored
+git annex whereis data/muni_snapshots/
 
----
+# See what's available locally
+git annex find --in=here
 
-## Recommended Approach
+# See what's in Google Cloud
+git annex find --in=google-cloud
+```
 
-**For this project, I recommend**:
+### Freeing Up Local Disk Space
 
-1. **Commit training labels** (`data/training_labels.json` - 570KB)
-   - Small enough for Git
-   - Valuable for reproducibility
-   - Easy to share
+```bash
+# Remove local copies (keeps them in cloud)
+git annex drop data/muni_snapshots/
 
-2. **Use Git LFS for the model** if sharing with team:
-   ```bash
-   git lfs track "models/trained_model/**"
-   git add models/trained_model/
-   ```
-
-3. **Keep images in `.gitignore`**:
-   - 267MB is manageable but grows over time
-   - Easy to regenerate with `download_muni_image.py`
-   - If sharing, provide a small sample dataset (10-20 images) instead
-
-4. **Add download script** for collaborators:
-   ```bash
-   # scripts/download_pretrained_model.sh
-   #!/bin/bash
-   # Download pre-trained model from cloud storage
-   gsutil cp -r gs://your-bucket/muni-model/* models/trained_model/
-   ```
-
----
-
-## Setup Instructions for Collaborators
-
-Add to your `README.md`:
-
-```markdown
-## Getting the Trained Model
-
-**Option 1: Download pre-trained model** (fastest):
-\`\`\`bash
-# Download from cloud storage
-./scripts/download_pretrained_model.sh
-\`\`\`
-
-**Option 2: Train it yourself** (2-4 hours):
-\`\`\`bash
-cd training
-python download_muni_image.py  # Collect images (run overnight)
-python label_images.py          # Label 50-100+ images
-python train_model.py           # Train model (5-20 minutes)
-\`\`\`
+# Get them back later
+git annex get data/muni_snapshots/
 ```
 
 ---
 
-## Decision Matrix
+## Useful Commands
 
-| Approach | Cost | Setup Complexity | Best For |
-|----------|------|-----------------|----------|
-| **Git LFS** | $5-10/mo | Low | Teams, version control |
-| **Cloud Storage** | $1-5/mo | Medium | Personal, cost-sensitive |
-| **DVC** | Storage cost only | High | ML teams, experiments |
-| **Regenerate** | Free | Low | Learning, small teams |
-| **Hugging Face** | Free (public) | Low | Public sharing |
+| Command | Purpose |
+|---------|---------|
+| `git annex get <file>` | Download file from cloud |
+| `git annex drop <file>` | Remove local copy (keeps in cloud) |
+| `git annex copy --to=google-cloud` | Upload files to cloud |
+| `git annex whereis <file>` | Show where file is stored |
+| `git annex unlock <file>` | Make file editable |
+| `git annex sync --content` | Sync everything |
+| `git annex info` | Show repository stats |
 
 ---
 
-## Current Status
+## Storage Details
 
-✅ `.gitignore` configured to exclude:
-- `data/muni_snapshots/` (267MB)
-- `models/trained_model/` (856MB)
-- `data/cache/` (runtime cache)
+- **Bucket**: gs://munimetro-annex
+- **Region**: us-west1 (close to San Francisco)
+- **Cost**: $0/month (under Google Cloud's 5GB free tier)
+- **Chunking**: 50MiB chunks for efficient transfer
+- **Encryption**: None (data is not sensitive)
 
-📋 Ready to commit:
-- `data/training_labels.json` (570KB) - Optionally commit this
+For more details on the setup, see [GCS_SETUP.md](GCS_SETUP.md).
 
-🎯 **Next step**: Choose one of the approaches above based on your needs.
+---
+
+## Troubleshooting
+
+### "Remote not available"
+```bash
+git annex enableremote google-cloud
+```
+
+### "Permission denied"
+```bash
+# Re-authenticate with Google Cloud
+gcloud auth application-default login
+```
+
+### Files showing as broken symlinks
+```bash
+# Download the files
+git annex get .
+```
+
+### Want to switch to a different storage backend?
+git-annex supports multiple remotes. You can add S3, another GCS bucket, or even a local USB drive:
+```bash
+git annex initremote backup-usb type=directory directory=/Volumes/backup/munimetro encryption=none
+git annex copy --to=backup-usb
+```

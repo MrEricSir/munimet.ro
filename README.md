@@ -68,9 +68,8 @@ munimetro/
 - **[Training Guide](training/README.md)** - Download images, label data, train models
 - **[API & Deployment Guide](api/README.md)** - Run API locally or deploy to Google Cloud Run
 - **[Testing Guide](tests/README.md)** - Run automated tests
-- **[GCS Setup Guide](GCS_SETUP.md)** - Configure Google Cloud Storage for git-annex
-- **[Storage Comparison](STORAGE_COMPARISON.md)** - Analysis of storage options for large files
-- **[Data Management Guide](DATA_MANAGEMENT.md)** - Legacy guide (see GCS_SETUP.md instead)
+- **[Data Management Guide](DATA_MANAGEMENT.md)** - Using git-annex with Google Cloud Storage
+- **[GCS Setup Guide](GCS_SETUP.md)** - Detailed Google Cloud Storage configuration
 
 ## Workflow
 
