@@ -1,6 +1,6 @@
 # Multi-stage build for SF Muni Status API
 # Uses security best practices: minimal image, non-root user, health checks
-# Build from project root: docker build -f api/Dockerfile .
+# Build with Cloud Build: gcloud builds submit --tag IMAGE_NAME
 
 # Stage 1: Build stage - install dependencies
 FROM python:3.13-slim-bookworm AS builder
@@ -43,17 +43,14 @@ WORKDIR /app
 # Copy shared library
 COPY --chown=muni:muni lib/ ./lib/
 
-# Copy API application files
-COPY --chown=muni:muni api/api.py .
-COPY --chown=muni:muni api/check_status.py .
-COPY --chown=muni:muni api/predict_status.py .
-COPY --chown=muni:muni api/index.html .
+# Copy API application files to api/ subdirectory to preserve path structure
+COPY --chown=muni:muni api/ ./api/
 
-# Copy download script (used by check_status.py)
-COPY --chown=muni:muni training/download_muni_image.py .
+# Copy ML model files (Docker COPY follows symlinks, so git-annex files work)
+COPY --chown=muni:muni artifacts/models/v1/ ./artifacts/models/v1/
 
 # Create directories for runtime data with proper permissions
-RUN mkdir -p /app/artifacts/runtime/downloads /app/artifacts/runtime/cache /app/artifacts/models/v1 && \
+RUN mkdir -p /app/artifacts/runtime/downloads /app/artifacts/runtime/cache && \
     chown -R muni:muni /app
 
 # Switch to non-root user
@@ -82,7 +79,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # - Graceful timeout for proper shutdown
 # - Access logging disabled for performance (enable with --access-logfile -)
 CMD ["gunicorn", \
-    "api:app", \
+    "api.api:app", \
     "--bind", "0.0.0.0:8000", \
     "--workers", "1", \
     "--timeout", "120", \

@@ -1,6 +1,11 @@
-# SF Muni Metro Status Monitor
+# Muni Metro Status Monitor
 
-ML-powered real-time monitoring system for SF Muni Metro subway status. Downloads status board images, trains vision-language models to classify and describe status, and serves predictions via a production-ready web API.
+Is the Muni Metro subway in San Francisco running? This web app monitors the internal status image and provides a brief summary using computer vision.
+
+See it in action:
+https://munimet.ro
+
+This project was largely "vibe coded" using Anthropic's Claude Code. The project itself does not rely on Claude or any other LLM AI.
 
 ## Quick Start
 

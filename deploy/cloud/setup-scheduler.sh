@@ -31,7 +31,7 @@ CHECKER_URL=$(gcloud run services describe "$CHECKER_SERVICE" \
 
 if [ -z "$CHECKER_URL" ]; then
     echo "❌ Error: Checker service not found. Deploy services first:"
-    echo "   ./deploy-services.sh"
+    echo "   ./deploy/cloud/deploy-services.sh"
     exit 1
 fi
 

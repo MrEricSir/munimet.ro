@@ -1,0 +1,55 @@
+# This file specifies files that are *not* uploaded to Google Cloud
+# when using gcloud builds submit
+
+# Git files (but we need .git/annex for model files during unlock)
+.git/
+!.git/annex/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+*/venv/
+*/env/
+muni_venv/
+muni_ml_venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Training artifacts we don't need in the container
+training/venv/
+training/training_log.txt
+training/*.ipynb_checkpoints/
+
+# Test artifacts
+tests/
+*.test
+
+# Large data files we don't need (snapshots are downloaded at runtime)
+data/muni_snapshots/
+data/cache/
+
+# Deployment scripts (don't need in container)
+deploy/
+
+# Documentation
+*.md
+!README.md
+
+# Git artifacts
+*.orig

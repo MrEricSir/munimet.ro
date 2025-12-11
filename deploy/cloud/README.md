@@ -50,8 +50,7 @@ Users
 ### 1. Setup Infrastructure (One-time)
 
 ```bash
-cd api/deploy
-./setup-infrastructure.sh
+./deploy/cloud/setup-infrastructure.sh
 ```
 
 This script:
@@ -63,11 +62,11 @@ This script:
 ### 2. Deploy Services
 
 ```bash
-./deploy-services.sh
+./deploy/cloud/deploy-services.sh
 ```
 
 This script:
-- ✅ Builds Docker image
+- ✅ Builds container image using Cloud Build
 - ✅ Deploys `munimetro-api` (public, serves frontend + API)
 - ✅ Deploys `munimetro-checker` (private, updates status)
 
@@ -76,7 +75,7 @@ This script:
 ### 3. Setup Scheduler
 
 ```bash
-./setup-scheduler.sh
+./deploy/cloud/setup-scheduler.sh
 ```
 
 This script:
@@ -141,23 +140,23 @@ gcloud logging read 'resource.type="cloud_scheduler_job"' --limit 20
 ```bash
 # Edit schedule (cron format)
 export SCHEDULE="*/10 * * * *"  # Every 10 minutes
-./setup-scheduler.sh
+./deploy/cloud/setup-scheduler.sh
 ```
 
 ### Change bucket name
 ```bash
 export GCS_BUCKET="my-custom-bucket"
-./setup-infrastructure.sh
-./deploy-services.sh  # Redeploy with new bucket
+./deploy/cloud/setup-infrastructure.sh
+./deploy/cloud/deploy-services.sh  # Redeploy with new bucket
 ```
 
 ### Enable fallback mode (download+predict on API)
 ```bash
-# Edit deploy-services.sh, change:
+# Edit deploy/cloud/deploy-services.sh, change:
 # ENABLE_FALLBACK=false → ENABLE_FALLBACK=true
 
 # Redeploy
-./deploy-services.sh
+./deploy/cloud/deploy-services.sh
 ```
 
 ## Security
@@ -269,7 +268,7 @@ python3 -m gunicorn api:app --bind 0.0.0.0:8000
 ### Deploy new version
 ```bash
 # Just re-run deploy script
-./deploy-services.sh
+./deploy/cloud/deploy-services.sh
 
 # Cloud Run will:
 # - Build new image

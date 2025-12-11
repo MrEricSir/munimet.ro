@@ -29,11 +29,11 @@ SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 DEFAULT_INTERVAL = 30  # seconds
 
 
-def check_status(write_cache=False, model=None, processor=None, label_to_status=None, device=None):
+def check_status(should_write_cache=False, model=None, processor=None, label_to_status=None, device=None):
     """Download image and predict status.
 
     Args:
-        write_cache: If True, write result to cache file
+        should_write_cache: If True, write result to cache file
         model: Pre-loaded model (optional, will load if not provided)
         processor: Pre-loaded processor (optional, will load if not provided)
         label_to_status: Pre-loaded label mapping (optional, will load if not provided)
@@ -90,7 +90,7 @@ def check_status(write_cache=False, model=None, processor=None, label_to_status=
     print(f"  🔴 Red:    {prediction['probabilities']['red']:.1%}")
 
     # Write to cache if requested
-    if write_cache:
+    if should_write_cache:
         # Create new status entry
         new_status = {
             'status': prediction['status'],
@@ -178,7 +178,7 @@ def main():
 
     if not continuous:
         # Single check
-        check_status(write_cache=write_cache)
+        check_status(should_write_cache=write_cache)
     else:
         # Continuous checking
         count = 0
@@ -193,7 +193,7 @@ def main():
                 print(f"{'='*60}")
 
                 if check_status(
-                    write_cache=write_cache,
+                    should_write_cache=write_cache,
                     model=model,
                     processor=processor,
                     label_to_status=label_to_status,
