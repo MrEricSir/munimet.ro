@@ -147,13 +147,13 @@ tail -f artifacts/runtime/cache-writer.log
 
 ```
 Cloud Scheduler (every 5 min)
-  ↓ POST request (OIDC auth)
-munimetro-checker (Cloud Run - private)
+  ↓ triggers (OAuth)
+munimetro-checker (Cloud Run Job)
   ↓ downloads image + predicts status
-  ↓ writes JSON
+  ↓ writes JSON + exits
 Cloud Storage (gs://munimetro-cache/latest_status.json)
   ↑ reads JSON (~100-200ms)
-munimetro-api (Cloud Run - public)
+munimetro-api (Cloud Run Service)
   ↓ serves to users
 Users
 ```
@@ -201,8 +201,8 @@ This script:
 
 This script:
 1. Builds Docker image from project root
-2. Deploys `munimetro-api` (public, serves frontend + API)
-3. Deploys `munimetro-checker` (private, updates status)
+2. Deploys `munimetro-api` (public Cloud Run Service, serves frontend + API)
+3. Deploys `munimetro-checker` (Cloud Run Job, updates status when triggered)
 4. Grants service account permissions
 
 **First deployment: ~10-15 minutes** (downloading ML model layers)
@@ -217,7 +217,7 @@ This script:
 This script:
 1. Creates Cloud Scheduler job
 2. Configures 5-minute interval (`*/5 * * * *`)
-3. Sets up OIDC authentication for checker service
+3. Sets up OAuth authentication to trigger Cloud Run Job
 4. Runs test execution
 
 ### Verifying Deployment
@@ -229,21 +229,23 @@ This script:
 Comprehensive verification checks:
 1. GCS bucket exists and has cache file
 2. API service deployed and healthy
-3. Checker service deployed
+3. Checker job deployed and execution history
 4. Cloud Scheduler configured and running
 5. Service account permissions
-6. Recent logs from both services
+6. Recent logs from API and job executions
 
 ### Cost Estimate
 
-**Expected: ~$0.12/month for typical usage**
+**Expected: ~$0.13/month for typical usage**
 
 | Service | Usage | Cost |
 |---------|-------|------|
-| Cloud Run (API) | ~1000 requests/day | $0 (free tier) |
-| Cloud Run (Checker) | 8,640 invocations/month | $0 (free tier) |
+| Cloud Run Service (API) | ~1000 requests/day | $0 (free tier) |
+| Cloud Run Jobs (Checker) | 8,640 executions/month @ ~10s each | $0.01 (very minimal) |
 | Cloud Storage | 1KB file, 30K reads/month | $0.016 |
 | Cloud Scheduler | 1 job | $0.10 |
+
+*Cloud Run Jobs are cheaper than Services for scheduled tasks - no idle costs.*
 
 At 100K API requests/day, cost increases to ~$2-3/month.
 
@@ -266,7 +268,11 @@ export GCP_REGION="us-central1"
 
 **Manual trigger:**
 ```bash
+# Option 1: Via scheduler
 gcloud scheduler jobs run munimetro-status-check --location=us-west1
+
+# Option 2: Run job directly (faster for testing)
+gcloud run jobs execute munimetro-checker --region=us-west1
 ```
 
 ### Monitoring
@@ -276,8 +282,11 @@ gcloud scheduler jobs run munimetro-status-check --location=us-west1
 # API logs
 gcloud run services logs read munimetro-api --region us-west1 --limit 50
 
-# Checker logs
-gcloud run services logs read munimetro-checker --region us-west1 --limit 50
+# Checker job logs
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="munimetro-checker"' --limit 50
+
+# Job executions
+gcloud run jobs executions list --job=munimetro-checker --region=us-west1
 
 # Scheduler logs
 gcloud logging read 'resource.type="cloud_scheduler_job"' --limit 20
@@ -319,15 +328,18 @@ gsutil iam ch \
   gs://munimetro-cache
 ```
 
-**Checker service fails:**
+**Checker job fails:**
 ```bash
+# View recent executions
+gcloud run jobs executions list --job=munimetro-checker --region=us-west1 --limit=10
+
 # View logs
-gcloud run services logs read munimetro-checker --region us-west1 --limit 100
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="munimetro-checker"' --limit 100
 
 # Common issues:
-# - Model download timeout → increase --timeout in deploy script
+# - Model download timeout → increase --task-timeout in deploy script
 # - GCS permission denied → check service account IAM
-# - Out of memory → increase --memory to 4Gi
+# - Out of memory → increase --memory to 4Gi in deploy script
 ```
 
 **Scheduler not triggering:**
@@ -347,20 +359,23 @@ gcloud scheduler jobs run munimetro-status-check --location us-west1
 **IAM Permissions:**
 - Service account has Storage Object Admin on bucket only
 - API service is public
-- Checker service is private (OIDC auth)
-- Cloud Scheduler uses service account to invoke checker
+- Checker job only executable by authorized service accounts
+- Cloud Scheduler uses OAuth to trigger job executions
 
 **Network:**
-- Both services in Google's managed VPC
+- API Service and Checker Job run in Google's managed VPC
 - Outbound: HTTPS to sfmunicentral.com only
 - Bucket is private (no public access)
+- Checker Job has no inbound network (batch execution only)
 
 ### Cleanup
 
 ```bash
-# Delete services
+# Delete service
 gcloud run services delete munimetro-api --region us-west1 --quiet
-gcloud run services delete munimetro-checker --region us-west1 --quiet
+
+# Delete job
+gcloud run jobs delete munimetro-checker --region us-west1 --quiet
 
 # Delete scheduler
 gcloud scheduler jobs delete munimetro-status-check --location us-west1 --quiet
