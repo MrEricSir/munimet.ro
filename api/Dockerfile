@@ -53,7 +53,7 @@ COPY --chown=muni:muni api/index.html .
 COPY --chown=muni:muni training/download_muni_image.py .
 
 # Create directories for runtime data with proper permissions
-RUN mkdir -p /app/data/muni_snapshots /app/data/cache /app/models/trained_model && \
+RUN mkdir -p /app/artifacts/runtime/downloads /app/artifacts/runtime/cache /app/artifacts/models/v1 && \
     chown -R muni:muni /app
 
 # Switch to non-root user
@@ -66,6 +66,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
     ENABLE_FALLBACK=false \
+    CLOUD_RUN=true \
+    GCS_BUCKET=munimetro-cache \
     PORT=8000
 
 # Expose port
