@@ -7,8 +7,8 @@ set -e
 PROJECT_ID="${GCP_PROJECT_ID:-munimetro}"
 REGION="${GCP_REGION:-us-west1}"
 API_SERVICE="munimetro-api"
-CHECKER_SERVICE="munimetro-checker"
-JOB_NAME="munimetro-status-check"
+CHECKER_JOB="munimetro-checker"
+SCHEDULER_JOB_NAME="munimetro-status-check"
 BUCKET_NAME="${GCS_BUCKET:-munimetro-cache}"
 
 echo "=========================================="
@@ -86,47 +86,62 @@ else
 fi
 echo ""
 
-echo "[3/6] Checking Checker Service..."
-if gcloud run services describe "$CHECKER_SERVICE" \
+echo "[3/6] Checking Checker Job..."
+if gcloud run jobs describe "$CHECKER_JOB" \
     --region "$REGION" --project "$PROJECT_ID" &> /dev/null; then
 
-    CHECKER_URL=$(gcloud run services describe "$CHECKER_SERVICE" \
+    IMAGE=$(gcloud run jobs describe "$CHECKER_JOB" \
         --region "$REGION" --project "$PROJECT_ID" \
-        --format 'value(status.url)')
+        --format 'value(spec.template.spec.containers[0].image)')
 
-    STATUS=$(gcloud run services describe "$CHECKER_SERVICE" \
-        --region "$REGION" --project "$PROJECT_ID" \
-        --format 'value(status.conditions[0].status)')
+    echo "✓ Job deployed: $CHECKER_JOB"
+    echo "  Image: $IMAGE"
 
-    echo "✓ Service deployed: $CHECKER_SERVICE"
-    echo "  URL: $CHECKER_URL (private)"
-    echo "  Status: $STATUS"
+    # Check last execution
+    echo "  Checking recent executions..."
+    LAST_EXECUTION=$(gcloud run jobs executions list \
+        --job="$CHECKER_JOB" \
+        --region="$REGION" \
+        --project="$PROJECT_ID" \
+        --limit=1 \
+        --format='value(metadata.name)' 2>/dev/null)
+
+    if [ -n "$LAST_EXECUTION" ]; then
+        EXEC_STATUS=$(gcloud run jobs executions describe "$LAST_EXECUTION" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --format='value(status.conditions[0].type)' 2>/dev/null)
+        echo "  Last execution: $LAST_EXECUTION"
+        echo "  Status: $EXEC_STATUS"
+    else
+        echo "  ⚠️  No executions yet (run manually or wait for scheduler)"
+    fi
 else
-    echo "❌ Checker service not deployed"
-    echo "   Run: ./deploy-services.sh"
+    echo "❌ Checker job not deployed"
+    echo "   Run: ./deploy/cloud/deploy-services.sh"
 fi
 echo ""
 
 echo "[4/6] Checking Cloud Scheduler..."
-if gcloud scheduler jobs describe "$JOB_NAME" \
+if gcloud scheduler jobs describe "$SCHEDULER_JOB_NAME" \
     --location="$REGION" --project="$PROJECT_ID" &> /dev/null; then
 
-    SCHEDULE=$(gcloud scheduler jobs describe "$JOB_NAME" \
+    SCHEDULE=$(gcloud scheduler jobs describe "$SCHEDULER_JOB_NAME" \
         --location="$REGION" --project="$PROJECT_ID" \
         --format 'value(schedule)')
 
-    STATE=$(gcloud scheduler jobs describe "$JOB_NAME" \
+    STATE=$(gcloud scheduler jobs describe "$SCHEDULER_JOB_NAME" \
         --location="$REGION" --project="$PROJECT_ID" \
         --format 'value(state)')
 
-    echo "✓ Scheduler job configured: $JOB_NAME"
+    echo "✓ Scheduler job configured: $SCHEDULER_JOB_NAME"
     echo "  Schedule: $SCHEDULE"
     echo "  State: $STATE"
 
     # Get last run time
     echo "  Checking recent executions..."
     LAST_RUN=$(gcloud logging read \
-        "resource.type=cloud_scheduler_job AND resource.labels.job_id=$JOB_NAME" \
+        "resource.type=cloud_scheduler_job AND resource.labels.job_id=$SCHEDULER_JOB_NAME" \
         --limit 1 --format 'value(timestamp)' --project "$PROJECT_ID" 2>/dev/null)
 
     if [ -n "$LAST_RUN" ]; then
@@ -136,7 +151,7 @@ if gcloud scheduler jobs describe "$JOB_NAME" \
     fi
 else
     echo "❌ Scheduler job not configured"
-    echo "   Run: ./setup-scheduler.sh"
+    echo "   Run: ./deploy/cloud/setup-scheduler.sh"
 fi
 echo ""
 
@@ -168,10 +183,11 @@ gcloud run services logs read "$API_SERVICE" \
     --limit 5 --format 'value(textPayload)' 2>/dev/null | head -5 || echo "No logs available"
 
 echo ""
-echo "--- Checker Service ---"
-gcloud run services logs read "$CHECKER_SERVICE" \
-    --region "$REGION" --project "$PROJECT_ID" \
-    --limit 5 --format 'value(textPayload)' 2>/dev/null | head -5 || echo "No logs available"
+echo "--- Checker Job ---"
+gcloud logging read \
+    "resource.type=cloud_run_job AND resource.labels.job_name=$CHECKER_JOB" \
+    --limit 10 --project "$PROJECT_ID" \
+    --format 'value(textPayload)' 2>/dev/null | head -5 || echo "No logs available"
 
 echo ""
 echo "=========================================="
@@ -184,7 +200,8 @@ if [ -n "$API_URL" ]; then
     echo "🌐 Live URL: $API_URL"
     echo ""
     echo "Quick commands:"
-    echo "  Test API:       curl $API_URL/status"
-    echo "  Trigger update: gcloud scheduler jobs run $JOB_NAME --location=$REGION"
-    echo "  View logs:      gcloud run services logs read $API_SERVICE --region=$REGION"
+    echo "  Test API:         curl $API_URL/status"
+    echo "  Trigger via scheduler: gcloud scheduler jobs run $SCHEDULER_JOB_NAME --location=$REGION"
+    echo "  Trigger job directly:  gcloud run jobs execute $CHECKER_JOB --region=$REGION"
+    echo "  View API logs:    gcloud run services logs read $API_SERVICE --region=$REGION"
 fi

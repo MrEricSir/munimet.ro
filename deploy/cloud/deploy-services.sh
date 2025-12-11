@@ -11,9 +11,9 @@ BUCKET_NAME="${GCS_BUCKET:-munimetro-cache}"
 SERVICE_ACCOUNT_NAME="munimetro-api"
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# Service names
+# Service and job names
 API_SERVICE="munimetro-api"
-CHECKER_SERVICE="munimetro-checker"
+CHECKER_JOB="munimetro-checker"
 
 # Image names
 IMAGE_NAME="munimetro"
@@ -114,47 +114,37 @@ API_URL=$(gcloud run services describe "$API_SERVICE" \
 echo "✓ API service deployed: $API_URL"
 echo ""
 
-# Deploy status checker service
+# Deploy status checker job
 echo ""
-echo "  Deploying status checker service..."
-gcloud run deploy "$CHECKER_SERVICE" \
+echo "  Deploying status checker job..."
+gcloud run jobs deploy "$CHECKER_JOB" \
     --image "$API_IMAGE" \
-    --platform managed \
     --region "$REGION" \
     --project "$PROJECT_ID" \
     --service-account "$SERVICE_ACCOUNT_EMAIL" \
-    --no-allow-unauthenticated \
     --memory 2Gi \
     --cpu 1 \
-    --timeout 120s \
-    --max-instances 1 \
-    --min-instances 0 \
-    --concurrency 1 \
-    --port 8000 \
+    --task-timeout 120s \
+    --max-retries 3 \
     --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME}" \
-    --command="gunicorn" \
-    --args="api.checker_server:app,--bind,0.0.0.0:8000,--workers,1,--timeout,120,--graceful-timeout,30,--log-level,info"
+    --command="python" \
+    --args="-m,api.check_status_job"
 
-CHECKER_URL=$(gcloud run services describe "$CHECKER_SERVICE" \
-    --platform managed \
-    --region "$REGION" \
-    --project "$PROJECT_ID" \
-    --format 'value(status.url)')
-
-echo "✓ Checker service deployed: $CHECKER_URL"
+echo "✓ Checker job deployed: $CHECKER_JOB"
 echo ""
 
 echo "=========================================="
 echo "✓ Deployment complete!"
 echo "=========================================="
 echo ""
-echo "Service URLs:"
-echo "  API (public):     $API_URL"
-echo "  Checker (private): $CHECKER_URL"
+echo "Deployed components:"
+echo "  API Service:  $API_URL"
+echo "  Checker Job:  $CHECKER_JOB (in region $REGION)"
 echo ""
 echo "Next steps:"
 echo "1. Test API: curl $API_URL/status"
-echo "2. Setup scheduler: ./setup-scheduler.sh"
+echo "2. Setup scheduler: ./deploy/cloud/setup-scheduler.sh"
+echo "3. Test job manually: gcloud run jobs execute $CHECKER_JOB --region=$REGION"
 echo ""
 echo "Environment info:"
 echo "  Cache: gs://$BUCKET_NAME/latest_status.json"

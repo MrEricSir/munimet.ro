@@ -6,8 +6,8 @@ set -e  # Exit on error
 # Configuration
 PROJECT_ID="${GCP_PROJECT_ID:-munimetro}"
 REGION="${GCP_REGION:-us-west1}"
-CHECKER_SERVICE="munimetro-checker"
-JOB_NAME="munimetro-status-check"
+CHECKER_JOB="munimetro-checker"
+SCHEDULER_JOB_NAME="munimetro-status-check"
 SCHEDULE="${SCHEDULE:-*/5 * * * *}"  # Every 5 minutes by default
 SERVICE_ACCOUNT_NAME="munimetro-api"
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -21,60 +21,58 @@ echo "Schedule: $SCHEDULE (cron format)"
 echo "=========================================="
 echo ""
 
-# Get the checker service URL
-echo "[1/3] Getting checker service URL..."
-CHECKER_URL=$(gcloud run services describe "$CHECKER_SERVICE" \
-    --platform managed \
+# Verify the checker job exists
+echo "[1/3] Verifying checker job exists..."
+if ! gcloud run jobs describe "$CHECKER_JOB" \
     --region "$REGION" \
-    --project "$PROJECT_ID" \
-    --format 'value(status.url)')
-
-if [ -z "$CHECKER_URL" ]; then
-    echo "❌ Error: Checker service not found. Deploy services first:"
+    --project "$PROJECT_ID" &> /dev/null; then
+    echo "❌ Error: Checker job not found. Deploy services first:"
     echo "   ./deploy/cloud/deploy-services.sh"
     exit 1
 fi
 
-echo "✓ Checker service: $CHECKER_URL"
+echo "✓ Checker job found: $CHECKER_JOB"
 echo ""
 
-# Delete existing job if it exists
+# Delete existing scheduler job if it exists
 echo "[2/3] Checking for existing scheduler job..."
-if gcloud scheduler jobs describe "$JOB_NAME" \
+if gcloud scheduler jobs describe "$SCHEDULER_JOB_NAME" \
     --location="$REGION" \
     --project="$PROJECT_ID" &> /dev/null; then
-    echo "  - Deleting existing job..."
-    gcloud scheduler jobs delete "$JOB_NAME" \
+    echo "  - Deleting existing scheduler job..."
+    gcloud scheduler jobs delete "$SCHEDULER_JOB_NAME" \
         --location="$REGION" \
         --project="$PROJECT_ID" \
         --quiet
-    echo "✓ Existing job deleted"
+    echo "✓ Existing scheduler job deleted"
 else
-    echo "  - No existing job found"
+    echo "  - No existing scheduler job found"
 fi
 echo ""
 
-# Create new scheduler job
+# Create new scheduler job to trigger Cloud Run Job
 echo "[3/3] Creating scheduler job..."
-gcloud scheduler jobs create http "$JOB_NAME" \
+# Cloud Run Jobs API endpoint
+RUN_JOB_URL="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${CHECKER_JOB}:run"
+
+gcloud scheduler jobs create http "$SCHEDULER_JOB_NAME" \
     --location="$REGION" \
     --schedule="$SCHEDULE" \
-    --uri="$CHECKER_URL" \
-    --http-method=GET \
-    --oidc-service-account-email="$SERVICE_ACCOUNT_EMAIL" \
-    --oidc-token-audience="$CHECKER_URL" \
+    --uri="$RUN_JOB_URL" \
+    --http-method=POST \
+    --oauth-service-account-email="$SERVICE_ACCOUNT_EMAIL" \
     --max-retry-attempts=3 \
     --max-backoff=3600s \
     --min-backoff=5s \
     --description="Triggers MuniMetro status check every 5 minutes" \
     --project="$PROJECT_ID"
 
-echo "✓ Scheduler job created: $JOB_NAME"
+echo "✓ Scheduler job created: $SCHEDULER_JOB_NAME"
 echo ""
 
 # Trigger a test run
 echo "Testing scheduler job..."
-gcloud scheduler jobs run "$JOB_NAME" \
+gcloud scheduler jobs run "$SCHEDULER_JOB_NAME" \
     --location="$REGION" \
     --project="$PROJECT_ID" || {
     echo "⚠️  Test run failed. This is OK on first setup."
@@ -86,15 +84,16 @@ echo "=========================================="
 echo "✓ Cloud Scheduler configured!"
 echo "=========================================="
 echo ""
-echo "Job details:"
-echo "  Name: $JOB_NAME"
+echo "Scheduler job details:"
+echo "  Name: $SCHEDULER_JOB_NAME"
 echo "  Schedule: $SCHEDULE"
-echo "  Target: $CHECKER_URL"
+echo "  Target: Cloud Run Job '$CHECKER_JOB'"
 echo ""
 echo "Next status check: $(date -u -v+5M '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date -u -d '+5 minutes' '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || echo 'in 5 minutes')"
 echo ""
-echo "View job status:"
-echo "  gcloud scheduler jobs describe $JOB_NAME --location=$REGION"
+echo "View scheduler job status:"
+echo "  gcloud scheduler jobs describe $SCHEDULER_JOB_NAME --location=$REGION"
 echo ""
-echo "Manual trigger:"
-echo "  gcloud scheduler jobs run $JOB_NAME --location=$REGION"
+echo "Manual trigger options:"
+echo "  Via scheduler: gcloud scheduler jobs run $SCHEDULER_JOB_NAME --location=$REGION"
+echo "  Direct job:    gcloud run jobs execute $CHECKER_JOB --region=$REGION"
