@@ -2,6 +2,24 @@
 
 Production-ready web API for SF Muni status monitoring with Docker containerization and Google Cloud Run deployment support.
 
+## Deployment Options
+
+### 🚀 Cloud Run (Production - Recommended)
+
+**Fully managed, serverless, auto-scaling deployment**
+
+```bash
+cd api/deploy
+./setup-infrastructure.sh  # One-time setup
+./deploy-services.sh       # Deploy
+./setup-scheduler.sh       # Configure auto-updates
+```
+
+**Cost:** ~$0.12/month for typical usage
+**Guide:** See [deploy/README.md](deploy/README.md) for complete instructions
+
+### 🐳 Docker (Local Development)
+
 ## Quick Start (Docker)
 
 ```bash
