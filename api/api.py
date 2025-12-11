@@ -22,10 +22,9 @@ PROJECT_ROOT = API_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, predict_muni_status, load_muni_model
+from lib.muni_lib import download_muni_image, predict_muni_status, load_muni_model, read_cache
 
 # Configuration
-CACHE_FILE = str(PROJECT_ROOT / "artifacts" / "runtime" / "cache" / "latest_status.json")
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 CACHE_MAX_AGE = 300  # seconds (5 minutes) - fallback if cache is stale
 ENABLE_FALLBACK = os.getenv('ENABLE_FALLBACK', 'true').lower() == 'true'
@@ -63,22 +62,16 @@ class StatusResource:
         timestamp = datetime.now().isoformat()
 
         # Try to read from cache first
-        cached = False
-        cache_age = None
+        cache_data = read_cache()
 
-        if os.path.exists(CACHE_FILE):
+        if cache_data:
             try:
-                with open(CACHE_FILE, 'r') as f:
-                    cache_data = json.load(f)
-
                 # Check cache age
                 cached_at = datetime.fromisoformat(cache_data['cached_at'])
                 cache_age = (datetime.now() - cached_at).total_seconds()
 
                 # Use cache if it's fresh enough
                 if cache_age < CACHE_MAX_AGE:
-                    cached = True
-
                     # Get best status (most optimistic of last 2)
                     best = cache_data.get('best_status', cache_data.get('statuses', [{}])[0])
 
@@ -112,7 +105,7 @@ class StatusResource:
                     resp.status = falcon.HTTP_200
                     resp.media = response_data
                     return
-            except (json.JSONDecodeError, KeyError, ValueError) as e:
+            except (KeyError, ValueError) as e:
                 # Cache is corrupted, fall through to download + predict
                 print(f"Cache read failed: {e}")
 

@@ -35,6 +35,107 @@ EXPECTED_HEIGHT = 800
 MODEL_DIR = str(PROJECT_ROOT / "artifacts" / "models" / "v1")
 
 
+def get_cache_path():
+    """
+    Get cache file path based on environment.
+
+    Returns local path for development, Google Cloud Storage path for production.
+
+    Returns:
+        str: Cache file path (local file path or gs:// URL)
+    """
+    if os.getenv('CLOUD_RUN'):
+        # Cloud Run environment - use Cloud Storage
+        bucket = os.getenv('GCS_BUCKET', 'munimetro-cache')
+        return f'gs://{bucket}/latest_status.json'
+    else:
+        # Local development - use local file
+        return str(PROJECT_ROOT / "artifacts" / "runtime" / "cache" / "latest_status.json")
+
+
+def read_cache():
+    """
+    Read cached status from local file or Cloud Storage.
+
+    Returns:
+        dict: Cached status data, or None if not found
+    """
+    cache_path = get_cache_path()
+
+    try:
+        if cache_path.startswith('gs://'):
+            # Read from Cloud Storage
+            from google.cloud import storage
+
+            # Parse gs://bucket/path
+            parts = cache_path[5:].split('/', 1)
+            bucket_name = parts[0]
+            blob_name = parts[1] if len(parts) > 1 else 'latest_status.json'
+
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(blob_name)
+
+            if not blob.exists():
+                return None
+
+            content = blob.download_as_string()
+            return json.loads(content)
+        else:
+            # Read from local file
+            if not os.path.exists(cache_path):
+                return None
+
+            with open(cache_path, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error reading cache: {e}")
+        return None
+
+
+def write_cache(data):
+    """
+    Write status data to local file or Cloud Storage.
+
+    Args:
+        data: Dict containing status data to cache
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    cache_path = get_cache_path()
+
+    try:
+        if cache_path.startswith('gs://'):
+            # Write to Cloud Storage
+            from google.cloud import storage
+
+            # Parse gs://bucket/path
+            parts = cache_path[5:].split('/', 1)
+            bucket_name = parts[0]
+            blob_name = parts[1] if len(parts) > 1 else 'latest_status.json'
+
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(blob_name)
+
+            # Upload with content type
+            blob.upload_from_string(
+                json.dumps(data, indent=2),
+                content_type='application/json'
+            )
+            return True
+        else:
+            # Write to local file
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(cache_path, 'w') as f:
+                json.dump(data, f, indent=2)
+            return True
+    except Exception as e:
+        print(f"Error writing cache: {e}")
+        return False
+
+
 def _get_classifier_class():
     """Lazy import and return MuniClassifier class."""
     import torch.nn as nn

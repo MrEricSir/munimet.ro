@@ -22,11 +22,9 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, predict_muni_status
+from lib.muni_lib import download_muni_image, predict_muni_status, read_cache, write_cache
 
 # Configuration
-CACHE_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "cache")
-CACHE_FILE = str(PROJECT_ROOT / "artifacts" / "runtime" / "cache" / "latest_status.json")
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 DEFAULT_INTERVAL = 30  # seconds
 
@@ -93,8 +91,6 @@ def check_status(write_cache=False, model=None, processor=None, label_to_status=
 
     # Write to cache if requested
     if write_cache:
-        os.makedirs(CACHE_DIR, exist_ok=True)
-
         # Create new status entry
         new_status = {
             'status': prediction['status'],
@@ -111,15 +107,11 @@ def check_status(write_cache=False, model=None, processor=None, label_to_status=
 
         # Read existing cache to get previous status
         statuses = []
-        if os.path.exists(CACHE_FILE):
-            try:
-                with open(CACHE_FILE, 'r') as f:
-                    cache_data = json.load(f)
-                    # Get the current status from previous cache (becomes previous)
-                    if 'statuses' in cache_data and len(cache_data['statuses']) > 0:
-                        statuses.append(cache_data['statuses'][0])
-            except (json.JSONDecodeError, KeyError):
-                pass  # Start fresh if cache is corrupted
+        cache_data = read_cache()
+        if cache_data:
+            # Get the current status from previous cache (becomes previous)
+            if 'statuses' in cache_data and len(cache_data['statuses']) > 0:
+                statuses.append(cache_data['statuses'][0])
 
         # Add new status at the front
         statuses.insert(0, new_status)
@@ -139,12 +131,12 @@ def check_status(write_cache=False, model=None, processor=None, label_to_status=
             'cached_at': datetime.now().isoformat()
         }
 
-        with open(CACHE_FILE, 'w') as f:
-            json.dump(cache_data, f, indent=2)
-
-        print(f"\n✓ Cache updated: {CACHE_FILE}")
-        if len(statuses) > 1:
-            print(f"  Current: {statuses[0]['status']}, Previous: {statuses[1]['status']}, Best: {best_status['status']}")
+        if write_cache(cache_data):
+            print(f"\n✓ Cache updated")
+            if len(statuses) > 1:
+                print(f"  Current: {statuses[0]['status']}, Previous: {statuses[1]['status']}, Best: {best_status['status']}")
+        else:
+            print(f"\n❌ Cache write failed")
 
     return True
 
@@ -173,7 +165,8 @@ def main():
     else:
         print("Mode: Single check")
     if write_cache:
-        print(f"Cache: Enabled ({CACHE_FILE})")
+        from lib.muni_lib import get_cache_path
+        print(f"Cache: Enabled ({get_cache_path()})")
     print("=" * 60)
 
     # Pre-load model for continuous mode to avoid reloading on every iteration
