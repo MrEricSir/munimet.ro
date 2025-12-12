@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/favicon.png">
+    <title>MuniMet.ro</title>
+    <style>
+        @font-face {
+            font-family: "handodle";
+            src: url("static/handodle.ttf") format("truetype");
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: radial-gradient(#bbb, #777);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            height: 100%;
+            transition: background 1.5s ease-in-out;
+        }
+
+        body.status-green {
+            background: radial-gradient(#cfc, #7f7);
+        }
+
+        body.status-yellow {
+            background: radial-gradient(#eef, #ee4);
+        }
+
+        body.status-red {
+            background: radial-gradient(#fcc, #f77);
+        }
+
+        body.status-error {
+            background: radial-gradient(#bbb, #777);
+        }
+
+        .container {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 90%;
+            height: 85%;
+            -webkit-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%);
+        }
+
+        h1, h2 {
+            font-family: "handodle";
+            color: #2d3748;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 3.0em;
+            margin-bottom: 0;
+        }
+
+        h2 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+        }
+
+        #app {
+            display: table;
+            width: 100%;
+            height: 100%;
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        #app .header {
+            display:table-row;
+        }
+
+        #app .main {
+            display:table-row;
+        }
+
+        #app .footer {
+            display:table-row;
+        }
+
+        .description {
+            font-family: "handodle";
+            font-size: 2.2em;
+        }
+
+        .status-icon {
+            font-size: 80px;
+            margin-bottom: 15px;
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+        }
+
+        .status-icon .fade-out {
+            opacity: 0;
+            transform: scale(0.8);
+        }
+
+        .status-icon .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .status-text {
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-text.green { color: #48bb78; }
+        .status-text.yellow { color: #ecc94b; }
+        .status-text.red { color: #f56565; }
+        .status-text.error { color: #718096; }
+
+        .description {
+            font-size: 2.2em;
+            color: #4a5568;
+            margin-bottom: 15px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #718096;
+            padding: 40px;
+        }
+
+        .spinner {
+            animation: spin 5s linear infinite;
+        }
+
+        #status .fade-out {
+            opacity: 0;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .about-info {
+            text-align: center;
+            font-size: 1em;
+            color: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="app">
+
+            <div class="header">
+                <h1>Muni Metro</h1>
+                <h2>Subway Status</h2>
+            </div>
+
+            <div class="main">
+                <div id="status" class="status-display">
+                    <div class="status-icon fade-in ">
+                        <div class="spinner">⎈</div>
+                    </div>
+                    <div class="description">Loading...</div>
+                </div>
+            </div>
+
+            <div class="footer">
+                <div class="about-info">
+                    About
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/status';
+        const REFRESH_INTERVAL = 30000; // 30 seconds
+
+        const statusEmojis = {
+            'green': '🟢',
+            'yellow': '🟡',
+            'red': '🔴',
+            'error': '✖️'
+        };
+
+        let previousStatus = null;
+
+        async function fetchStatus() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderStatus(data);
+                } else {
+                    renderError(data.error || 'Failed to fetch status');
+                }
+            } catch (error) {
+                renderError('Network error: ' + error.message);
+            }
+        }
+
+        function updateBodyBackground(status) {
+            // Remove all status classes
+            document.body.classList.remove('status-green', 'status-yellow', 'status-red', 'status-error');
+            // Add new status class
+            document.body.classList.add(`status-${status}`);
+        }
+
+        function renderStatus(data) {
+            const emoji = statusEmojis[data.status] || '⚪';
+            const timestamp = new Date(data.timestamp).toLocaleString();
+            const cacheAge = data.cache_age ? `${data.cache_age}s ago` : 'Live';
+            const description =
+                data.status === 'error' ? `Unknown error ` :
+                data.status === 'red' ? `Muni is taking a nap` :
+                data.status === 'green' ? `Muni is on track. All aboard!` :
+                data.status === 'yellow' ? `Uh oh! ` + data.status :
+                "";
+
+            // Check if status has changed or first load
+            const isFirstLoad = previousStatus === null;
+            const statusChanged = previousStatus !== null && previousStatus !== data.status;
+            const shouldAnimate = isFirstLoad || statusChanged;
+
+            const iconClass = statusChanged ? 'status-icon fade-in' : 'status-icon';
+
+            const html = `
+                <div class="${iconClass}">${emoji}</div>
+                <div class="description">${description}</div>
+            `;
+
+            const status = document.getElementById('status');
+
+            if (shouldAnimate) {
+                // Fade out
+                status.classList.add('fade-out');
+
+                // Wait for fade-out animation, then update content
+                setTimeout(() => {
+                    updateBodyBackground(data.status);
+                    status.innerHTML = html;
+                    previousStatus = data.status;
+
+                    // Trigger fade-in by removing fade-out class
+                    status.classList.remove('fade-out');
+                }, 500);
+            } else {
+                // No animation needed, just update
+                updateBodyBackground(data.status);
+                status.innerHTML = html;
+                previousStatus = data.status;
+            }
+        }
+
+        function renderError(message) {
+            const emoji = statusEmojis['error'];
+
+            // Check if status has changed or first load
+            const isFirstLoad = previousStatus === null;
+            const statusChanged = previousStatus !== null && previousStatus !== 'error';
+            const shouldAnimate = isFirstLoad || statusChanged;
+
+            const iconClass = statusChanged ? 'status-icon fade-in' : 'status-icon';
+
+            const html = `
+                <div class="${iconClass}">${emoji}</div>
+                <div class="status-text error">Error</div>
+                <div class="description">${message}</div>
+            `;
+
+            const status = document.getElementById('status');
+
+            if (shouldAnimate) {
+                // Fade out
+                status.classList.add('fade-out');
+
+                // Wait for fade-out animation, then update content
+                setTimeout(() => {
+                    updateBodyBackground('error');
+                    status.innerHTML = html;
+                    previousStatus = 'error';
+
+                    // Trigger fade-in by removing fade-out class
+                    status.classList.remove('fade-out');
+                }, 500);
+            } else {
+                // No animation needed, just update
+                updateBodyBackground('error');
+                status.innerHTML = html;
+                previousStatus = 'error';
+            }
+        }
+
+        // Initial fetch
+        fetchStatus();
+
+        // Auto-refresh
+        setInterval(fetchStatus, REFRESH_INTERVAL);
+    </script>
+</body>
+</html>

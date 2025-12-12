@@ -116,9 +116,9 @@ class MockAPIHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(current_response).encode())
         elif self.path == "/":
-            # Serve the frontend
+            # Serve the dashboard
             import os
-            html_path = os.path.join(os.path.dirname(__file__), "..", "api", "index.html")
+            html_path = os.path.join(os.path.dirname(__file__), "..", "api", "html", "dashboard.html")
             with open(html_path, "r") as f:
                 html = f.read()
                 # Replace API URL to point to our test server
@@ -232,10 +232,12 @@ def test_best_of_two_green_yellow(driver):
     driver.get(BASE_URL)
     wait = WebDriverWait(driver, 10)
 
-    status_text = wait.until(
-        EC.presence_of_element_located((By.CLASS_NAME, "status-text"))
+    wait.until(
+        EC.presence_of_element_located((By.CLASS_NAME, "status-display"))
     )
+    time.sleep(0.6)  # Wait for animations to complete (500ms fade + buffer)
 
+    status_text = driver.find_element(By.CLASS_NAME, "status-text")
     # Should show green (best of two)
     assert "GREEN" in status_text.text.upper(), f"Expected GREEN (best of two), got {status_text.text}"
 
@@ -257,10 +259,12 @@ def test_best_of_two_green_red(driver):
     driver.get(BASE_URL)
     wait = WebDriverWait(driver, 10)
 
-    status_text = wait.until(
-        EC.presence_of_element_located((By.CLASS_NAME, "status-text"))
+    wait.until(
+        EC.presence_of_element_located((By.CLASS_NAME, "status-display"))
     )
+    time.sleep(0.6)  # Wait for animations to complete (500ms fade + buffer)
 
+    status_text = driver.find_element(By.CLASS_NAME, "status-text")
     # Should show green (best of two)
     assert "GREEN" in status_text.text.upper(), f"Expected GREEN (best of two), got {status_text.text}"
 
@@ -279,11 +283,18 @@ def test_error_display(driver):
     driver.get(BASE_URL)
     wait = WebDriverWait(driver, 10)
 
-    error_div = wait.until(
-        EC.presence_of_element_located((By.CLASS_NAME, "error"))
+    # Wait for status display with error
+    wait.until(
+        EC.presence_of_element_located((By.CLASS_NAME, "status-display"))
     )
 
-    assert "Cache unavailable" in error_div.text, f"Expected error message, got {error_div.text}"
+    # Check that error status is shown
+    status_text = driver.find_element(By.CLASS_NAME, "status-text")
+    assert "ERROR" in status_text.text.upper(), f"Expected ERROR status, got {status_text.text}"
+
+    # Check that error message is in description
+    description = driver.find_element(By.CLASS_NAME, "description")
+    assert "Cache unavailable" in description.text, f"Expected error message, got {description.text}"
 
     print("✓ Error display test passed")
 

@@ -141,7 +141,9 @@ Current Muni Metro status with best-of-two logic.
 
 ## Web Dashboard
 
-Lightweight single-page application (`index.html`, 8.6KB).
+Lightweight single-page application (`dashboard.html`, 8.6KB).
+
+**Access**: Navigate to `/dashboard` to view the status dashboard.
 
 **Features**:
 - Real-time status indicator (green/yellow/red)

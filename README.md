@@ -36,8 +36,9 @@ cd deploy/local
 ./setup.sh   # Creates venv, installs dependencies
 ./start.sh   # Starts cache writer + API server
 
-# Access dashboard
-open http://localhost:8000
+# Access services
+open http://localhost:8000              # Landing page
+open http://localhost:8000/dashboard    # Status dashboard
 
 # Cloud deployment (Google Cloud Run)
 cd deploy/cloud
@@ -125,7 +126,8 @@ munimet.ro/
 │   ├── check_status.py    # Status checker
 │   ├── check_status_job.py # Cloud Run Job entry point
 │   ├── predict_status.py  # Prediction script
-│   ├── index.html         # Web dashboard (8.6KB, vanilla JS)
+│   ├── index.html         # Landing page
+│   ├── dashboard.html     # Status dashboard
 │   └── requirements.txt   # API dependencies
 │
 ├── deploy/                # Deployment configuration
@@ -197,7 +199,7 @@ Users
 
 - **ML-Powered Classification** - BLIP vision-language model for status classification and description generation
 - **Production API** - Falcon web framework with health checks, caching, and graceful degradation
-- **Lightweight Frontend** - 8.6KB vanilla JavaScript dashboard with zero runtime dependencies
+- **Lightweight Frontend** - Vanilla JavaScript with zero runtime dependencies
 - **Containerized Deployment** - Multi-stage Docker builds with security best practices
 - **Smart Caching** - Best-of-two logic reduces false positives (~30ms local response time)
 - **Cloud Native** - Serverless deployment on Google Cloud Run with automatic scaling

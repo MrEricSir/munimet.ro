@@ -4,6 +4,7 @@
 # Web framework and server
 falcon>=4.0.0
 gunicorn>=23.0.0
+whitenoise>=6.0.0
 
 # Image processing and HTTP
 requests>=2.32.0

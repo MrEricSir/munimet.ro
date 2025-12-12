@@ -10,7 +10,6 @@ Usage:
 """
 
 import falcon
-import json
 import os
 import sys
 from datetime import datetime
@@ -187,28 +186,32 @@ class HealthResource:
         }
 
 
-class IndexResource:
-    """Serve the frontend HTML."""
+class StaticResource:
+    """Serve the frontend files."""
+    def __init__(self, filename):
+        self.filename = filename
 
     def on_get(self, req, resp):
-        """Handle GET request to /"""
+        """Handle GET request"""
         resp.status = falcon.HTTP_200
         resp.content_type = 'text/html'
 
-        # Read and serve index.html
-        index_path = str(API_DIR / 'index.html')
+        # Return file data
+        index_path = str(API_DIR / 'html' / self.filename)
         try:
-            with open(index_path, 'r') as f:
+            with open(index_path, 'rb') as f:
                 resp.text = f.read()
         except FileNotFoundError:
             resp.status = falcon.HTTP_404
-            resp.text = '<h1>Frontend not found</h1><p>index.html is missing</p>'
+            resp.text = '<h1>Not found</h1><p>Something\'s missing</p>'
 
 
 # Create Falcon app
 app = falcon.App()
 
 # Add routes
-app.add_route('/', IndexResource())
+app.add_route('/', StaticResource('index.html'))
+app.add_route('/dashboard', StaticResource('dashboard.html'))
+app.add_static_route('/static', str(API_DIR / 'html' / 'static'))
 app.add_route('/status', StatusResource())
 app.add_route('/health', HealthResource())

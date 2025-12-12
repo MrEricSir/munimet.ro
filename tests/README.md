@@ -109,7 +109,7 @@ Tests implement the following pattern:
 
 ## Troubleshooting
 
-### File Not Found: index.html
+### File Not Found: dashboard.html
 
 Cause: Test execution from incorrect directory
 
@@ -242,5 +242,5 @@ Planned test coverage expansion:
 ## Related Documentation
 
 - **Deployment**: [deploy/README.md](../deploy/README.md) - API deployment guide
-- **Frontend**: [api/index.html](../api/index.html) - Dashboard implementation
+- **Dashboard**: [api/dashboard.html](../api/dashboard.html) - Dashboard implementation
 - **Configuration**: [CONFIGURATION.md](../CONFIGURATION.md) - System configuration
