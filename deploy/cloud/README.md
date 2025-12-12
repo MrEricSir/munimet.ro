@@ -1,18 +1,20 @@
 # Cloud Run Deployment Guide
 
-This directory contains scripts to deploy MuniMetro to Google Cloud Run.
+Scripts for deploying MuniMetro to Google Cloud Run.
+
+See [../../CONFIGURATION.md](../../CONFIGURATION.md) for actual deployment configuration values.
 
 ## Architecture
 
 ```
-Cloud Scheduler (every 5 min)
+Cloud Scheduler (every 2 min)
   ↓ triggers
-munimetro-checker (Cloud Run Job)
+Checker (Cloud Run Job)
   ↓ downloads image + predicts status
   ↓ writes JSON + exits
-Cloud Storage (gs://munimetro-cache/latest_status.json)
+Cloud Storage (cache file)
   ↑ reads JSON
-munimetro-api (Cloud Run Service)
+API (Cloud Run Service)
   ↓ serves to users
 Users
 ```
@@ -28,22 +30,24 @@ Users
    gcloud auth login
    ```
 
-2. **GCP Project** created
+2. **GCP Project** created with billing enabled
    ```bash
-   # Create project (if needed)
-   gcloud projects create munimetro --name="MuniMetro"
+   # Create project
+   gcloud projects create PROJECT_ID --name="PROJECT_NAME"
 
-   # Set billing account (required)
+   # Set billing account
    gcloud billing accounts list
-   gcloud billing projects link munimetro --billing-account=BILLING_ACCOUNT_ID
+   gcloud billing projects link PROJECT_ID --billing-account=BILLING_ACCOUNT_ID
    ```
 
-3. **Environment variables** (optional)
+3. **Environment variables** (optional - override defaults)
    ```bash
-   export GCP_PROJECT_ID="munimetro"       # Your GCP project ID
-   export GCP_REGION="us-west1"             # Region (default: us-west1)
-   export GCS_BUCKET="munimetro-cache"      # Bucket name (default: munimetro-cache)
+   export GCP_PROJECT_ID="PROJECT_ID"
+   export GCP_REGION="REGION"
+   export GCS_BUCKET="BUCKET_NAME"
    ```
+
+See [../../CONFIGURATION.md](../../CONFIGURATION.md) for the actual values used in this deployment.
 
 ## Deployment Steps
 
@@ -54,10 +58,10 @@ Users
 ```
 
 This script:
-- ✅ Enables required GCP APIs
-- ✅ Creates Cloud Storage bucket (private)
-- ✅ Creates service account with minimal permissions
-- ✅ Sets up App Engine (for Cloud Scheduler)
+- Enables required GCP APIs
+- Creates Cloud Storage bucket (private)
+- Creates service account with minimal permissions
+- Sets up App Engine (required for Cloud Scheduler)
 
 ### 2. Deploy Services
 
@@ -66,11 +70,11 @@ This script:
 ```
 
 This script:
-- ✅ Builds container image using Cloud Build
-- ✅ Deploys `munimetro-api` (public Cloud Run Service, serves frontend + API)
-- ✅ Deploys `munimetro-checker` (Cloud Run Job, updates status when triggered)
+- Builds container image using Cloud Build
+- Deploys API service (public Cloud Run Service, serves frontend + API)
+- Deploys checker job (Cloud Run Job, updates status when triggered)
 
-**First deployment takes ~10-15 minutes** (downloading ML model layers).
+First deployment takes approximately 10-15 minutes (downloading ML model layers).
 
 ### 3. Setup Scheduler
 
@@ -79,35 +83,35 @@ This script:
 ```
 
 This script:
-- ✅ Creates Cloud Scheduler job
-- ✅ Configures 5-minute interval
-- ✅ Runs test execution
+- Creates Cloud Scheduler job
+- Configures 2-minute interval
+- Runs test execution
 
 ## Verification
 
 ### Check API is running
 ```bash
 # Get API URL
-API_URL=$(gcloud run services describe munimetro-api \
-    --region us-west1 \
+API_URL=$(gcloud run services describe API_SERVICE_NAME \
+    --region REGION \
     --format 'value(status.url)')
 
 # Test health endpoint
 curl $API_URL/health
 
-# Test status endpoint (may be empty on first deploy)
+# Test status endpoint
 curl $API_URL/status
 ```
 
 ### Trigger manual status update
 ```bash
 # Option 1: Trigger via scheduler
-gcloud scheduler jobs run munimetro-status-check --location=us-west1
+gcloud scheduler jobs run SCHEDULER_JOB_NAME --location=REGION
 
 # Option 2: Run job directly (faster for testing)
-gcloud run jobs execute munimetro-checker --region=us-west1
+gcloud run jobs execute CHECKER_JOB_NAME --region=REGION
 
-# Wait 30 seconds for job to complete, then check API
+# Wait for job to complete, then check API
 sleep 30
 curl $API_URL/status
 ```
@@ -115,13 +119,13 @@ curl $API_URL/status
 ### View logs
 ```bash
 # API logs
-gcloud run services logs read munimetro-api --region us-west1 --limit 50
+gcloud run services logs read API_SERVICE_NAME --region REGION --limit 50
 
 # Checker job logs
-gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="munimetro-checker"' --limit 50
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="CHECKER_JOB_NAME"' --limit 50
 
 # Job executions
-gcloud run jobs executions list --job=munimetro-checker --region=us-west1
+gcloud run jobs executions list --job=CHECKER_JOB_NAME --region=REGION
 
 # Scheduler logs
 gcloud logging read 'resource.type="cloud_scheduler_job"' --limit 20
@@ -129,19 +133,21 @@ gcloud logging read 'resource.type="cloud_scheduler_job"' --limit 20
 
 ## Cost Estimate
 
-**Expected monthly cost: ~$0.10-0.15**
+Typical usage costs approximately $1.17/month:
 
 | Service | Usage | Cost |
 |---------|-------|------|
 | Cloud Run Service (API) | ~1000 requests/day | $0 (free tier) |
-| Cloud Run Jobs (Checker) | 8,640 executions/month @ ~10s each | $0.01 (very minimal) |
-| Cloud Storage | 1KB file, 30K reads/month | $0.016 |
+| Cloud Run Jobs (Checker) | 21,600 executions/month @ ~10s each | $1.04 |
+| Cloud Storage | 1KB file, 75K reads/month | $0.016 |
 | Cloud Scheduler | 1 job | $0.10 |
-| **Total** | | **~$0.13/month** |
+| **Total** | | **~$1.17/month** |
 
-*Cloud Run Jobs are cheaper than Services for scheduled tasks since you only pay for execution time (no idle costs).*
+Cloud Run Jobs are more cost-effective than Services for scheduled tasks since execution time is billed without idle costs.
 
-*Scaling: At 100K API requests/day, cost increases to ~$2-3/month.*
+At 100K API requests/day, estimated cost increases to approximately $2-3/month.
+
+See [../../CONFIGURATION.md](../../CONFIGURATION.md) for detailed cost breakdown.
 
 ## Configuration
 
@@ -154,7 +160,7 @@ export SCHEDULE="*/10 * * * *"  # Every 10 minutes
 
 ### Change bucket name
 ```bash
-export GCS_BUCKET="my-custom-bucket"
+export GCS_BUCKET="BUCKET_NAME"
 ./deploy/cloud/setup-infrastructure.sh
 ./deploy/cloud/deploy-services.sh  # Redeploy with new bucket
 ```
@@ -172,18 +178,19 @@ export GCS_BUCKET="my-custom-bucket"
 
 ### IAM Permissions
 
-**Service Account** (`munimetro-api@PROJECT.iam.gserviceaccount.com`):
-- ✅ Storage Object Admin on `gs://munimetro-cache` (read/write cache)
-- ❌ No other permissions
+**Service Account**:
+- Storage Object Admin on cache bucket (read/write cache)
+- Run Invoker on checker job
+- No additional permissions
 
-**API Service** (`munimetro-api`):
-- ✅ Public (unauthenticated) access
-- ✅ Serves frontend and `/status` endpoint
+**API Service**:
+- Public (unauthenticated) access
+- Serves frontend and `/status` endpoint
 
-**Checker Job** (`munimetro-checker`):
-- ✅ Only executable by authorized service accounts
-- ✅ Triggered by Cloud Scheduler via OAuth authentication
-- ✅ No HTTP endpoint (runs as batch job)
+**Checker Job**:
+- Only executable by authorized service accounts
+- Triggered by Cloud Scheduler via OAuth authentication
+- No HTTP endpoint (batch execution only)
 
 ### Network Security
 - API Service and Checker Job run in Google's managed VPC
@@ -195,30 +202,32 @@ export GCS_BUCKET="my-custom-bucket"
 - Cache contains only public transit status (no PII)
 - Service account has minimal permissions
 
+See [../../CONFIGURATION.md](../../CONFIGURATION.md) for actual service account and bucket details.
+
 ## Troubleshooting
 
-### "Permission denied" errors
+### Permission denied errors
 ```bash
 # Verify service account has bucket access
-gsutil iam get gs://munimetro-cache
+gsutil iam get gs://BUCKET_NAME
 
 # Re-grant permissions
 gsutil iam ch \
-  serviceAccount:munimetro-api@PROJECT.iam.gserviceaccount.com:objectAdmin \
-  gs://munimetro-cache
+  serviceAccount:SERVICE_ACCOUNT_EMAIL:objectAdmin \
+  gs://BUCKET_NAME
 ```
 
 ### Checker job fails
 ```bash
 # View recent job executions
 gcloud run jobs executions list \
-    --job=munimetro-checker \
-    --region=us-west1 \
+    --job=CHECKER_JOB_NAME \
+    --region=REGION \
     --limit=10
 
 # View logs for failed execution
 gcloud logging read \
-    'resource.type="cloud_run_job" AND resource.labels.job_name="munimetro-checker"' \
+    'resource.type="cloud_run_job" AND resource.labels.job_name="CHECKER_JOB_NAME"' \
     --limit=100 \
     --format=json
 
@@ -231,8 +240,8 @@ gcloud logging read \
 ### Scheduler not triggering
 ```bash
 # Check job status
-gcloud scheduler jobs describe munimetro-status-check \
-    --location us-west1
+gcloud scheduler jobs describe SCHEDULER_JOB_NAME \
+    --location REGION
 
 # View execution history
 gcloud logging read 'resource.type="cloud_scheduler_job"' \
@@ -240,8 +249,8 @@ gcloud logging read 'resource.type="cloud_scheduler_job"' \
     --format=json
 
 # Manual trigger for testing
-gcloud scheduler jobs run munimetro-status-check \
-    --location us-west1
+gcloud scheduler jobs run SCHEDULER_JOB_NAME \
+    --location REGION
 ```
 
 ## Cleanup
@@ -249,21 +258,19 @@ gcloud scheduler jobs run munimetro-status-check \
 ### Delete everything
 ```bash
 # Delete Cloud Run service
-gcloud run services delete munimetro-api --region us-west1 --quiet
+gcloud run services delete API_SERVICE_NAME --region REGION --quiet
 
 # Delete Cloud Run job
-gcloud run jobs delete munimetro-checker --region us-west1 --quiet
+gcloud run jobs delete CHECKER_JOB_NAME --region REGION --quiet
 
 # Delete scheduler job
-gcloud scheduler jobs delete munimetro-status-check --location us-west1 --quiet
+gcloud scheduler jobs delete SCHEDULER_JOB_NAME --location REGION --quiet
 
 # Delete GCS bucket
-gsutil rm -r gs://munimetro-cache
+gsutil rm -r gs://BUCKET_NAME
 
 # Delete service account
-gcloud iam service-accounts delete \
-    munimetro-api@PROJECT.iam.gserviceaccount.com \
-    --quiet
+gcloud iam service-accounts delete SERVICE_ACCOUNT_EMAIL --quiet
 ```
 
 ## Local Testing
@@ -273,7 +280,7 @@ Test the code locally before deploying:
 ```bash
 # Set environment to simulate Cloud Run
 export CLOUD_RUN=true
-export GCS_BUCKET=munimetro-cache
+export GCS_BUCKET=BUCKET_NAME
 
 # Test checker job script (requires gcloud auth)
 python3 -m api.check_status_job
@@ -301,12 +308,12 @@ python3 -m api.check_status_job
 ### Rollback
 ```bash
 # List revisions
-gcloud run revisions list --service munimetro-api --region us-west1
+gcloud run revisions list --service API_SERVICE_NAME --region REGION
 
 # Rollback to previous
-gcloud run services update-traffic munimetro-api \
-    --region us-west1 \
-    --to-revisions REVISION-NAME=100
+gcloud run services update-traffic API_SERVICE_NAME \
+    --region REGION \
+    --to-revisions REVISION_NAME=100
 ```
 
 ## Monitoring
@@ -314,7 +321,7 @@ gcloud run services update-traffic munimetro-api \
 ### View metrics
 ```bash
 # Cloud Console
-open "https://console.cloud.google.com/run?project=munimetro"
+open "https://console.cloud.google.com/run?project=PROJECT_ID"
 
 # Key metrics:
 # - Request count
@@ -323,18 +330,3 @@ open "https://console.cloud.google.com/run?project=munimetro"
 # - Container instance count
 ```
 
-### Set up alerts
-```bash
-# Create alert policy for errors
-gcloud alpha monitoring policies create \
-    --notification-channels=CHANNEL_ID \
-    --display-name="MuniMetro API Errors" \
-    --condition-display-name="Error rate > 5%" \
-    ...
-```
-
-## Support
-
-- Cloud Run docs: https://cloud.google.com/run/docs
-- Cloud Scheduler docs: https://cloud.google.com/scheduler/docs
-- Troubleshooting: Check logs with `gcloud run services logs read`

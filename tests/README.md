@@ -1,30 +1,45 @@
-# Testing Guide
+# Test Suite Documentation
 
-Automated tests for the Muni Status Monitor web frontend.
+Automated integration tests for the web dashboard frontend.
+
+## Prerequisites
+
+- Python 3.13+
+- Google Chrome browser
+- ChromeDriver (automatically managed by Selenium 4+)
 
 ## Setup
 
 ```bash
-cd ~/Development/munimetro/tests
+cd tests
 
-# Install test dependencies (requires Chrome)
+# Install test dependencies
 pip install -r requirements.txt
 
-# macOS - Install Chrome if not already installed
+# Install Chrome (if not installed)
+# macOS
 brew install --cask google-chrome
+
+# Debian/Ubuntu
+sudo apt-get install google-chrome-stable
+
+# RHEL/CentOS
+sudo yum install google-chrome-stable
 ```
 
-**Note**: These tests use a mock API server, so you **don't** need the actual API running. The tests are self-contained.
+**Note**: Tests use a self-contained mock API server. The production API does not need to be running.
 
 ## Running Tests
 
+Execute tests from the `tests` directory:
+
 ```bash
-# Run from the tests directory
-cd ~/Development/munimetro/tests
+cd tests
 python3 test_frontend.py
 ```
 
-**Expected output:**
+### Expected Output
+
 ```
 ============================================================
 Muni Status Dashboard - Frontend Tests
@@ -52,101 +67,180 @@ Running tests...
 ============================================================
 ```
 
-## What's Tested
+## Test Coverage
 
-The frontend integration tests (`test_frontend.py`) verify:
+Frontend integration tests (`test_frontend.py`) verify:
 
-- ✓ Green status display with emoji 🟢
-- ✓ Yellow status display with emoji 🟡
-- ✓ Red status display with emoji 🔴
-- ✓ Best of two: green + yellow = green
-- ✓ Best of two: green + red = green
-- ✓ Error message display
-- ✓ Probability bars rendering
-- ✓ Metadata display (timestamp, cache age)
+### Status Display
+- Green status indicator (🟢)
+- Yellow status indicator (🟡)
+- Red status indicator (🔴)
+- Emoji rendering
+- Status text formatting
 
-## How It Works
+### Best-of-Two Logic
+- Green + Yellow → Green (optimistic)
+- Green + Red → Green (tolerates temporary failures)
+- Correct status history display
 
-Tests run a mock API server that serves predefined status responses, then uses Selenium to:
-1. Load the web dashboard
-2. Verify correct status indicators and colors
-3. Check emoji rendering
-4. Validate probability bar calculations
-5. Test edge cases (errors, mixed statuses)
+### Error Handling
+- Error message presentation
+- Graceful degradation
+- User feedback
+
+### Probability Visualization
+- Probability bar rendering
+- Percentage calculations
+- Visual scaling
+
+### Metadata Display
+- Timestamp formatting
+- Cache age calculation
+- Status history
+
+## Test Architecture
+
+Tests implement the following pattern:
+
+1. **Mock Server**: HTTP server serving predefined status responses
+2. **Browser Automation**: Selenium WebDriver controls Chrome headlessly
+3. **Assertions**: Verify DOM elements, styles, and content
+4. **Cleanup**: Automatic teardown of server and browser
 
 ## Troubleshooting
 
-**FileNotFoundError: index.html**
+### File Not Found: index.html
 
-**Cause**: Running tests from wrong directory
+Cause: Test execution from incorrect directory
 
-**Solution**:
+Solution:
 ```bash
-# Make sure you're in the tests directory
-cd ~/Development/munimetro/tests
-pwd  # Should show .../munimetro/tests
+# Navigate to tests directory
+cd tests
 
+# Verify location
+pwd  # Should end with /tests
+
+# Run tests
 python3 test_frontend.py
 ```
 
-**Chrome driver errors:**
+### ChromeDriver Errors
+
+Update Chrome and Selenium:
+
 ```bash
-# Update Chrome
+# macOS
 brew update && brew upgrade google-chrome
 
-# Or update selenium
+# Upgrade Selenium
 pip install --upgrade selenium
 ```
 
-**"WebDriver not found" or "chromedriver not found":**
+### WebDriver Not Found
 
-**Solution**:
+Selenium 4+ manages ChromeDriver automatically:
+
 ```bash
-# Selenium 4+ automatically manages chromedriver
+# Upgrade Selenium
 pip install --upgrade selenium
 
-# If still having issues, explicitly install chromedriver
+# Manual ChromeDriver installation (if needed)
 brew install chromedriver
+
+# Verify installation
+chromedriver --version
 ```
 
-**Port 8888 already in use:**
+### Port 8888 In Use
 
-**Cause**: Another process using the test server port
+Cause: Process already bound to test server port
 
-**Solution**:
+Solution:
 ```bash
-# Find and kill the process
+# Find and terminate process
 lsof -ti:8888 | xargs kill
 
-# Or change TEST_PORT in test_frontend.py
+# Alternative: Modify TEST_PORT in test_frontend.py
 ```
 
-**Tests hang or timeout:**
-- Check Chrome is installed: `which google-chrome-stable || which chrome`
-- Try running in non-headless mode (comment out `--headless=new` in test file)
-- Check firewall isn't blocking localhost connections
+### Test Timeouts or Hangs
 
-## Writing New Tests
+Debug steps:
 
-Add new test methods to `test_frontend.py`:
+```bash
+# Verify Chrome installation
+which google-chrome-stable || which chrome
+
+# Run in visible mode (disable headless)
+# Edit test_frontend.py: Comment out --headless=new option
+
+# Check firewall rules
+# Ensure localhost connections permitted
+```
+
+### Selenium Exceptions
+
+Common issues:
+
+```bash
+# Verify Selenium version (4.0+ required)
+pip show selenium
+
+# Reinstall dependencies
+pip uninstall selenium
+pip install -r requirements.txt
+
+# Check Python version
+python3 --version  # Should be 3.13+
+```
+
+## Writing Additional Tests
+
+Add test methods to `TestFrontend` class in `test_frontend.py`:
 
 ```python
 def test_new_feature(self):
     """Test description"""
-    # Setup mock data
-    mock_data = {...}
+    # Configure mock response
+    mock_data = {
+        "status": "green",
+        "description": "Test description",
+        "confidence": 0.95
+    }
 
-    # Load page
+    # Load dashboard
     self.driver.get(f"{self.base_url}?test_mode=true")
 
-    # Verify behavior
+    # Assert expected behavior
     element = self.driver.find_element(By.ID, "element-id")
     self.assertEqual(element.text, "Expected Value")
 ```
 
-## Next Steps
+## Continuous Integration
 
-- Add API endpoint tests
-- Add model prediction tests
-- Add integration tests for cache writer
-- Add performance/load tests
+For CI/CD integration:
+
+```bash
+# Run tests in headless mode (default)
+python3 test_frontend.py
+
+# Exit code 0 = success, non-zero = failure
+echo $?
+```
+
+## Future Enhancements
+
+Planned test coverage expansion:
+
+- **API Endpoint Tests**: Backend API validation
+- **Model Prediction Tests**: ML inference correctness
+- **Cache Writer Tests**: Background process integration
+- **Load Tests**: Performance under concurrent requests
+- **Cross-Browser Tests**: Firefox, Safari compatibility
+
+## Related Documentation
+
+- **Deployment**: [deploy/README.md](../deploy/README.md) - API deployment guide
+- **Frontend**: [api/index.html](../api/index.html) - Dashboard implementation
+- **Configuration**: [CONFIGURATION.md](../CONFIGURATION.md) - System configuration

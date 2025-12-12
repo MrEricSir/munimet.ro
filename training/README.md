@@ -1,159 +1,265 @@
-# Training Guide
+# Training Documentation
 
-Collect Muni status images, label them, and train a vision-language model to classify status and generate descriptions.
+Data collection, labeling, and model training workflow for the Muni Metro status classifier.
 
-## Setup
+## Prerequisites
 
-### Option 1: Use Existing Training Data (Recommended for collaborators)
+- Python 3.13+
+- Virtual environment (see [SETUP.md](../SETUP.md))
+- tkinter (for labeling GUI)
+- ~2GB RAM for training
+- Optional: CUDA-capable GPU for faster training
 
-If cloning this repo, download the pre-labeled training data via git-annex:
-
-```bash
-# Initialize git-annex
-git annex init "your-laptop"
-
-# Configure Google Cloud Storage remote (see GCS_SETUP.md)
-git annex enableremote google-cloud
-
-# Download training data (268MB images + 570KB labels)
-git annex get data/
-
-# IMPORTANT: Unlock labels file to make it editable
-git annex unlock artifacts/training_data/labels.json
-```
-
-### Option 2: Start Fresh
+## Environment Setup
 
 ```bash
 # Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Activate environment
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate   # Windows
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Install tkinter for labeling GUI (macOS)
+# Install tkinter (macOS)
 brew install python-tk@3.13
 ```
 
-## Step 1: Download Images
+For detailed setup instructions, see [SETUP.md](../SETUP.md).
 
-Collect status board images over time to build a training dataset.
+## Training Data Access
+
+### Using Existing Data (Collaborators)
+
+Download pre-labeled training data via git-annex:
+
+```bash
+# Initialize git-annex
+git annex init "machine-name"
+
+# Enable Google Cloud Storage remote
+git annex enableremote google-cloud
+
+# Download training data
+git annex get artifacts/training_data/images/  # 268MB
+git annex get artifacts/training_data/labels.json  # 570KB
+
+# Unlock labels file for editing
+git annex unlock artifacts/training_data/labels.json
+```
+
+For git-annex configuration, see [GCS_SETUP.md](../GCS_SETUP.md).
+
+### Collecting New Data
+
+Build a custom training dataset:
 
 ```bash
 python download_muni_image.py
 ```
 
-- Downloads snapshots every 5 minutes from http://sfmunicentral.com/Enterprise/MetroLO.htm
-- Saves to `../artifacts/training_data/images/` folder
-- Validates image dimensions (1860×800px)
-- Press `Ctrl+C` to stop
+**Behavior**:
+- Downloads snapshots every 5 minutes from http://sfmunicentral.com/sfmunicentral_Snapshot_Objects/Mimic1_A7SE582P.jpg
+- Saves to `artifacts/training_data/images/`
+- Validates dimensions (1860×800 pixels)
+- Continues until interrupted (Ctrl+C)
 
-**Tip**: Run for several hours/days to capture different status conditions (normal, delays, offline).
+**Recommendation**: Collect over multiple days to capture diverse status conditions (normal operation, delays, service interruptions).
 
-## Step 2: Label Images
+## Image Labeling
 
-Use the GUI to label collected images with status and descriptions.
+Launch the labeling GUI:
 
 ```bash
 python label_images.py
 ```
 
-### Keyboard Shortcuts
+### Interface Controls
 
-- `1` - Green status (auto-fills "Normal")
-- `2` - Yellow status
-- `3` - Red status (auto-fills "Offline")
-- `Ctrl+Enter` - Save & next
-- `Ctrl+←/→` - Navigate images
-- `Ctrl+Shift+←/→` - Jump to unlabeled images
-- `Ctrl+G` - Jump to specific index (then type index and press Enter)
-- `Delete` - Delete current image
+| Shortcut | Action |
+|----------|--------|
+| `1` | Green status (auto-fills "Normal") |
+| `2` | Yellow status |
+| `3` | Red status (auto-fills "Offline") |
+| `Ctrl+Enter` | Save and advance to next image |
+| `Ctrl+←/→` | Navigate between images |
+| `Ctrl+Shift+←/→` | Jump to next unlabeled image |
+| `Ctrl+G` | Jump to specific index |
+| `Delete` | Delete current image |
 
-### Labeling Tips
+### Labeling Workflow
 
-1. Opens to first unlabeled image automatically
-2. Select status (1/2/3) and enter description
-3. Save with `Ctrl+Enter` to move to next image
-4. Aim for 50-100+ labeled images for good accuracy
+1. GUI opens to first unlabeled image
+2. Select status classification (1/2/3)
+3. Enter natural language description
+4. Save with `Ctrl+Enter`
+5. Repeat for remaining images
 
-Labels saved to: `../artifacts/training_data/labels.json`
+**Minimum Dataset**: 50-100 labeled images recommended for baseline accuracy.
 
-**Note for git-annex users**: The labels file is tracked in git-annex but kept unlocked for editing. After labeling, commit your changes:
+Labels are saved to `artifacts/training_data/labels.json`.
+
+### Version Control
+
+For git-annex tracked labels:
+
 ```bash
+# Commit label changes
 git add artifacts/training_data/labels.json
 git commit -m "Update training labels"
+
+# Upload to cloud storage
+git annex copy artifacts/training_data/labels.json --to=google-cloud
+git push
 ```
 
-## Step 3: Train Model
+## Model Training
 
-Fine-tune BLIP vision-language model on your labeled data.
+Fine-tune BLIP vision-language model:
 
 ```bash
 python train_model.py
 ```
 
-**What it does:**
-- Loads labeled data from `../artifacts/training_data/labels.json`
-- Fine-tunes BLIP-2 vision-language model
-- Trains status classifier (green/yellow/red)
-- Learns to generate natural language descriptions
-- Takes 5-20 minutes depending on data size and hardware
+### Training Process
 
-**Model saved to:** `../artifacts/models/v1/`
+1. Loads labeled data from `artifacts/training_data/labels.json`
+2. Fine-tunes BLIP vision transformer model
+3. Trains classification head (3 classes: green/yellow/red)
+4. Learns natural language description generation
+5. Saves model to `artifacts/models/v1/`
+
+**Duration**: 5-20 minutes depending on dataset size and hardware (CPU/GPU).
 
 ### Training Configuration
 
-Edit `train_model.py` to adjust:
+Edit `train_model.py` to modify training parameters:
 
 ```python
-EPOCHS = 10          # More epochs = longer training, may improve accuracy
-BATCH_SIZE = 4       # Increase if you have GPU memory
-LEARNING_RATE = 5e-5 # Lower = more stable, higher = faster learning
-TRAIN_SPLIT = 0.8    # 80% train, 20% validation
+EPOCHS = 10          # Training iterations (more = better fit, risk of overfitting)
+BATCH_SIZE = 4       # Images per batch (increase with available GPU memory)
+LEARNING_RATE = 5e-5 # Optimizer step size (lower = stable, higher = faster)
+TRAIN_SPLIT = 0.8    # Train/validation split ratio
 ```
 
-## Shared Library
+### Model Artifacts
 
-All scripts use `lib/muni_lib.py` for core functionality:
+Trained model components in `artifacts/models/v1/`:
+
+- `model.safetensors` (854MB) - Vision transformer weights
+- `status_classifier.pt` (775KB) - Classification head
+- Configuration files (JSON)
+- Tokenizer files
+
+## Shared Library Reference
+
+Core functionality in `lib/muni_lib.py`:
 
 ```python
 from lib.muni_lib import download_muni_image, predict_muni_status
 
-# Download image
-result = download_muni_image(output_folder="../artifacts/training_data/images")
+# Download status image
+result = download_muni_image(output_folder="artifacts/training_data/images")
 
-# Predict status
+# Run inference
 prediction = predict_muni_status(result['filepath'])
 print(f"Status: {prediction['status']}")
 print(f"Description: {prediction['description']}")
+print(f"Confidence: {prediction['confidence']:.2%}")
 ```
 
 ## Troubleshooting
 
-**Low ML accuracy:**
-- Label more images (aim for 100-200+)
-- Ensure consistent labeling across images
-- Train for more epochs
-- Check for class imbalance (too many green, not enough red/yellow)
+### Low Classification Accuracy
 
-**tkinter not found:**
+Causes and solutions:
+
+- **Insufficient training data**: Label 100-200+ images minimum
+- **Inconsistent labeling**: Review and correct label inconsistencies
+- **Inadequate training**: Increase `EPOCHS` in configuration
+- **Class imbalance**: Ensure balanced representation (green/yellow/red)
+
+### tkinter Module Not Found
+
+Platform-specific installation:
+
 ```bash
 # macOS
 brew install python-tk@3.13
 
-# Ubuntu/Debian
+# Debian/Ubuntu
 sudo apt-get install python3-tk
+
+# RHEL/CentOS
+sudo yum install python3-tkinter
 
 # Windows
 # Included with official Python installer
 ```
 
-**Out of memory during training:**
+### Out of Memory Errors
+
+Solutions:
+
 - Reduce `BATCH_SIZE` in `train_model.py`
-- Close other applications
-- Use a machine with more RAM or GPU memory
+- Close resource-intensive applications
+- Use system with more RAM (8GB+ recommended)
+- Enable GPU training if available (CUDA)
+
+### Image Download Failures
+
+Common issues:
+
+```bash
+# Verify network connectivity
+curl -I http://sfmunicentral.com/sfmunicentral_Snapshot_Objects/Mimic1_A7SE582P.jpg
+
+# Check output directory exists
+ls -la artifacts/training_data/images/
+
+# Verify write permissions
+touch artifacts/training_data/images/test.txt
+rm artifacts/training_data/images/test.txt
+```
+
+### Training Script Errors
+
+Debug steps:
+
+```bash
+# Verify labeled data exists
+cat artifacts/training_data/labels.json | python3 -m json.tool | head
+
+# Check PyTorch installation
+python3 -c "import torch; print(torch.__version__)"
+
+# Verify CUDA availability (if using GPU)
+python3 -c "import torch; print(torch.cuda.is_available())"
+```
+
+## Model Evaluation
+
+The training script outputs validation metrics:
+
+- **Accuracy**: Overall classification accuracy
+- **Loss**: Training and validation loss curves
+- **Per-class metrics**: Precision/recall for each status level
+
+Review these metrics to assess model quality before deployment.
 
 ## Next Steps
 
-Once you've trained a model, proceed to the [API & Deployment Guide](../api/README.md) to run the web API and deploy to production.
+After training:
+
+1. **Test locally**: Run API server (see [deploy/README.md](../deploy/README.md))
+2. **Validate predictions**: Use `api/predict_status.py` for manual testing
+3. **Deploy**: Push model to production (see [deploy/cloud/README.md](../deploy/cloud/README.md))
+
+## Related Documentation
+
+- **Data Management**: [artifacts/README.md](../artifacts/README.md) - Git-annex workflows
+- **API Deployment**: [deploy/README.md](../deploy/README.md) - Local and cloud deployment
+- **Environment Setup**: [SETUP.md](../SETUP.md) - Virtual environment configuration
+- **Configuration**: [CONFIGURATION.md](../CONFIGURATION.md) - System configuration values

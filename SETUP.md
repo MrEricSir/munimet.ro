@@ -1,26 +1,29 @@
-# Setup Guide
+# Environment Setup Guide
 
-Quick setup instructions for the Muni Status Monitor.
+Configuration instructions for Python virtual environments and dependency management.
+
+## Project Structure
+
+The project uses isolated Python environments for each component:
+
+- **training/** - Data collection, labeling, model training
+- **api/** - Production web API and deployment
+- **tests/** - Test suite
 
 ## Virtual Environment Setup
 
-The project is split into two parts with separate dependencies:
-- **training/** - Data collection, labeling, and model training
-- **api/** - Production web API and deployment
-
-### Training Setup
+### Training Environment
 
 ```bash
-cd ~/Development/munimetro/training
+cd training
 
 # Create virtual environment
 python3 -m venv venv
 
-# Activate virtual environment
-# On macOS/Linux (bash/zsh):
+# Activate environment (macOS/Linux)
 source venv/bin/activate
 
-# On Windows:
+# Activate environment (Windows)
 venv\Scripts\activate
 
 # Install dependencies
@@ -30,15 +33,15 @@ pip install -r requirements.txt
 brew install python-tk@3.13
 ```
 
-### API Setup (Local Development)
+### API Environment
 
 ```bash
-cd ~/Development/munimetro/api
+cd api
 
 # Create virtual environment
 python3 -m venv venv
 
-# Activate virtual environment
+# Activate environment
 source venv/bin/activate  # macOS/Linux
 # venv\Scripts\activate   # Windows
 
@@ -46,110 +49,189 @@ source venv/bin/activate  # macOS/Linux
 pip install -r requirements.txt
 ```
 
-## Troubleshooting Virtual Environment Errors
+### Test Environment
+
+```bash
+cd tests
+
+# Create virtual environment
+python3 -m venv venv
+
+# Activate environment
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+## Docker Deployment
+
+For production deployments, Docker manages all dependencies automatically:
+
+```bash
+# Local deployment
+cd deploy/local
+./setup.sh
+./start.sh
+
+# Cloud deployment
+cd deploy/cloud
+./deploy-services.sh
+```
+
+See [deploy/README.md](deploy/README.md) for deployment documentation.
+
+## Dependency Reference
+
+### Training Dependencies (training/requirements.txt)
+
+- **requests, pillow** - Image downloading and processing
+- **torch, transformers** - ML framework and models
+- **numpy, tqdm** - Data processing and progress tracking
+- **tkinter** - Installed separately via system package manager
+
+### API Dependencies (api/requirements.txt)
+
+- **falcon, gunicorn** - Web framework and WSGI server
+- **requests, pillow** - Image downloading and processing
+- **torch, transformers** - ML inference
+- **numpy** - Data processing
+- **google-cloud-storage** - Cloud storage client (for Cloud Run deployment)
+
+### Test Dependencies (tests/requirements.txt)
+
+- **selenium** - Browser automation for frontend testing
+- **webdriver-manager** - ChromeDriver management
+
+## Troubleshooting
 
 ### Error: "No such file or directory"
 
-**Cause**: Running command from wrong directory
+Cause: Command executed from incorrect directory
 
-**Solution**:
+Solution:
 ```bash
-# Make sure you're in the correct directory first
-cd ~/Development/munimetro/training
-pwd  # Verify you're in the right place
+# Navigate to correct directory
+cd PROJECT_ROOT/training
 
-# Then create venv
+# Verify location
+pwd
+
+# Create environment
 python3 -m venv venv
-```
-
-### Error: Split commands with `&&`
-
-**Cause**: Some shells don't handle `&&` well in interactive mode
-
-**Solution**: Run commands separately:
-```bash
-# Instead of: python3 -m venv venv && source venv/bin/activate
-# Do this:
-python3 -m venv venv
-source venv/bin/activate
 ```
 
 ### Error: "command not found: source"
 
-**Cause**: Using a shell that doesn't have `source` (some sh variants)
+Cause: Shell does not support `source` command
 
-**Solution**:
+Solution:
 ```bash
-# Use dot instead of source
+# Use dot notation instead
 . venv/bin/activate
 ```
 
 ### Error: Python version mismatch
 
-**Cause**: System has multiple Python versions
+Cause: Multiple Python installations on system
 
-**Solution**:
+Solution:
 ```bash
-# Use specific Python version
+# Specify Python version explicitly
 python3.13 -m venv venv
-# or
+
+# Or use full path
 /usr/bin/python3 -m venv venv
+
+# Verify Python version
+python3 --version
 ```
 
 ### Error: "externally-managed-environment"
 
-**Cause**: Python installed via package manager on some Linux distros
+Cause: Distribution-managed Python installation (Debian/Ubuntu)
 
-**Solution**:
+Solution:
 ```bash
-# Create venv with --system-site-packages if needed
+# Option 1: Create venv with system packages
 python3 -m venv --system-site-packages venv
 
-# Or use pipx/poetry for dependency management
+# Option 2: Use pipx for global tools
+pipx install PACKAGE
+
+# Option 3: Override (not recommended)
+pip install --break-system-packages PACKAGE
 ```
 
-## Docker Setup (Recommended for Production)
+### Error: Command concatenation with &&
 
-No virtual environment needed! Docker handles all dependencies.
+Cause: Some shells handle `&&` differently in interactive mode
 
+Solution:
 ```bash
-cd ~/Development/munimetro/api
-docker-compose up -d
+# Execute commands separately instead of:
+# python3 -m venv venv && source venv/bin/activate
+
+# Run sequentially:
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-See [api/README.md](api/README.md) for full Docker documentation.
+### Error: pip install failures
 
-## Quick Reference
+Cause: Missing system dependencies or outdated pip
 
-| Task | Directory | Requirements File |
-|------|-----------|-------------------|
-| Download images | `training/` | `requirements.txt` |
-| Label images | `training/` | `requirements.txt` (+ tkinter) |
-| Train model | `training/` | `requirements.txt` |
-| Run API locally | `api/` | `requirements.txt` |
-| Run API with Docker | `api/` | None (handled by Dockerfile) |
-| Run tests | `tests/` | `requirements.txt` |
+Solution:
+```bash
+# Upgrade pip
+python3 -m pip install --upgrade pip
 
-## What's in Each Requirements File?
+# Install build tools (if needed)
+# macOS
+xcode-select --install
 
-**training/requirements.txt:**
-- `requests`, `pillow` - Image downloading
-- `torch`, `transformers` - ML training
-- `numpy`, `tqdm` - Data processing
-- Note: tkinter installed separately via system package manager
+# Debian/Ubuntu
+sudo apt-get install python3-dev build-essential
 
-**api/requirements.txt:**
-- `falcon`, `gunicorn` - Web server
-- `requests`, `pillow` - Image downloading
-- `torch`, `transformers` - ML prediction
-- `numpy` - Data processing
+# RHEL/CentOS
+sudo yum install python3-devel gcc
+```
 
-**tests/requirements.txt:**
-- `selenium` - Browser automation for frontend testing
+## Dependency Management Tasks
+
+| Task | Directory | Requirements File | Notes |
+|------|-----------|-------------------|-------|
+| Download images | `training/` | `training/requirements.txt` | - |
+| Label images | `training/` | `training/requirements.txt` | Requires tkinter |
+| Train model | `training/` | `training/requirements.txt` | Requires CUDA for GPU |
+| Run API (local) | `api/` | `api/requirements.txt` | - |
+| Run API (Docker) | `api/` | N/A | Dockerfile handles deps |
+| Run tests | `tests/` | `tests/requirements.txt` | Requires Chrome browser |
+
+## Platform-Specific Notes
+
+### macOS
+
+- tkinter: Install via `brew install python-tk@3.13`
+- ChromeDriver: Managed automatically by webdriver-manager
+
+### Linux
+
+- tkinter: Install via package manager (`python3-tk`)
+- Chrome: Required for Selenium tests
+- Build tools: May be needed for PyTorch compilation
+
+### Windows
+
+- Activation: Use `venv\Scripts\activate` instead of `source venv/bin/activate`
+- Visual Studio: May be required for building certain packages
+- Chrome: Required for Selenium tests
 
 ## Next Steps
 
-Once your environment is set up:
-1. Training: See [training/README.md](training/README.md)
-2. API: See [api/README.md](api/README.md)
-3. Testing: See [tests/README.md](tests/README.md)
+Component-specific documentation:
+
+- **Training**: [training/README.md](training/README.md)
+- **API**: [api/README.md](api/README.md)
+- **Deployment**: [deploy/README.md](deploy/README.md)
+- **Testing**: [tests/README.md](tests/README.md)

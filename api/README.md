@@ -1,62 +1,61 @@
-# API & Deployment Guide
+# API Documentation
 
-Production-ready web API for SF Muni status monitoring with Cloud Run deployment support.
+Production web API for Muni Metro status monitoring with local and cloud deployment support.
 
-## Deployment Options
+## Quick Start
 
-### 🚀 Cloud Run (Production - Recommended)
-
-**Fully managed, serverless, auto-scaling deployment**
+### Local Deployment (Recommended for Development)
 
 ```bash
-./deploy/cloud/setup-infrastructure.sh  # One-time setup
-./deploy/cloud/deploy-services.sh       # Deploy
-./deploy/cloud/setup-scheduler.sh       # Configure auto-updates
-./deploy/cloud/verify.sh               # Check deployment status
+cd deploy/local
+./setup.sh      # One-time environment setup
+./start.sh      # Start cache writer + API server
+./verify.sh     # Verify services running
+./stop.sh       # Stop all services
 ```
 
-**Cost:** ~$0.12/month for typical usage
-**Guide:** See [../deploy/README.md](../deploy/README.md) for complete instructions
+See [deploy/README.md](../deploy/README.md) for detailed deployment instructions.
 
-### 💻 Local Development (Shell Scripts - Recommended)
-
-**Simple local development without Docker**
+### Cloud Deployment (Production)
 
 ```bash
-./deploy/local/setup.sh     # One-time setup
-./deploy/local/start.sh     # Start services
-./deploy/local/verify.sh    # Check status
-./deploy/local/stop.sh      # Stop services
+cd deploy/cloud
+./setup-infrastructure.sh  # One-time GCP setup
+./deploy-services.sh       # Deploy services
+./setup-scheduler.sh       # Configure scheduler
+./verify.sh               # Verify deployment
 ```
 
-**Guide:** See [../deploy/README.md](../deploy/README.md) for complete instructions
+Cost: ~$0.13/month for typical usage.
 
-## Running Locally (Manual Setup)
+See [deploy/cloud/README.md](../deploy/cloud/README.md) for complete cloud deployment guide.
 
-For automated setup, use the deployment scripts in [../deploy/local/](../deploy/local/).
+## Manual Setup (Development)
 
-For manual setup:
+For manual local development without deployment scripts:
 
 ```bash
-# Setup
+# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 
-# Option 1: Single status check
+# Run status checker (single execution)
 python check_status.py
 
-# Option 2: Continuous monitoring
+# Run continuous monitoring
 python check_status.py --continuous --interval 60
 
-# Option 3: Web API (standalone, ~11s per request)
+# Run API server (standalone mode, ~11s per request)
 gunicorn api.api:app --bind 0.0.0.0:8000 --timeout 120
 
-# Option 4: Web API (lightweight, cache-only) - Recommended
-# Terminal 1 - Cache writer
+# Recommended: Cache writer + lightweight API
+# Terminal 1: Start cache writer
 python check_status.py --continuous --write-cache --interval 60
 
-# Terminal 2 - Lightweight API
+# Terminal 2: Start lightweight API (cache-only mode)
 ENABLE_FALLBACK=false gunicorn api.api:app --bind 0.0.0.0:8000 --timeout 120
 ```
 
@@ -64,26 +63,28 @@ ENABLE_FALLBACK=false gunicorn api.api:app --bind 0.0.0.0:8000 --timeout 120
 
 ### GET /
 
-Serves the web dashboard (HTML)
+Web dashboard interface.
+
+**Response**: HTML page with real-time status display.
 
 ### GET /health
 
-Health check endpoint
+Health check endpoint for monitoring.
 
-**Response:**
+**Response** (200 OK):
 ```json
 {
   "status": "ok",
   "service": "muni-status-api",
-  "timestamp": "2025-12-08T14:36:24.876950"
+  "timestamp": "2025-12-11T23:00:00.000000"
 }
 ```
 
 ### GET /status
 
-Get current Muni status (best of last 2 checks)
+Current Muni Metro status with best-of-two logic.
 
-**Response:**
+**Response** (200 OK):
 ```json
 {
   "status": "green",
@@ -92,52 +93,101 @@ Get current Muni status (best of last 2 checks)
   "probabilities": {
     "green": 0.9998,
     "yellow": 0.0002,
-    "red": 0.0
+    "red": 0.0000
   },
-  "image_path": "../artifacts/training_data/images/muni_snapshot_20251208_143638.jpg",
-  "image_dimensions": {"width": 1860, "height": 800},
-  "timestamp": "2025-12-08T14:36:28.364915",
+  "image_path": "artifacts/runtime/downloads/muni_snapshot_20251211_230000.jpg",
+  "image_dimensions": {
+    "width": 1860,
+    "height": 800
+  },
+  "timestamp": "2025-12-11T23:00:15.920941",
   "cached": true,
-  "cache_age": 4.5,
+  "cache_age": 12.7,
   "status_history": [
-    {"status": "green", "timestamp": "2025-12-08T14:36:28.364915"},
-    {"status": "green", "timestamp": "2025-12-08T14:35:58.123456"}
+    {
+      "status": "green",
+      "timestamp": "2025-12-11T23:00:15.920941"
+    },
+    {
+      "status": "green",
+      "timestamp": "2025-12-11T22:59:38.506073"
+    }
   ],
   "is_best_of_two": true
 }
 ```
 
-**Cache behavior:**
-- Keeps last 2 status checks
-- Returns **best** (most optimistic): green > yellow > red
-- Smooths out brief transient failures
-- Uses cache if < 5 minutes old (~30ms)
-- Falls back to live download + predict if cache stale (~11s)
+**Fields**:
+- `status`: Classification result (green/yellow/red)
+- `description`: Natural language description
+- `confidence`: Classification confidence (0-1)
+- `probabilities`: Per-class probabilities
+- `cached`: Whether response served from cache
+- `cache_age`: Seconds since cache update
+- `status_history`: Last 2 status checks
+- `is_best_of_two`: Whether best-of-two logic applied
 
-## Web Frontend
+**Caching Behavior**:
+- Maintains last 2 status checks
+- Returns most optimistic status (green > yellow > red)
+- Reduces false positives from transient issues
+- Cache valid for 5 minutes
+- Fallback to live prediction if cache stale (when `ENABLE_FALLBACK=true`)
 
-**Lightweight dashboard** (`index.html`) - Just **8.6KB** with zero dependencies!
+**Performance**:
+- Cached response: ~30ms
+- Live prediction: ~11s (download + ML inference)
+- Cache-only mode: ~30ms cached, 503 on miss
 
-**Features:**
-- 🟢🟡🔴 Large status indicator with emoji
-- Real-time status with confidence percentage
+## Web Dashboard
+
+Lightweight single-page application (`index.html`, 8.6KB).
+
+**Features**:
+- Real-time status indicator (green/yellow/red)
+- Confidence percentage
 - Visual probability bars
-- Auto-refreshes every 30 seconds
-- Mobile-responsive
-- Pure vanilla JavaScript (no frameworks!)
+- Auto-refresh (30-second interval)
+- Mobile-responsive design
+- Zero JavaScript dependencies
 
-## Cloud Run Deployment
+**Technology**:
+- Pure vanilla JavaScript
+- No build process required
+- No external dependencies
 
-For Cloud Run deployment, use the automated scripts:
+## Architecture
 
-```bash
-./deploy/cloud/setup-infrastructure.sh  # One-time GCP setup
-./deploy/cloud/deploy-services.sh       # Build and deploy services
-./deploy/cloud/setup-scheduler.sh       # Configure auto-updates
-./deploy/cloud/verify.sh               # Verify deployment
+### Local Development
+
+```
+Cache Writer Process (background)
+  ↓ downloads image every 60s
+  ↓ runs ML prediction
+  ↓ writes JSON to disk
+Local Cache File
+  ↑ reads JSON (~30ms)
+API Server (gunicorn)
+  ↓ serves /status, /health, /
+Client Browser
 ```
 
-See [../deploy/README.md](../deploy/README.md) for complete Cloud Run deployment guide.
+### Cloud Run Production
+
+```
+Cloud Scheduler (every 2 min)
+  ↓ triggers via OAuth
+Cloud Run Job (munimetro-checker)
+  ↓ downloads image + predicts
+  ↓ writes JSON to GCS
+Cloud Storage (gs://munimetro-cache/)
+  ↑ reads JSON (~100-200ms)
+Cloud Run Service (munimetro-api)
+  ↓ serves endpoints
+Client Browser
+```
+
+See [CONFIGURATION.md](../CONFIGURATION.md) for deployment configuration details.
 
 ## Monitoring
 
@@ -148,60 +198,169 @@ See [../deploy/README.md](../deploy/README.md) for complete Cloud Run deployment
 tail -f artifacts/runtime/cache-writer.log
 tail -f artifacts/runtime/api-error.log
 
-# Check status
+# Check service status
 ./deploy/local/verify.sh
+
+# Test endpoints
+curl http://localhost:8000/health
+curl http://localhost:8000/status
 ```
 
 ### Cloud Run
 
 ```bash
-# View logs
+# View API logs
 gcloud run services logs read munimetro-api --region us-west1 --limit 50
-gcloud run services logs read munimetro-checker --region us-west1 --limit 50
+
+# View job logs
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="munimetro-checker"' --limit 50
 
 # Verify deployment
 ./deploy/cloud/verify.sh
+
+# Test endpoints
+curl https://munimetro-api-438243686292.us-west1.run.app/health
+curl https://munimetro-api-438243686292.us-west1.run.app/status
 ```
+
+## Environment Variables
+
+### Local Development
+
+- `CLOUD_RUN`: `false` (default) - Use local file cache
+- `ENABLE_FALLBACK`: `true` (default) - Download+predict on cache miss
+
+### Cloud Run
+
+- `CLOUD_RUN`: `true` - Use Google Cloud Storage cache
+- `GCS_BUCKET`: `munimetro-cache` - Cache bucket name
+- `ENABLE_FALLBACK`: `false` - Cache-only mode (no fallback)
+- `PORT`: `8000` - HTTP server port
+
+See [CONFIGURATION.md](../CONFIGURATION.md) for complete configuration reference.
 
 ## Troubleshooting
 
-**Local services won't start:**
+### Local Services Not Starting
+
+Check logs and verify model files:
+
 ```bash
-# Check logs
+# View recent log entries
 tail -20 artifacts/runtime/cache-writer.log
 tail -20 artifacts/runtime/api-error.log
 
 # Verify model exists
-ls -la artifacts/models/v1/status_classifier.pt
+ls -lh artifacts/models/v1/status_classifier.pt
 
-# Run verification
+# Run verification script
 ./deploy/local/verify.sh
 ```
 
-**Port already in use:**
+### Port Already in Use
+
 ```bash
+# Find process using port 8000
 lsof -i :8000
-kill <PID>
+
+# Terminate process
+kill PID
+
+# Or use stop script
+./deploy/local/stop.sh
 ```
 
-**Cloud Run deployment issues:**
+### Cloud Run Deployment Issues
+
 ```bash
-# Run verification script
+# Run comprehensive verification
 ./deploy/cloud/verify.sh
 
-# Check recent logs
-gcloud run services logs read munimetro-checker --region us-west1 --limit 100
+# Check service logs
+gcloud run services logs read munimetro-api --region us-west1 --limit 100
+
+# Check job logs
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="munimetro-checker"' --limit 100
+
+# Verify service status
+gcloud run services describe munimetro-api --region us-west1
+
+# Verify job status
+gcloud run jobs describe munimetro-checker --region us-west1
 ```
 
-## Performance
+### Cache Not Updating
 
-- **Standalone API**: ~11 seconds (downloads + predicts every request)
-- **Cached API (fallback enabled)**: ~40ms cached, ~11s on cache miss
-- **Lightweight cached API (fallback disabled)**: ~30ms cached, 503 on cache miss ⚡
+Local development:
 
-**Recommended**: Use cache writer + lightweight API for production (~30ms responses).
+```bash
+# Check cache writer process
+ps aux | grep check_status.py
 
-## Next Steps
+# View cache writer logs
+tail -f artifacts/runtime/cache-writer.log
 
-- See [Testing Guide](../tests/README.md) for running automated tests
-- See [Training Guide](../training/README.md) to retrain with more data
+# Verify cache file
+ls -lh artifacts/runtime/cache/latest_status.json
+cat artifacts/runtime/cache/latest_status.json | python3 -m json.tool
+```
+
+Cloud Run:
+
+```bash
+# Check recent job executions
+gcloud run jobs executions list --job=munimetro-checker --region=us-west1 --limit=10
+
+# View job execution logs
+gcloud logging read 'resource.type="cloud_run_job"' --limit 50
+
+# Verify cache in GCS
+gsutil stat gs://munimetro-cache/latest_status.json
+```
+
+### Model Loading Errors
+
+```bash
+# Verify model files exist
+ls -lh artifacts/models/v1/
+
+# Test model loading
+python3 -c "from lib.muni_lib import load_model; load_model()"
+
+# Check PyTorch installation
+python3 -c "import torch; print(torch.__version__)"
+
+# Download model from git-annex (if missing)
+git annex get artifacts/models/v1/
+```
+
+## Performance Optimization
+
+### Recommended Configuration
+
+**Local Development**:
+- Cache writer with 60-second interval
+- Lightweight API with `ENABLE_FALLBACK=false`
+- Response time: ~30ms (cached)
+
+**Cloud Run**:
+- Cloud Run Job triggered every 2 minutes
+- API Service in cache-only mode (`ENABLE_FALLBACK=false`)
+- Response time: ~100-200ms (GCS latency + processing)
+
+### Performance Metrics
+
+| Configuration | Cached Response | Cache Miss |
+|--------------|-----------------|------------|
+| Standalone API | N/A | ~11s |
+| Cache + Fallback | ~30ms | ~11s |
+| Cache Only | ~30ms | 503 error |
+| Cloud Run | ~100-200ms | 503 error |
+
+## Related Documentation
+
+- **Deployment Guide**: [deploy/README.md](../deploy/README.md) - Local and cloud deployment
+- **Cloud Deployment**: [deploy/cloud/README.md](../deploy/cloud/README.md) - Google Cloud Run
+- **Training Guide**: [training/README.md](../training/README.md) - Model training workflow
+- **Testing Guide**: [tests/README.md](../tests/README.md) - Automated test suite
+- **Configuration**: [CONFIGURATION.md](../CONFIGURATION.md) - System configuration values

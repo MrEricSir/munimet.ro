@@ -8,7 +8,7 @@ PROJECT_ID="${GCP_PROJECT_ID:-munimetro}"
 REGION="${GCP_REGION:-us-west1}"
 CHECKER_JOB="munimetro-checker"
 SCHEDULER_JOB_NAME="munimetro-status-check"
-SCHEDULE="${SCHEDULE:-*/5 * * * *}"  # Every 5 minutes by default
+SCHEDULE="${SCHEDULE:-*/2 * * * *}"  # Every 2 minutes by default
 SERVICE_ACCOUNT_NAME="munimetro-api"
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
@@ -64,7 +64,7 @@ gcloud scheduler jobs create http "$SCHEDULER_JOB_NAME" \
     --max-retry-attempts=3 \
     --max-backoff=3600s \
     --min-backoff=5s \
-    --description="Triggers MuniMetro status check every 5 minutes" \
+    --description="Triggers MuniMetro status check every 2 minutes" \
     --project="$PROJECT_ID"
 
 echo "✓ Scheduler job created: $SCHEDULER_JOB_NAME"
@@ -75,7 +75,7 @@ echo "Testing scheduler job..."
 gcloud scheduler jobs run "$SCHEDULER_JOB_NAME" \
     --location="$REGION" \
     --project="$PROJECT_ID" || {
-    echo "⚠️  Test run failed. This is OK on first setup."
+    echo "⚠️  Test run failed. This is normal on first setup."
     echo "   The job will run on schedule: $SCHEDULE"
 }
 echo ""
@@ -89,7 +89,7 @@ echo "  Name: $SCHEDULER_JOB_NAME"
 echo "  Schedule: $SCHEDULE"
 echo "  Target: Cloud Run Job '$CHECKER_JOB'"
 echo ""
-echo "Next status check: $(date -u -v+5M '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date -u -d '+5 minutes' '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || echo 'in 5 minutes')"
+echo "Next status check: $(date -u -v+2M '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date -u -d '+2 minutes' '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || echo 'in 2 minutes')"
 echo ""
 echo "View scheduler job status:"
 echo "  gcloud scheduler jobs describe $SCHEDULER_JOB_NAME --location=$REGION"

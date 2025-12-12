@@ -1,31 +1,25 @@
-# Google Cloud Storage Setup for git-annex
+# Google Cloud Storage Configuration for git-annex
 
-This guide explains how to configure Google Cloud Storage (GCS) as the remote backend for git-annex to store your 1.1GB of training data and models.
-
-**Status**: ✅ **Already configured** for the munimetro project! This doc explains the setup for reference and for collaborators.
+Configuration guide for using Google Cloud Storage as the git-annex backend for training data and model storage (1.1GB total).
 
 ## Prerequisites
 
-- Google Cloud account
-- `gcloud` CLI installed (`brew install google-cloud-sdk`)
-- `rclone` installed (`brew install rclone`)
-- `git-annex-remote-rclone` installed (`brew install git-annex-remote-rclone`)
-- Git-annex already initialized (done)
+- Google Cloud account with billing enabled
+- `gcloud` CLI: `brew install google-cloud-sdk`
+- `rclone`: `brew install rclone`
+- `git-annex-remote-rclone`: `brew install git-annex-remote-rclone`
+- Git-annex initialized repository
 
-## Why Google Cloud Storage?
+## Advantages of Google Cloud Storage
 
-- **FREE**: Your 1.1GB fits within the 5GB free tier
-- **Reliable**: Google's infrastructure
-- **Fast**: Good upload/download speeds
-- **No lock-in**: Can switch to S3 or other backends later
+- **Cost Effective**: Free tier covers 5GB storage
+- **Reliability**: Google's infrastructure
+- **Performance**: High-speed transfers
+- **Flexibility**: Compatible with S3-compatible backends
 
----
+## Initial Setup
 
-## Setup Steps (Already Completed)
-
-The munimetro project is already set up with GCS. Here's what was done:
-
-### 1. Install Required Tools
+### 1. Install Dependencies
 
 ```bash
 brew install google-cloud-sdk rclone git-annex-remote-rclone
@@ -35,185 +29,254 @@ brew install google-cloud-sdk rclone git-annex-remote-rclone
 
 ```bash
 gcloud auth login
-gcloud config set project munimetro
+gcloud config set project PROJECT_ID
 ```
 
-### 3. Enable API and Create Bucket
+Replace `PROJECT_ID` with the GCP project identifier.
+
+### 3. Enable Storage API and Create Bucket
 
 ```bash
 gcloud services enable storage-api.googleapis.com
-gsutil mb -p munimetro -l us-west1 gs://munimetro-annex
+gsutil mb -p PROJECT_ID -l us-west1 gs://BUCKET_NAME
 ```
 
-### 4. Configure rclone for GCS
+Replace `BUCKET_NAME` with a globally unique bucket name.
+
+### 4. Configure rclone
 
 ```bash
-rclone config create munimetro-gcs gcs project_number=munimetro bucket_policy_only=true
-# This opens a browser for OAuth authentication
+rclone config create REMOTE_NAME gcs project_number=PROJECT_ID bucket_policy_only=true
 ```
+
+This opens a browser for OAuth authentication. Replace `REMOTE_NAME` with a descriptive name (e.g., `project-gcs`).
 
 ### 5. Initialize git-annex Remote
 
 ```bash
-git annex initremote google-cloud \
+git annex initremote REMOTE_NAME \
   type=external \
   externaltype=rclone \
-  target=munimetro-gcs \
-  prefix=munimetro-annex \
+  target=REMOTE_NAME \
+  prefix=BUCKET_PREFIX \
   chunk=50MiB \
   encryption=none \
   rclone_layout=lower
 ```
 
-### 6. Upload Files
+Parameters:
+- `REMOTE_NAME`: git-annex remote identifier
+- `target`: rclone remote name from step 4
+- `BUCKET_PREFIX`: subdirectory within bucket
+- `chunk`: file chunk size for large files
+- `encryption`: enable for sensitive data (requires GPG key)
+
+### 6. Upload Annexed Files
 
 ```bash
-# Upload all annexed files (1.1GB - takes ~10-20 minutes)
-git annex copy --to=google-cloud --jobs=4
+# Upload all annexed files
+git annex copy --to=REMOTE_NAME --jobs=4
+
+# Upload specific directories
+git annex copy artifacts/training_data/ --to=REMOTE_NAME
+git annex copy artifacts/models/ --to=REMOTE_NAME
 ```
 
----
-
-## Uploading Files to GCS
-
-Once the remote is configured, upload your annexed files:
-
-```bash
-# Copy all annexed files to Google Cloud
-git annex copy --to=google-cloud
-
-# Or copy specific directories
-git annex copy artifacts/training_data/images/ --to=google-cloud
-git annex copy artifacts/models/v1/ --to=google-cloud
-git annex copy artifacts/training_data/labels.json --to=google-cloud
-
-# Check what's been uploaded
-git annex whereis
-```
-
-This will take some time (~1.1GB upload).
-
----
+Initial upload time: approximately 10-20 minutes for 1.1GB.
 
 ## Collaborator Workflow
 
-When a collaborator clones your repo, they'll see symlinks. Here's how they get the actual files:
+Collaborators cloning the repository must enable the git-annex remote to access files.
+
+### Setup Steps
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/yourusername/munimetro.git
-cd munimetro
+# Clone repository
+git clone https://github.com/MrEricSir/munimet.ro.git
+cd munimet.ro
 
-# 2. Initialize git-annex
-git annex init "collaborator-laptop"
+# Initialize git-annex
+git annex init "machine-name"
 
-# 3. Enable the Google Cloud remote
+# Enable the cloud remote
 git annex enableremote google-cloud
+```
 
-# 4. Download only the files they need
-# Option A: Get everything
+Note: `enableremote` requires the same rclone configuration from step 4.
+
+### Downloading Files
+
+```bash
+# Download all annexed files
 git annex get .
 
-# Option B: Get only the model (for API usage)
-git annex get artifacts/models/v1/
+# Download specific directories
+git annex get artifacts/models/v1/        # Model files only
+git annex get artifacts/training_data/    # Training data only
 
-# Option C: Get only the training data (for retraining)
-git annex get data/
+# Verify downloaded files
+git annex whereis
+```
 
-# 5. If editing training labels, unlock the file
+### Editing Annexed Files
+
+Some files (e.g., `training_labels.json`) must be unlocked for editing:
+
+```bash
+# Unlock file for editing
 git annex unlock artifacts/training_data/labels.json
 
-# 6. Verify files are available
-ls -lh artifacts/training_data/images/ | head
-ls -lh artifacts/models/v1/
+# Edit file
+# File remains git-annex tracked but becomes writable
+
+# Re-lock after editing (optional)
+git annex lock artifacts/training_data/labels.json
 ```
 
-**Important**: `training_labels.json` must be unlocked to edit it with `label_images.py`. The file stays tracked in git-annex but becomes writable.
+## File Management Commands
 
----
+### Check File Locations
 
-## Useful Commands
-
-### Check file locations
 ```bash
-# See where files are stored (local, cloud, both)
-git annex whereis artifacts/training_data/images/
+# Show where files are stored (local/cloud/both)
+git annex whereis PATH
 
-# See what's available locally
+# List files available locally
 git annex find --in=here
 
-# See what's in Google Cloud
-git annex find --in=google-cloud
+# List files in cloud storage
+git annex find --in=REMOTE_NAME
 ```
 
-### Free up local disk space
+### Disk Space Management
+
 ```bash
-# Remove local copies (keeps them in cloud)
-git annex drop artifacts/training_data/images/
+# Remove local copies (keeps cloud copies)
+git annex drop PATH
 
-# Get them back later
-git annex get artifacts/training_data/images/
-```
+# Retrieve files from cloud
+git annex get PATH
 
-### Sync with cloud
-```bash
-# Upload new files
-git annex copy --to=google-cloud
-
-# Download updates from cloud
+# Sync all changes with cloud
 git annex sync --content
 ```
 
----
+### Upload New Files
+
+```bash
+# Upload new or modified files
+git annex copy --to=REMOTE_NAME
+
+# Upload with parallel transfers
+git annex copy --to=REMOTE_NAME --jobs=4
+```
 
 ## Cost Monitoring
 
-Monitor your Google Cloud Storage usage:
+### Check Storage Usage
 
 ```bash
-# Check bucket size
-gsutil du -sh gs://$BUCKET_NAME
+# Bucket size
+gsutil du -sh gs://BUCKET_NAME
 
-# List all objects
-gsutil ls -lh gs://$BUCKET_NAME/munimetro/
+# List objects with sizes
+gsutil ls -lh gs://BUCKET_NAME/PREFIX/
+
+# View billing
+gcloud billing accounts list
 ```
 
-**Expected cost**: $0/month (under 5GB free tier)
+### Expected Costs
 
----
+- Storage: ~1.1GB
+- Monthly cost: $0 (within 5GB free tier)
+- Network egress: Free within same region
 
 ## Troubleshooting
 
-### "Remote not available"
-```bash
-# Re-enable the remote
-git annex enableremote google-cloud
+### Remote Not Available
 
-# Check remote status
-git annex info google-cloud
+```bash
+# Re-enable remote
+git annex enableremote REMOTE_NAME
+
+# Check remote configuration
+git annex info REMOTE_NAME
 ```
 
-### "Permission denied"
+### Authentication Errors
+
 ```bash
-# Re-authenticate
+# Re-authenticate with gcloud
 gcloud auth application-default login
+
+# Verify credentials
+gcloud auth list
 ```
 
-### "Bucket not found"
+### Bucket Permission Issues
+
 ```bash
 # Verify bucket exists
 gsutil ls
 
-# Check bucket permissions
-gsutil iam get gs://$BUCKET_NAME
+# Check bucket IAM permissions
+gsutil iam get gs://BUCKET_NAME
+
+# Grant access if needed
+gsutil iam ch user:EMAIL:objectAdmin gs://BUCKET_NAME
 ```
 
----
+### Transfer Failures
 
-## Next Steps
+```bash
+# Check git-annex logs
+git annex info --debug
 
-1. **Test the setup**: Upload a few files first
-2. **Push to GitHub**: Push your git repo (only symlinks, not actual files)
-3. **Document for collaborators**: Add instructions to README
+# Test rclone connectivity
+rclone lsd REMOTE_NAME:
 
-See [STORAGE_COMPARISON.md](STORAGE_COMPARISON.md) for alternatives if you want to switch later.
+# Verify bucket access
+gsutil ls gs://BUCKET_NAME
+```
+
+## Security Considerations
+
+### Encryption
+
+For sensitive data, enable git-annex encryption:
+
+```bash
+git annex initremote REMOTE_NAME \
+  type=external \
+  externaltype=rclone \
+  encryption=hybrid \
+  keyid=GPG_KEY_ID \
+  ...
+```
+
+This encrypts files before upload, preventing cloud provider access.
+
+### Access Control
+
+- Use service accounts for automated access
+- Enable IAM policies for bucket access
+- Implement bucket versioning for recovery
+- Enable audit logging for compliance
+
+## Alternative Backends
+
+git-annex supports multiple storage backends:
+
+- **Amazon S3**: AWS S3-compatible storage
+- **Backblaze B2**: Cost-effective alternative
+- **Local Server**: rsync/ssh to dedicated server
+- **WebDAV**: Self-hosted storage
+
+Configuration details: See git-annex special remote documentation.
+
+## Reference
+
+- [git-annex documentation](https://git-annex.branchable.com/)
+- [rclone documentation](https://rclone.org/docs/)
+- [GCS pricing](https://cloud.google.com/storage/pricing)
