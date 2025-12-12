@@ -133,6 +133,17 @@ gcloud run jobs deploy "$CHECKER_JOB" \
 echo "✓ Checker job deployed: $CHECKER_JOB"
 echo ""
 
+# Grant service account permission to invoke the job (for Cloud Scheduler)
+echo "  Granting job execution permission to service account..."
+gcloud run jobs add-iam-policy-binding "$CHECKER_JOB" \
+    --region="$REGION" \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/run.invoker" \
+    --project="$PROJECT_ID" > /dev/null
+
+echo "✓ Job invoker permission granted"
+echo ""
+
 echo "=========================================="
 echo "✓ Deployment complete!"
 echo "=========================================="
