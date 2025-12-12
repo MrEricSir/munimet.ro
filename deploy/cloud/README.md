@@ -7,7 +7,7 @@ See [../../CONFIGURATION.md](../../CONFIGURATION.md) for actual deployment confi
 ## Architecture
 
 ```
-Cloud Scheduler (every 2 min)
+Cloud Scheduler (every 5 min)
   ↓ triggers
 Checker (Cloud Run Job)
   ↓ downloads image + predicts status

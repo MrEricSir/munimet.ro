@@ -165,8 +165,8 @@
         };
 
         const statusMessages = {
-            'green': 'Muni is on track. All aboard!',
-            'yellow': 'Uh oh! Minor delays',
+            'green': 'All aboard: Muni is on track',
+            'yellow': 'Uh oh: Minor delays',
             'red': 'Muni is taking a nap',
             'error': 'Unknown error'
         };
@@ -194,7 +194,7 @@
             // For yellow status, use the AI-generated description from the API
             let message;
             if (status === 'yellow' && apiDescription) {
-                message = `Uh oh! ${apiDescription}`;
+                message = `Uh oh: ${apiDescription}`;
             } else {
                 message = statusMessages[status] || 'Unknown status';
             }
