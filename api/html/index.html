@@ -25,7 +25,6 @@
             justify-content: center;
             align-items: center;
             padding: 20px;
-            height: 100%;
             transition: background 1.5s ease-in-out;
         }
 
@@ -51,7 +50,6 @@
             top: 50%;
             width: 90%;
             height: 85%;
-            -webkit-transform: translate(-50%, -50%);
             transform: translate(-50%, -50%);
         }
 
@@ -79,71 +77,42 @@
             border-radius: 12px;
             padding: 30px;
             text-align: center;
-            margin-bottom: 20px;
-            opacity: 1;
-            transition: opacity 0.5s ease-in-out;
         }
 
         #app .header {
-            display:table-row;
+            display: table-row;
         }
 
         #app .main {
-            display:table-row;
+            display: table-row;
         }
 
         #app .footer {
-            display:table-row;
-        }
-
-        .description {
-            font-family: "handodle";
-            font-size: 2.2em;
+            display: table-row;
         }
 
         .status-icon {
             font-size: 80px;
             margin-bottom: 15px;
-            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
         }
-
-        .status-icon .fade-out {
-            opacity: 0;
-            transform: scale(0.8);
-        }
-
-        .status-icon .fade-in {
-            animation: fadeIn 0.5s ease-in;
-        }
-
-        .status-text {
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .status-text.green { color: #48bb78; }
-        .status-text.yellow { color: #ecc94b; }
-        .status-text.red { color: #f56565; }
-        .status-text.error { color: #718096; }
 
         .description {
+            font-family: "handodle";
             font-size: 2.2em;
             color: #4a5568;
             margin-bottom: 15px;
-        }
-
-        .loading {
-            text-align: center;
-            color: #718096;
-            padding: 40px;
         }
 
         .spinner {
             animation: spin 5s linear infinite;
         }
 
-        #status .fade-out {
+        #status {
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        #status.fade-out {
             opacity: 0;
         }
 
@@ -162,15 +131,14 @@
 <body>
     <div class="container">
         <div id="app">
-
             <div class="header">
                 <h1>Muni Metro</h1>
                 <h2>Subway Status</h2>
             </div>
 
             <div class="main">
-                <div id="status" class="status-display">
-                    <div class="status-icon fade-in ">
+                <div id="status">
+                    <div class="status-icon">
                         <div class="spinner">⎈</div>
                     </div>
                     <div class="description">Loading...</div>
@@ -196,6 +164,13 @@
             'error': '✖️'
         };
 
+        const statusMessages = {
+            'green': 'Muni is on track. All aboard!',
+            'yellow': 'Uh oh! Minor delays',
+            'red': 'Muni is taking a nap',
+            'error': 'Unknown error'
+        };
+
         let previousStatus = null;
 
         async function fetchStatus() {
@@ -204,104 +179,51 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    renderStatus(data);
+                    renderStatus(data.status, data.description);
                 } else {
-                    renderError(data.error || 'Failed to fetch status');
+                    renderStatus('error');
                 }
             } catch (error) {
-                renderError('Network error: ' + error.message);
+                renderStatus('error');
             }
         }
 
-        function updateBodyBackground(status) {
-            // Remove all status classes
-            document.body.classList.remove('status-green', 'status-yellow', 'status-red', 'status-error');
-            // Add new status class
-            document.body.classList.add(`status-${status}`);
-        }
+        function renderStatus(status, apiDescription = null) {
+            const emoji = statusEmojis[status] || '⚪';
 
-        function renderStatus(data) {
-            const emoji = statusEmojis[data.status] || '⚪';
-            const timestamp = new Date(data.timestamp).toLocaleString();
-            const cacheAge = data.cache_age ? `${data.cache_age}s ago` : 'Live';
-            const description =
-                data.status === 'error' ? `Unknown error ` :
-                data.status === 'red' ? `Muni is taking a nap` :
-                data.status === 'green' ? `Muni is on track. All aboard!` :
-                data.status === 'yellow' ? `Uh oh! ` + data.status :
-                "";
-
-            // Check if status has changed or first load
-            const isFirstLoad = previousStatus === null;
-            const statusChanged = previousStatus !== null && previousStatus !== data.status;
-            const shouldAnimate = isFirstLoad || statusChanged;
-
-            const iconClass = statusChanged ? 'status-icon fade-in' : 'status-icon';
-
-            const html = `
-                <div class="${iconClass}">${emoji}</div>
-                <div class="description">${description}</div>
-            `;
-
-            const status = document.getElementById('status');
-
-            if (shouldAnimate) {
-                // Fade out
-                status.classList.add('fade-out');
-
-                // Wait for fade-out animation, then update content
-                setTimeout(() => {
-                    updateBodyBackground(data.status);
-                    status.innerHTML = html;
-                    previousStatus = data.status;
-
-                    // Trigger fade-in by removing fade-out class
-                    status.classList.remove('fade-out');
-                }, 500);
+            // For yellow status, use the AI-generated description from the API
+            let message;
+            if (status === 'yellow' && apiDescription) {
+                message = `Uh oh! ${apiDescription}`;
             } else {
-                // No animation needed, just update
-                updateBodyBackground(data.status);
-                status.innerHTML = html;
-                previousStatus = data.status;
+                message = statusMessages[status] || 'Unknown status';
             }
-        }
 
-        function renderError(message) {
-            const emoji = statusEmojis['error'];
-
-            // Check if status has changed or first load
-            const isFirstLoad = previousStatus === null;
-            const statusChanged = previousStatus !== null && previousStatus !== 'error';
-            const shouldAnimate = isFirstLoad || statusChanged;
-
-            const iconClass = statusChanged ? 'status-icon fade-in' : 'status-icon';
+            // Check if status changed
+            const statusChanged = previousStatus !== null && previousStatus !== status;
 
             const html = `
-                <div class="${iconClass}">${emoji}</div>
-                <div class="status-text error">Error</div>
+                <div class="status-icon">${emoji}</div>
                 <div class="description">${message}</div>
             `;
 
-            const status = document.getElementById('status');
+            const statusElement = document.getElementById('status');
 
-            if (shouldAnimate) {
-                // Fade out
-                status.classList.add('fade-out');
+            if (statusChanged) {
+                // Fade out, update content, fade in
+                statusElement.classList.add('fade-out');
 
-                // Wait for fade-out animation, then update content
                 setTimeout(() => {
-                    updateBodyBackground('error');
-                    status.innerHTML = html;
-                    previousStatus = 'error';
-
-                    // Trigger fade-in by removing fade-out class
-                    status.classList.remove('fade-out');
+                    document.body.className = `status-${status}`;
+                    statusElement.innerHTML = html;
+                    statusElement.classList.remove('fade-out');
+                    previousStatus = status;
                 }, 500);
             } else {
-                // No animation needed, just update
-                updateBodyBackground('error');
-                status.innerHTML = html;
-                previousStatus = 'error';
+                // First load - no animation
+                document.body.className = `status-${status}`;
+                statusElement.innerHTML = html;
+                previousStatus = status;
             }
         }
 
