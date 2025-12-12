@@ -60,7 +60,7 @@ Browser: http://localhost:8000
 ### Prerequisites
 
 - Python 3.11+
-- Trained ML model in `artifacts/models/v1/muni_status_model.keras`
+- Trained ML model in `artifacts/models/v1/` (status_classifier.pt + model.safetensors)
 - ~2GB RAM
 
 ### Setup (First Time)
@@ -118,7 +118,7 @@ tail -f artifacts/runtime/cache-writer.log
 tail -f artifacts/runtime/api-error.log
 
 # Verify model exists
-ls -lh artifacts/models/v1/muni_status_model.keras
+ls -lh artifacts/models/v1/status_classifier.pt
 
 # Reinstall dependencies
 ./deploy/local/setup.sh
