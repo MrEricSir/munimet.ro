@@ -1,4 +1,4 @@
-# Muni Metro Status Monitor
+# Muni Metro Subway Status
 
 Is the Muni Metro subway in San Francisco running? This web app monitors the internal status image and provides a brief summary using computer vision.
 
