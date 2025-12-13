@@ -5,127 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/static/favicon.png">
     <title>MuniMet.ro</title>
+        <link rel="stylesheet" href="/static/style.css">
     <style>
-        @font-face {
-            font-family: "handodle";
-            src: url("static/handodle.ttf") format("truetype");
-        }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: radial-gradient(#bbb, #777);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            transition: background 1.5s ease-in-out;
-        }
-
-        body.status-green {
-            background: radial-gradient(#cfc, #7f7);
-        }
-
-        body.status-yellow {
-            background: radial-gradient(#eef, #ee4);
-        }
-
-        body.status-red {
-            background: radial-gradient(#fcc, #f77);
-        }
-
-        body.status-error {
-            background: radial-gradient(#bbb, #777);
-        }
-
-        .container {
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            width: 90%;
-            height: 85%;
-            transform: translate(-50%, -50%);
-        }
-
-        h1, h2 {
-            font-family: "handodle";
-            color: #2d3748;
-            text-align: center;
-        }
-
-        h1 {
-            font-size: 3.0em;
-            margin-bottom: 0;
-        }
-
-        h2 {
-            font-size: 2.2em;
-            margin-bottom: 10px;
-        }
-
-        #app {
-            display: table;
-            width: 100%;
-            height: 100%;
-            background: #f7fafc;
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-        }
-
-        #app .header {
-            display: table-row;
-        }
-
-        #app .main {
-            display: table-row;
-        }
-
-        #app .footer {
-            display: table-row;
-        }
-
-        .status-icon {
-            font-size: 80px;
-            margin-bottom: 15px;
-        }
-
-        .description {
-            font-family: "handodle";
-            font-size: 2.2em;
-            color: #4a5568;
-            margin-bottom: 15px;
-        }
-
-        .spinner {
-            animation: spin 5s linear infinite;
-        }
-
-        #status {
-            opacity: 1;
-            transition: opacity 0.5s ease-in-out;
-        }
-
-        #status.fade-out {
-            opacity: 0;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .about-info {
-            text-align: center;
-            font-size: 1em;
-            color: #a0aec0;
-        }
     </style>
 </head>
 <body>
@@ -147,7 +29,7 @@
 
             <div class="footer">
                 <div class="about-info">
-                    About
+                    <a href="/about">About</a>
                 </div>
             </div>
         </div>
@@ -157,11 +39,11 @@
         const API_URL = '/status';
         const REFRESH_INTERVAL = 30000; // 30 seconds
 
-        const statusEmojis = {
-            'green': '🟢',
-            'yellow': '🟡',
-            'red': '🔴',
-            'error': '✖️'
+        const statusImage = {
+            'green': 'muni-green.png',
+            'yellow': 'muni-yellow.png',
+            'red': 'muni-red.png',
+            'error': 'error.png'
         };
 
         const statusMessages = {
@@ -189,7 +71,8 @@
         }
 
         function renderStatus(status, apiDescription = null) {
-            const emoji = statusEmojis[status] || '⚪';
+            // Find the image filename, or default to the error image.
+            const image = statusImage[status] || statusImage['error'];
 
             // For yellow status, use the AI-generated description from the API
             let message;
@@ -203,7 +86,9 @@
             const statusChanged = previousStatus !== null && previousStatus !== status;
 
             const html = `
-                <div class="status-icon">${emoji}</div>
+                <div class="status-icon">
+                    <img src="/static/${image}">
+                </div>
                 <div class="description">${message}</div>
             `;
 

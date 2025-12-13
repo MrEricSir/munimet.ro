@@ -212,6 +212,7 @@ app = falcon.App()
 # Add routes
 app.add_route('/', StaticResource('index.html'))
 app.add_route('/dashboard', StaticResource('dashboard.html'))
+app.add_route('/about', StaticResource('about.html'))
 app.add_static_route('/static', str(API_DIR / 'html' / 'static'))
 app.add_route('/status', StatusResource())
 app.add_route('/health', HealthResource())
