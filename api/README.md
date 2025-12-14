@@ -177,7 +177,7 @@ Client Browser
 ### Cloud Run Production
 
 ```
-Cloud Scheduler (every 5 min)
+Cloud Scheduler (every 3 min)
   ↓ triggers via OAuth
 Cloud Run Job (munimetro-checker)
   ↓ downloads image + predicts
@@ -346,7 +346,7 @@ git annex get artifacts/models/v1/
 - Response time: ~30ms (cached)
 
 **Cloud Run**:
-- Cloud Run Job triggered every 5 minutes
+- Cloud Run Job triggered every 3 minutes
 - API Service in cache-only mode (`ENABLE_FALLBACK=false`)
 - Response time: ~100-200ms (GCS latency + processing)
 

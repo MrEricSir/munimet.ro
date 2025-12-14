@@ -7,7 +7,7 @@ See [../../CONFIGURATION.md](../../CONFIGURATION.md) for actual deployment confi
 ## Architecture
 
 ```
-Cloud Scheduler (every 5 min)
+Cloud Scheduler (every 3 min)
   ↓ triggers
 Checker (Cloud Run Job)
   ↓ downloads image + predicts status
@@ -84,8 +84,26 @@ First deployment takes approximately 10-15 minutes (downloading ML model layers)
 
 This script:
 - Creates Cloud Scheduler job
-- Configures 2-minute interval
+- Configures 3-minute interval
 - Runs test execution
+
+### 4. Setup Monitoring (Optional but Recommended)
+
+```bash
+export ALERT_EMAIL="your-email@example.com"  # Set your email first
+./deploy/cloud/setup-monitoring.sh
+```
+
+This script:
+- Creates uptime check for API `/health` endpoint (checks every 5 minutes)
+- Creates alert policy for API downtime (alerts if down for 5+ minutes)
+- Creates alert policy for job failures (alerts if checker job fails repeatedly)
+- Creates alert policy for high error rates (alerts if API error rate >10%)
+- Sends email notifications to `ALERT_EMAIL`
+
+**Cost**: FREE (within Google Cloud Monitoring free tier limits)
+
+**Note**: You must run `setup-infrastructure.sh` with `ALERT_EMAIL` set first to create the notification channel.
 
 ## Verification
 

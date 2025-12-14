@@ -183,7 +183,7 @@ Browser
 
 #### Cloud Run (Production)
 ```
-Cloud Scheduler (every 5 min)
+Cloud Scheduler (every 3 min)
   ↓ triggers via OAuth
 Cloud Run Job (munimetro-checker)
   ↓ downloads image + predicts status

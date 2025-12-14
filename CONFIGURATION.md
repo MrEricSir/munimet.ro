@@ -57,7 +57,7 @@ This document records the actual configuration values used for this deployment.
 
 - **Job Name**: `munimetro-status-check`
 - **Location**: `us-west1`
-- **Schedule**: `*/5 * * * *` (every 5 minutes)
+- **Schedule**: `*/3 * * * *` (every 3 minutes)
 - **Target**: `munimetro-checker` Cloud Run Job
 - **Authentication**: OAuth (service account)
 - **Retry Policy**: 3 attempts, exponential backoff (5s-3600s)
@@ -160,11 +160,12 @@ PORT=8000
 ### Current Monthly Costs
 
 - **Cloud Run Service (API)**: ~$0 (within free tier at current traffic)
-- **Cloud Run Jobs (Checker)**: ~$0.42 (8,640 executions/month @ ~10s each)
-- **Cloud Storage (Cache)**: ~$0.016 (1KB file, 60K reads/month)
+- **Cloud Run Jobs (Checker)**: ~$0.70 (14,400 executions/month @ ~10s each)
+- **Cloud Storage (Cache)**: ~$0.02 (1KB file, 100K reads/month)
 - **Cloud Storage (git-annex)**: ~$0 (1.1GB, within 5GB free tier)
 - **Cloud Scheduler**: $0.10 (1 job)
-- **Total**: ~$0.54/month
+- **Cloud Monitoring**: $0 (within free tier limits)
+- **Total**: ~$0.82/month
 
 ### Scaling Projections
 

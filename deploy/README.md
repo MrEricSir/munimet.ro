@@ -30,7 +30,7 @@ Access: http://localhost:8000
 # First time setup (one-time)
 ./deploy/cloud/setup-infrastructure.sh    # Create GCS bucket, service account, enable APIs
 ./deploy/cloud/deploy-services.sh         # Deploy API + checker services
-./deploy/cloud/setup-scheduler.sh         # Configure auto-updates every 5 min
+./deploy/cloud/setup-scheduler.sh         # Configure auto-updates every 3 min
 
 # Verify deployment
 ./deploy/cloud/verify.sh                  # Check all services, logs, permissions
@@ -148,7 +148,7 @@ tail -f artifacts/runtime/cache-writer.log
 ### Architecture
 
 ```
-Cloud Scheduler (every 5 min)
+Cloud Scheduler (every 3 min)
   ↓ triggers (OAuth)
 munimetro-checker (Cloud Run Job)
   ↓ downloads image + predicts status
@@ -220,7 +220,7 @@ This script:
 
 This script:
 1. Creates Cloud Scheduler job
-2. Configures 5-minute interval (`*/5 * * * *`)
+2. Configures 3-minute interval (`*/3 * * * *`)
 3. Sets up OAuth authentication to trigger Cloud Run Job
 4. Runs test execution
 
@@ -402,9 +402,9 @@ gcloud iam service-accounts delete SERVICE_ACCOUNT_EMAIL --quiet
 | Feature | Local | Cloud Run |
 |---------|-------|-----------|
 | Setup time | 2 minutes | 15 minutes (first time) |
-| Cost | Free | ~$0.54/month |
+| Cost | Free | ~$0.82/month |
 | Auto-scaling | No | Yes |
-| Auto-updates | No | Yes (every 5 min) |
+| Auto-updates | No | Yes (every 3 min) |
 | Public URL | No | Yes |
 | Persistence | Local files | Cloud Storage |
 | Ideal for | Development, testing | Production, demos |
