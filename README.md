@@ -10,6 +10,9 @@ This project was "vibe coded" using Anthropic's Claude Code. Runs without requir
 
 ### Prerequisites
 
+**First time setup?** See the comprehensive [Setup Guide (SETUP.md)](SETUP.md) for detailed installation instructions for macOS, Linux, and Windows.
+
+Quick checklist:
 - Python 3.13+
 - Git with git-annex
 - Google Cloud SDK (for cloud deployment only)
@@ -21,12 +24,15 @@ This project was "vibe coded" using Anthropic's Claude Code. Runs without requir
 git clone https://github.com/MrEricSir/munimet.ro.git
 cd munimet.ro
 
-# Initialize git-annex
-git annex init "local-machine"
+# Initialize git-annex with a descriptive name for this computer
+# Replace "your-computer-name" with any name (e.g., "laptop", "work-desktop")
+git annex init "your-computer-name"
 
 # Download pre-trained model (856MB)
 git annex get artifacts/models/v1/
 ```
+
+**Need help with installation?** See [SETUP.md](SETUP.md) for automated setup scripts and platform-specific instructions.
 
 ### Deployment
 
@@ -55,14 +61,12 @@ The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are 
 
 ### For Collaborators with GCS Access
 
-1. Install dependencies:
-   ```bash
-   brew install git-annex rclone git-annex-remote-rclone
-   ```
+1. Follow [SETUP.md](SETUP.md) to install base dependencies (git-annex, rclone, etc.)
 
-2. Initialize git-annex:
+2. Initialize git-annex with a descriptive name for this computer:
    ```bash
-   git annex init "machine-name"
+   # Replace "your-computer-name" with any name (e.g., "laptop", "alice-desktop")
+   git annex init "your-computer-name"
    ```
 
 3. Configure rclone for Google Cloud Storage:
@@ -84,6 +88,8 @@ The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are 
    # Download model files
    git annex get artifacts/models/v1/
    ```
+
+See [GCS_SETUP.md](GCS_SETUP.md) for detailed Google Cloud Storage configuration.
 
 ### For Contributors Without GCS Access
 
@@ -150,6 +156,7 @@ munimet.ro/
 
 ## Documentation
 
+- **[Setup Guide](SETUP.md)** - Comprehensive installation guide for macOS, Linux, and Windows
 - **[Deployment Guide](deploy/README.md)** - Local and cloud deployment instructions
 - **[Training Guide](training/README.md)** - Data collection, labeling, and model training
 - **[API Documentation](api/README.md)** - API endpoints and configuration

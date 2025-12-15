@@ -33,24 +33,21 @@ For detailed setup instructions, see [SETUP.md](../SETUP.md).
 
 ### Using Existing Data (Collaborators)
 
-Download pre-labeled training data via git-annex:
+If you have access to the shared training dataset via Google Cloud Storage:
+
+1. Follow [SETUP.md](../SETUP.md) to install git-annex and dependencies
+2. See [GCS_SETUP.md](../GCS_SETUP.md) for Google Cloud Storage configuration
+3. See [artifacts/README.md](../artifacts/README.md) for detailed git-annex workflows
+
+Quick reference for downloading training data:
 
 ```bash
-# Initialize git-annex
-git annex init "machine-name"
-
-# Enable Google Cloud Storage remote
-git annex enableremote google-cloud
-
-# Download training data
-git annex get artifacts/training_data/images/  # 268MB
-git annex get artifacts/training_data/labels.json  # 570KB
+# Download training data (270MB)
+git annex get artifacts/training_data/
 
 # Unlock labels file for editing
 git annex unlock artifacts/training_data/labels.json
 ```
-
-For git-annex configuration, see [GCS_SETUP.md](../GCS_SETUP.md).
 
 ### Collecting New Data
 
@@ -78,16 +75,16 @@ python label_images.py
 
 ### Interface Controls
 
-| Shortcut | Action |
-|----------|--------|
-| `1` | Green status (auto-fills "Normal") |
-| `2` | Yellow status |
-| `3` | Red status (auto-fills "Offline") |
-| `Ctrl+Enter` | Save and advance to next image |
-| `Ctrl+←/→` | Navigate between images |
-| `Ctrl+Shift+←/→` | Jump to next unlabeled image |
-| `Ctrl+G` | Jump to specific index |
-| `Delete` | Delete current image |
+| Shortcut         | Action                             |
+|------------------|------------------------------------|
+| `1`              | Green status (auto-fills "Normal") |
+| `2`              | Yellow status                      |
+| `3`              | Red status (auto-fills "Offline")  |
+| `Ctrl+Enter`     | Save and advance to next image     |
+| `Ctrl+←/→`       | Navigate between images            |
+| `Ctrl+Shift+←/→` | Jump to next unlabeled image       |
+| `Ctrl+G`         | Jump to specific index             |
+| `Delete`         | Delete current image               |
 
 ### Labeling Workflow
 
@@ -101,19 +98,7 @@ python label_images.py
 
 Labels are saved to `artifacts/training_data/labels.json`.
 
-### Version Control
-
-For git-annex tracked labels:
-
-```bash
-# Commit label changes
-git add artifacts/training_data/labels.json
-git commit -m "Update training labels"
-
-# Upload to cloud storage
-git annex copy artifacts/training_data/labels.json --to=google-cloud
-git push
-```
+For git-annex version control workflows (committing and uploading changes), see [artifacts/README.md](../artifacts/README.md).
 
 ## Model Training
 
