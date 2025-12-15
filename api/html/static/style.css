@@ -141,15 +141,18 @@ h2 {
 }
 
 .about-page {
-    font-size: 1.8em;
-    line-height: 150%;
     color: #4a5568;
     max-width: 60%;
     margin: auto;
 }
 
-.sub-credits {
-    font-size: 0.65em;
+.about-page p {
+    font-size: 1.8em;
+    line-height: 150%;
+}
+
+p.sub-credits {
+    font-size: 1.0em;
 }
 
 .spinner {
