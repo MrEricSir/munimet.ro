@@ -69,7 +69,10 @@ source scripts/setup/setup-python-env.sh
 git clone https://github.com/MrEricSir/munimet.ro.git
 cd munimet.ro
 
-# Run automated setup (PowerShell as Administrator recommended)
+# Allow running scripts
+Set-ExecutionPolicy RemoteSigned –Scope Process
+
+# Run automated setup
 .\scripts\setup\setup-windows.ps1
 
 # Setup Python environments
