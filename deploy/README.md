@@ -27,16 +27,15 @@ Access: http://localhost:8000
 ### Cloud Run (Production)
 
 ```bash
-# First time setup (one-time)
+# First time setup (one-time or when changed)
 ./deploy/cloud/setup-infrastructure.sh    # Create GCS bucket, service account, enable APIs
-./deploy/cloud/deploy-services.sh         # Deploy API + checker services
-./deploy/cloud/setup-scheduler.sh         # Configure auto-updates every 3 min
+./deploy/cloud/setup-scheduler.sh         # Schedule status update job
+
+# Deploy
+./deploy/cloud/deploy-services.sh         # Deploy new version (zero downtime)
 
 # Verify deployment
 ./deploy/cloud/verify.sh                  # Check all services, logs, permissions
-
-# Updates (re-run anytime)
-./deploy/cloud/deploy-services.sh         # Deploy new version (zero downtime)
 ```
 
 Access: See service URL in [CONFIGURATION.md](../CONFIGURATION.md)
