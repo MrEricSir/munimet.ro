@@ -148,6 +148,10 @@ h2 {
     margin: auto;
 }
 
+.sub-credits {
+    font-size: 0.65em;
+}
+
 .spinner {
     animation: spin 5s linear infinite;
 }
