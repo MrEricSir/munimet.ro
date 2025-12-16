@@ -299,13 +299,24 @@ scoop install rclone
 
 **Install git-annex-remote-rclone (both methods):**
 
-```powershell
-# Install via pip
-python -m pip install --user git-annex-remote-rclone
 
-# Add Python Scripts to PATH (if not already)
-# The path is typically: %APPDATA%\Python\Python313\Scripts
+```powershell
+# Create ~/bin directory if it doesn't exist
+mkdir -Force "$env:USERPROFILE\bin"
+
+# Download git-annex-remote-rclone script from GitHub
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/DanielDent/git-annex-remote-rclone/master/git-annex-remote-rclone" -OutFile "$env:USERPROFILE\bin\git-annex-remote-rclone"
+
+# Add ~/bin to PATH (if not already)
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath -notlike "*$env:USERPROFILE\bin*") {
+    [Environment]::SetEnvironmentVariable("Path", "$userPath;$env:USERPROFILE\bin", "User")
+}
+
+# Restart your terminal after adding to PATH
 ```
+
+**Note:** The pip package `git-annex-remote-rclone` is not available on Windows. The script must be downloaded directly from GitHub and placed in a directory that is in your PATH.
 
 **Note about tkinter:** tkinter is included with the official Python installer on Windows. If you encounter issues, reinstall Python and ensure the "tcl/tk and IDLE" option is checked during installation.
 

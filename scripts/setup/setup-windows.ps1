@@ -107,16 +107,47 @@ Write-Host ""
 # Install rclone
 Install-Package -packageName "rclone" -wingetId "Rclone.Rclone" -scoopName "rclone"
 
-# Verify rclone has git-annex support
-Write-Host "Verifying rclone git-annex support..." -ForegroundColor White
-$rcloneGitAnnex = rclone gitannex --help 2>&1
-if ($rcloneGitAnnex -match "gitannex") {
-    Write-Host "rclone has built-in git-annex support (no extra package needed)" -ForegroundColor Green
+
+# Install git-annex-remote-rclone (required to connect git-annex to rclone)
+Write-Host "Checking git-annex-remote-rclone installation..." -ForegroundColor White
+$binDir = "$env:USERPROFILE\bin"
+$rcloneRemotePath = "$binDir\git-annex-remote-rclone"
+
+# Check if already installed
+$gitAnnexRemoteRclone = Get-Command git-annex-remote-rclone -ErrorAction SilentlyContinue
+if ($gitAnnexRemoteRclone) {
+    Write-Host "git-annex-remote-rclone is already installed." -ForegroundColor Green
 } else {
-    Write-Host "WARNING: rclone may not have git-annex support" -ForegroundColor Yellow
-    Write-Host "This should work with rclone 1.50+" -ForegroundColor Yellow
+    Write-Host "Installing git-annex-remote-rclone..." -ForegroundColor Yellow
+
+    # Create ~/bin if it doesn't exist
+    if (-not (Test-Path $binDir)) {
+        New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+        Write-Host "Created $binDir directory" -ForegroundColor Gray
+    }
+
+    # Download the script from GitHub
+    $downloadUrl = "https://raw.githubusercontent.com/DanielDent/git-annex-remote-rclone/master/git-annex-remote-rclone"
+    try {
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $rcloneRemotePath -UseBasicParsing
+        Write-Host "Downloaded git-annex-remote-rclone to $rcloneRemotePath" -ForegroundColor Green
+    } catch {
+        Write-Host "ERROR: Failed to download git-annex-remote-rclone" -ForegroundColor Red
+        Write-Host "Please download manually from: $downloadUrl" -ForegroundColor Yellow
+        Write-Host "And save to: $rcloneRemotePath" -ForegroundColor Yellow
+    }
+
+    # Check if ~/bin is in PATH
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -notlike "*$binDir*") {
+        Write-Host "Adding $binDir to user PATH..." -ForegroundColor Yellow
+        [Environment]::SetEnvironmentVariable("Path", "$userPath;$binDir", "User")
+        $env:Path = "$env:Path;$binDir"
+        Write-Host "Added $binDir to PATH. You may need to restart your terminal." -ForegroundColor Cyan
+    }
 }
 Write-Host ""
+
 
 # Note about tkinter
 Write-Host "Note: tkinter should be included with Python on Windows." -ForegroundColor Cyan
