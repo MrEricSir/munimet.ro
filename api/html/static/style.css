@@ -57,15 +57,12 @@ body.status-error {
 }
 
 .container {
-    position: absolute;
-    left: 50%;
-    top: 50%;
     width: 90%;
     max-width: 1200px;
-    height: 85%;
-    max-height: 100vh;
-    max-height: 100dvh;
-    transform: translate(-50%, -50%);
+    min-height: 85vh;
+    min-height: 85dvh;
+    margin: auto;
+    padding: 20px 0;
 }
 
 h1, h2 {
@@ -143,10 +140,10 @@ h2 {
 .about-page {
     color: #4a5568;
     max-width: 60%;
-    margin: auto;
+    margin: 0 auto;
 }
 
-.about-page p {
+.about-page p, .about-page ol {
     font-size: 1.8em;
     line-height: 150%;
 }
@@ -233,7 +230,13 @@ p.sub-credits {
 
     .container {
         width: 95%;
-        height: 90%;
+        min-height: 90vh;
+        min-height: 90dvh;
+        padding: 10px 0;
+    }
+
+    .about-page {
+        max-width: 90%;
     }
 
     .status-icon {
