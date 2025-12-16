@@ -113,11 +113,29 @@ $rcloneRemote = Get-Command git-annex-remote-rclone -ErrorAction SilentlyContinu
 if (-not $rcloneRemote) {
     Write-Host "Installing git-annex-remote-rclone via pip..." -ForegroundColor Yellow
     python -m pip install --user git-annex-remote-rclone
-    # Add Python Scripts to PATH
-    $userScripts = "$env:APPDATA\Python\Python313\Scripts"
-    if ($env:Path -notlike "*$userScripts*") {
-        [Environment]::SetEnvironmentVariable("Path", "$env:Path;$userScripts", "User")
-        $env:Path += ";$userScripts"
+
+    # Get Python Scripts directory dynamically
+    $scriptsDir = python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>$null
+    if ($scriptsDir) {
+        Write-Host "Adding Python Scripts directory to PATH: $scriptsDir" -ForegroundColor Yellow
+        # Add to User PATH permanently
+        $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($currentPath -notlike "*$scriptsDir*") {
+            [Environment]::SetEnvironmentVariable("Path", "$currentPath;$scriptsDir", "User")
+        }
+        # Add to current session
+        if ($env:Path -notlike "*$scriptsDir*") {
+            $env:Path += ";$scriptsDir"
+        }
+
+        # Verify installation
+        $rcloneRemote = Get-Command git-annex-remote-rclone -ErrorAction SilentlyContinue
+        if ($rcloneRemote) {
+            Write-Host "git-annex-remote-rclone installed successfully." -ForegroundColor Green
+        } else {
+            Write-Host "WARNING: git-annex-remote-rclone installed but not found in PATH." -ForegroundColor Yellow
+            Write-Host "You may need to close and reopen PowerShell." -ForegroundColor Yellow
+        }
     }
 } else {
     Write-Host "git-annex-remote-rclone is already installed." -ForegroundColor Green
@@ -132,7 +150,17 @@ Write-Host ""
 # Optional: Install Google Cloud SDK
 $installGcloud = Read-Host "Do you want to install Google Cloud SDK? (required for cloud deployment) [y/N]"
 if ($installGcloud -eq 'Y' -or $installGcloud -eq 'y') {
-    Install-Package -packageName "Google Cloud SDK" -wingetId "Google.CloudSDK" -scoopName "gcloud"
+    if ($pkgManager -eq "scoop") {
+        # gcloud requires the extras bucket
+        Write-Host "Adding scoop extras bucket..." -ForegroundColor Yellow
+        scoop bucket add extras 2>$null | Out-Null
+        Write-Host "Installing Google Cloud SDK..." -ForegroundColor Yellow
+        scoop install gcloud
+    } else {
+        Install-Package -packageName "Google Cloud SDK" -wingetId "Google.CloudSDK" -scoopName "gcloud"
+    }
+    Write-Host ""
+    Write-Host "After installation completes, run: gcloud init" -ForegroundColor Cyan
 }
 
 # Optional: Install Docker Desktop
