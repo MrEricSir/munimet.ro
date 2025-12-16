@@ -107,38 +107,14 @@ Write-Host ""
 # Install rclone
 Install-Package -packageName "rclone" -wingetId "Rclone.Rclone" -scoopName "rclone"
 
-# Install git-annex-remote-rclone via pip
-Write-Host "Checking git-annex-remote-rclone installation..." -ForegroundColor White
-$rcloneRemote = Get-Command git-annex-remote-rclone -ErrorAction SilentlyContinue
-if (-not $rcloneRemote) {
-    Write-Host "Installing git-annex-remote-rclone via pip..." -ForegroundColor Yellow
-    python -m pip install --user git-annex-remote-rclone
-
-    # Get Python Scripts directory dynamically
-    $scriptsDir = python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>$null
-    if ($scriptsDir) {
-        Write-Host "Adding Python Scripts directory to PATH: $scriptsDir" -ForegroundColor Yellow
-        # Add to User PATH permanently
-        $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-        if ($currentPath -notlike "*$scriptsDir*") {
-            [Environment]::SetEnvironmentVariable("Path", "$currentPath;$scriptsDir", "User")
-        }
-        # Add to current session
-        if ($env:Path -notlike "*$scriptsDir*") {
-            $env:Path += ";$scriptsDir"
-        }
-
-        # Verify installation
-        $rcloneRemote = Get-Command git-annex-remote-rclone -ErrorAction SilentlyContinue
-        if ($rcloneRemote) {
-            Write-Host "git-annex-remote-rclone installed successfully." -ForegroundColor Green
-        } else {
-            Write-Host "WARNING: git-annex-remote-rclone installed but not found in PATH." -ForegroundColor Yellow
-            Write-Host "You may need to close and reopen PowerShell." -ForegroundColor Yellow
-        }
-    }
+# Verify rclone has git-annex support
+Write-Host "Verifying rclone git-annex support..." -ForegroundColor White
+$rcloneGitAnnex = rclone gitannex --help 2>&1
+if ($rcloneGitAnnex -match "gitannex") {
+    Write-Host "rclone has built-in git-annex support (no extra package needed)" -ForegroundColor Green
 } else {
-    Write-Host "git-annex-remote-rclone is already installed." -ForegroundColor Green
+    Write-Host "WARNING: rclone may not have git-annex support" -ForegroundColor Yellow
+    Write-Host "This should work with rclone 1.50+" -ForegroundColor Yellow
 }
 Write-Host ""
 

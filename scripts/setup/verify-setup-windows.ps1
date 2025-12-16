@@ -66,25 +66,15 @@ if ($rclone) {
 }
 Write-Host ""
 
-# Check git-annex-remote-rclone
-Write-Host "[5/8] Checking git-annex-remote-rclone..." -ForegroundColor White
-$rcloneRemote = Get-Command git-annex-remote-rclone -ErrorAction SilentlyContinue
-if ($rcloneRemote) {
-    Write-Host "  OK git-annex-remote-rclone installed" -ForegroundColor Green
+# Check rclone git-annex support
+Write-Host "[5/8] Checking rclone git-annex support..." -ForegroundColor White
+$rcloneGitAnnex = rclone gitannex --help 2>&1
+if ($rcloneGitAnnex -match "gitannex") {
+    Write-Host "  OK rclone has built-in git-annex support" -ForegroundColor Green
 } else {
-    Write-Host "  ERROR git-annex-remote-rclone not found in PATH" -ForegroundColor Red
-
-    # Check if it's installed but not in PATH
-    $scriptsDir = python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>$null
-    if (Test-Path "$scriptsDir\git-annex-remote-rclone.exe") {
-        Write-Host "  WARNING Found in Python Scripts but not in PATH" -ForegroundColor Yellow
-        Write-Host "    Add to PATH for current session:" -ForegroundColor Yellow
-        Write-Host "    `$env:Path += ';$scriptsDir'" -ForegroundColor Yellow
-    } else {
-        Write-Host "    Install with: python -m pip install --user git-annex-remote-rclone" -ForegroundColor Yellow
-        Write-Host "    Then add Scripts to PATH" -ForegroundColor Yellow
-    }
-    $allGood = $false
+    Write-Host "  WARNING rclone git-annex subcommand not found" -ForegroundColor Yellow
+    Write-Host "    Update rclone to version 1.50+ for git-annex support" -ForegroundColor Yellow
+    Write-Host "    Run: scoop update rclone" -ForegroundColor Yellow
 }
 Write-Host ""
 
