@@ -7,6 +7,9 @@ This script:
 2. Fine-tunes a pre-trained vision-language model (BLIP-2)
 3. Trains both status classification (green/yellow/red) and description generation
 4. Saves the trained model for inference
+
+Supports both CPU and GPU training with automatic hardware detection.
+GPU training uses mixed precision (AMP) for faster training.
 """
 
 import json
@@ -27,13 +30,48 @@ import numpy as np
 # Configuration
 LABELS_FILE = "../artifacts/training_data/labels.json"
 MODEL_OUTPUT_DIR = "../artifacts/models/v1"
-BATCH_SIZE = 4
 EPOCHS = 10
 LEARNING_RATE = 5e-5
 TRAIN_SPLIT = 0.7   # 70% train
 VAL_SPLIT = 0.15    # 15% validation
 TEST_SPLIT = 0.15   # 15% test (holdout set, never used during training)
 MAX_LENGTH = 128
+
+def get_training_config():
+    """Get optimal training configuration based on available hardware."""
+    config = {
+        'device': torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
+        'use_amp': False,  # Automatic Mixed Precision
+        'batch_size': 4,
+        'num_workers': 0,
+        'pin_memory': False,
+    }
+
+    if torch.cuda.is_available():
+        # GPU detected - enable optimizations
+        config['use_amp'] = True
+        config['batch_size'] = 8  # Larger batch size for GPU
+        config['num_workers'] = 4  # Parallel data loading
+        config['pin_memory'] = True  # Faster CPU->GPU transfer
+
+        # Get GPU info
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
+
+        print(f"GPU detected: {gpu_name} ({gpu_mem:.1f} GB)")
+        print("Enabling GPU optimizations: AMP, larger batch, parallel loading")
+
+        # Adjust batch size based on GPU memory
+        if gpu_mem < 8:
+            config['batch_size'] = 4
+            print(f"  Reduced batch size to {config['batch_size']} for lower VRAM")
+        elif gpu_mem >= 16:
+            config['batch_size'] = 16
+            print(f"  Increased batch size to {config['batch_size']} for high VRAM")
+    else:
+        print("No GPU detected - using CPU (training will be slower)")
+
+    return config
 
 
 class MuniDataset(Dataset):
@@ -203,12 +241,19 @@ def train_model():
     print("=" * 60)
     print()
 
-    # Check for GPU
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Get hardware-optimized configuration
+    config = get_training_config()
+    device = config['device']
+    use_amp = config['use_amp']
+    batch_size = config['batch_size']
+
     print(f"Using device: {device}")
+    print(f"Batch size: {batch_size}")
+    print(f"Mixed precision (AMP): {'enabled' if use_amp else 'disabled'}")
+    print()
 
     # Load data
-    print("\n[1/6] Loading training data...")
+    print("[1/6] Loading training data...")
     all_data = load_training_data()
 
     if len(all_data) == 0:
@@ -249,9 +294,28 @@ def train_model():
     val_dataset = MuniDataset(val_data, processor)
     test_dataset = MuniDataset(test_data, processor)
 
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    # Create data loaders with hardware-optimized settings
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=config['num_workers'],
+        pin_memory=config['pin_memory']
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=config['num_workers'],
+        pin_memory=config['pin_memory']
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=config['num_workers'],
+        pin_memory=config['pin_memory']
+    )
 
     # Setup optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
@@ -264,6 +328,9 @@ def train_model():
 
     # Loss function for classification
     classification_criterion = nn.CrossEntropyLoss(ignore_index=-1)
+
+    # Setup AMP scaler for mixed precision training (GPU only)
+    scaler = torch.amp.GradScaler('cuda') if use_amp else None
 
     # Training loop
     print(f"\n[4/6] Training model for {EPOCHS} epochs...")
@@ -286,26 +353,42 @@ def train_model():
             attention_mask = batch['attention_mask'].to(device)
             status_labels = batch['status_label'].to(device)
 
-            # Forward pass
-            caption_outputs, status_logits = model(
-                pixel_values=pixel_values,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                labels=input_ids
-            )
+            # Forward pass with optional AMP
+            if use_amp:
+                with torch.amp.autocast('cuda'):
+                    caption_outputs, status_logits = model(
+                        pixel_values=pixel_values,
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=input_ids
+                    )
+                    caption_loss = caption_outputs.loss
+                    status_loss = classification_criterion(status_logits, status_labels)
+                    loss = caption_loss + 0.5 * status_loss
 
-            # Calculate losses
-            caption_loss = caption_outputs.loss
-            status_loss = classification_criterion(status_logits, status_labels)
+                # Backward pass with scaler
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                # Standard forward pass (CPU or no AMP)
+                caption_outputs, status_logits = model(
+                    pixel_values=pixel_values,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=input_ids
+                )
+                caption_loss = caption_outputs.loss
+                status_loss = classification_criterion(status_logits, status_labels)
+                loss = caption_loss + 0.5 * status_loss
 
-            # Combined loss (weighted)
-            loss = caption_loss + 0.5 * status_loss
+                # Standard backward pass
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
 
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
             scheduler.step()
 
             # Track losses
@@ -337,15 +420,27 @@ def train_model():
                 attention_mask = batch['attention_mask'].to(device)
                 status_labels = batch['status_label'].to(device)
 
-                caption_outputs, status_logits = model(
-                    pixel_values=pixel_values,
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    labels=input_ids
-                )
+                # Use AMP for validation too (faster inference)
+                if use_amp:
+                    with torch.amp.autocast('cuda'):
+                        caption_outputs, status_logits = model(
+                            pixel_values=pixel_values,
+                            input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            labels=input_ids
+                        )
+                        caption_loss = caption_outputs.loss
+                        status_loss = classification_criterion(status_logits, status_labels)
+                else:
+                    caption_outputs, status_logits = model(
+                        pixel_values=pixel_values,
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=input_ids
+                    )
+                    caption_loss = caption_outputs.loss
+                    status_loss = classification_criterion(status_logits, status_labels)
 
-                caption_loss = caption_outputs.loss
-                status_loss = classification_criterion(status_logits, status_labels)
                 loss = caption_loss + 0.5 * status_loss
 
                 val_loss += loss.item()
@@ -371,7 +466,7 @@ def train_model():
         # Save best model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            print(f"  ✓ New best model! Saving...")
+            print(f"  + New best model! Saving...")
             os.makedirs(MODEL_OUTPUT_DIR, exist_ok=True)
 
             # Save model and processor
@@ -413,15 +508,27 @@ def train_model():
             attention_mask = batch['attention_mask'].to(device)
             status_labels = batch['status_label'].to(device)
 
-            caption_outputs, status_logits = model(
-                pixel_values=pixel_values,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                labels=input_ids
-            )
+            # Use AMP for testing too
+            if use_amp:
+                with torch.amp.autocast('cuda'):
+                    caption_outputs, status_logits = model(
+                        pixel_values=pixel_values,
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=input_ids
+                    )
+                    caption_loss = caption_outputs.loss
+                    status_loss = classification_criterion(status_logits, status_labels)
+            else:
+                caption_outputs, status_logits = model(
+                    pixel_values=pixel_values,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=input_ids
+                )
+                caption_loss = caption_outputs.loss
+                status_loss = classification_criterion(status_logits, status_labels)
 
-            caption_loss = caption_outputs.loss
-            status_loss = classification_criterion(status_logits, status_labels)
             loss = caption_loss + 0.5 * status_loss
 
             test_loss += loss.item()
@@ -439,7 +546,7 @@ def train_model():
 
             # Store results for each sample in batch
             for i in range(len(status_labels)):
-                sample_idx = batch_idx * BATCH_SIZE + i
+                sample_idx = batch_idx * batch_size + i
                 if sample_idx < len(test_data):
                     true_label = status_labels[i].item()
                     pred_label = predictions[i].item()
@@ -511,7 +618,7 @@ def train_model():
     print("LOW CONFIDENCE PREDICTIONS (Top 10 least confident, may need review):")
     print("-" * 80)
     for i, result in enumerate(low_confidence, 1):
-        status_icon = "✓" if result['correct'] else "✗"
+        status_icon = "+" if result['correct'] else "x"
         print(f"\n{i}. {status_icon} {os.path.basename(result['image_path'])}")
         print(f"   True: {result['true_status'].upper()}")
         print(f"   Predicted: {result['predicted_status'].upper()} (confidence: {result['confidence']:.1%})")
@@ -531,7 +638,7 @@ def train_model():
             print(f"   Probabilities: G={result['probabilities']['green']:.2%} "
                   f"Y={result['probabilities']['yellow']:.2%} "
                   f"R={result['probabilities']['red']:.2%}")
-            print(f"   → Review this image - model is very confident it's mislabeled!")
+            print(f"   -> Review this image - model is very confident it's mislabeled!")
         print()
 
     # Save detailed report to file

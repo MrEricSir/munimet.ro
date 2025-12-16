@@ -232,11 +232,12 @@ Users
 ## Requirements
 
 ### Training Environment
-- Python 3.13+
-- PyTorch 2.0+
+- Python 3.12+ (3.13+ recommended)
+- PyTorch 2.0+ (with CUDA support for GPU training)
 - Transformers (HuggingFace)
 - Pillow
 - tkinter (for labeling GUI)
+- Optional: NVIDIA GPU with CUDA for faster training (~10x speedup)
 
 ### API Environment
 - Python 3.13+

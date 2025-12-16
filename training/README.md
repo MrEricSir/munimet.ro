@@ -116,17 +116,24 @@ python train_model.py
 4. Learns natural language description generation
 5. Saves model to `artifacts/models/v1/`
 
-**Duration**: 5-20 minutes depending on dataset size and hardware (CPU/GPU).
+**Duration**: ~20 minutes on GPU, 1-2 hours on CPU (for ~2000 images, 10 epochs).
 
 ### Training Configuration
 
-Edit `train_model.py` to modify training parameters:
+The training script auto-detects hardware and configures optimal settings:
+
+| Setting | CPU | GPU (<8GB) | GPU (8-16GB) | GPU (16GB+) |
+|---------|-----|------------|--------------|-------------|
+| Batch Size | 4 | 4 | 8 | 16 |
+| Mixed Precision | No | Yes | Yes | Yes |
+| Data Workers | 0 | 4 | 4 | 4 |
+
+To manually override, edit `train_model.py`:
 
 ```python
 EPOCHS = 10          # Training iterations (more = better fit, risk of overfitting)
-BATCH_SIZE = 4       # Images per batch (increase with available GPU memory)
 LEARNING_RATE = 5e-5 # Optimizer step size (lower = stable, higher = faster)
-TRAIN_SPLIT = 0.8    # Train/validation split ratio
+TRAIN_SPLIT = 0.7    # Train/validation/test split ratio
 ```
 
 ### Model Artifacts
@@ -188,10 +195,11 @@ sudo yum install python3-tkinter
 
 Solutions:
 
-- Reduce `BATCH_SIZE` in `train_model.py`
+- The script auto-adjusts batch size based on GPU VRAM
+- For manual override, modify `get_training_config()` in `train_model.py`
 - Close resource-intensive applications
 - Use system with more RAM (8GB+ recommended)
-- Enable GPU training if available (CUDA)
+- Enable GPU training if available (CUDA) - uses more efficient memory management
 
 ### Image Download Failures
 
