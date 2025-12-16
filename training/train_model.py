@@ -401,8 +401,12 @@ def train_model():
     correct_status = 0
     total_status = 0
 
+    # Track predictions for outlier detection
+    test_results = []
+
     with torch.no_grad():
         pbar = tqdm(test_loader, desc="Testing")
+        batch_idx = 0
         for batch in pbar:
             pixel_values = batch['pixel_values'].to(device)
             input_ids = batch['input_ids'].to(device)
@@ -424,12 +428,37 @@ def train_model():
             test_caption_loss += caption_loss.item()
             test_status_loss += status_loss.item()
 
-            # Calculate status accuracy
+            # Calculate status accuracy and track per-sample results
             predictions = torch.argmax(status_logits, dim=1)
+            probabilities = torch.softmax(status_logits, dim=1)
+
             mask = status_labels != -1
             if mask.sum() > 0:
                 correct_status += (predictions[mask] == status_labels[mask]).sum().item()
                 total_status += mask.sum().item()
+
+            # Store results for each sample in batch
+            for i in range(len(status_labels)):
+                sample_idx = batch_idx * BATCH_SIZE + i
+                if sample_idx < len(test_data):
+                    true_label = status_labels[i].item()
+                    pred_label = predictions[i].item()
+                    confidence = probabilities[i, pred_label].item()
+
+                    test_results.append({
+                        'image_path': test_data[sample_idx]['image_path'],
+                        'true_status': test_dataset.label_to_status.get(true_label, 'unknown'),
+                        'predicted_status': test_dataset.label_to_status.get(pred_label, 'unknown'),
+                        'confidence': confidence,
+                        'correct': true_label == pred_label,
+                        'probabilities': {
+                            'green': probabilities[i, 0].item(),
+                            'yellow': probabilities[i, 1].item(),
+                            'red': probabilities[i, 2].item()
+                        }
+                    })
+
+            batch_idx += 1
 
     avg_test_loss = test_loss / len(test_loader)
     test_accuracy = correct_status / total_status if total_status > 0 else 0
@@ -439,7 +468,92 @@ def train_model():
     print(f"  Test Status Accuracy: {test_accuracy:.2%}")
     print()
 
-    print("\n[6/6] Training complete!")
+    # Generate outlier report
+    print("\n[6/6] Generating outlier analysis...")
+    print()
+
+    # Find incorrect predictions
+    incorrect = [r for r in test_results if not r['correct']]
+
+    # Find low confidence predictions (even if correct)
+    low_confidence = sorted(test_results, key=lambda x: x['confidence'])[:10]
+
+    # Find high confidence but wrong predictions (possible mislabels)
+    high_conf_wrong = sorted(
+        [r for r in test_results if not r['correct']],
+        key=lambda x: x['confidence'],
+        reverse=True
+    )[:10]
+
+    print("=" * 80)
+    print("OUTLIER ANALYSIS REPORT")
+    print("=" * 80)
+    print()
+
+    print(f"Total test samples: {len(test_results)}")
+    print(f"Incorrect predictions: {len(incorrect)} ({len(incorrect)/len(test_results)*100:.1f}%)")
+    print()
+
+    if incorrect:
+        print("-" * 80)
+        print("MISCLASSIFIED IMAGES (All incorrect predictions):")
+        print("-" * 80)
+        for i, result in enumerate(incorrect, 1):
+            print(f"\n{i}. {os.path.basename(result['image_path'])}")
+            print(f"   True: {result['true_status'].upper()}")
+            print(f"   Predicted: {result['predicted_status'].upper()} (confidence: {result['confidence']:.1%})")
+            print(f"   Probabilities: G={result['probabilities']['green']:.2%} "
+                  f"Y={result['probabilities']['yellow']:.2%} "
+                  f"R={result['probabilities']['red']:.2%}")
+        print()
+
+    print("-" * 80)
+    print("LOW CONFIDENCE PREDICTIONS (Top 10 least confident, may need review):")
+    print("-" * 80)
+    for i, result in enumerate(low_confidence, 1):
+        status_icon = "✓" if result['correct'] else "✗"
+        print(f"\n{i}. {status_icon} {os.path.basename(result['image_path'])}")
+        print(f"   True: {result['true_status'].upper()}")
+        print(f"   Predicted: {result['predicted_status'].upper()} (confidence: {result['confidence']:.1%})")
+        print(f"   Probabilities: G={result['probabilities']['green']:.2%} "
+              f"Y={result['probabilities']['yellow']:.2%} "
+              f"R={result['probabilities']['red']:.2%}")
+    print()
+
+    if high_conf_wrong:
+        print("-" * 80)
+        print("HIGH CONFIDENCE ERRORS (Possible mislabeled images):")
+        print("-" * 80)
+        for i, result in enumerate(high_conf_wrong, 1):
+            print(f"\n{i}. {os.path.basename(result['image_path'])}")
+            print(f"   Labeled as: {result['true_status'].upper()}")
+            print(f"   Model thinks: {result['predicted_status'].upper()} (confidence: {result['confidence']:.1%})")
+            print(f"   Probabilities: G={result['probabilities']['green']:.2%} "
+                  f"Y={result['probabilities']['yellow']:.2%} "
+                  f"R={result['probabilities']['red']:.2%}")
+            print(f"   → Review this image - model is very confident it's mislabeled!")
+        print()
+
+    # Save detailed report to file
+    report_path = os.path.join(MODEL_OUTPUT_DIR, 'outlier_report.json')
+    with open(report_path, 'w') as f:
+        json.dump({
+            'summary': {
+                'total_samples': len(test_results),
+                'incorrect': len(incorrect),
+                'accuracy': test_accuracy
+            },
+            'misclassified': incorrect,
+            'low_confidence': low_confidence,
+            'high_confidence_errors': high_conf_wrong
+        }, f, indent=2)
+
+    print("=" * 80)
+    print(f"Detailed outlier report saved to: {report_path}")
+    print("=" * 80)
+    print()
+
+    print("\nTraining complete!")
     print(f"Model saved to: {MODEL_OUTPUT_DIR}")
     print(f"Best validation loss: {best_val_loss:.4f}")
     print(f"Final test accuracy: {test_accuracy:.2%}")
