@@ -191,5 +191,11 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "1. Close and reopen PowerShell/Terminal to refresh environment variables" -ForegroundColor White
 Write-Host "2. Run: .\scripts\setup\setup-python-env.ps1" -ForegroundColor White
-Write-Host "3. Follow the setup guide in SETUP.md for project configuration" -ForegroundColor White
+Write-Host "3. Verify setup: .\scripts\setup\verify-setup-windows.ps1" -ForegroundColor White
+Write-Host "4. Follow SETUP.md for git-annex and cloud storage configuration" -ForegroundColor White
+Write-Host ""
+Write-Host "For collaborators downloading training data:" -ForegroundColor Cyan
+Write-Host "  - Configure rclone: rclone config create munimetro-gcs gcs" -ForegroundColor White
+Write-Host "  - Enable git-annex remote: git annex enableremote google-cloud" -ForegroundColor White
+Write-Host "  - Download files: git annex get artifacts/models/v1/" -ForegroundColor White
 Write-Host ""
