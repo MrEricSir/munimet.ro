@@ -83,31 +83,6 @@ else
     echo -e "${GREEN}git-annex is already installed.${NC}"
 fi
 
-# Install rclone
-echo ""
-echo "Checking rclone installation..."
-if ! command -v rclone &> /dev/null; then
-    echo -e "${YELLOW}Installing rclone...${NC}"
-    # Download and install rclone script
-    curl https://rclone.org/install.sh | sudo bash
-else
-    echo -e "${GREEN}rclone is already installed.${NC}"
-fi
-
-# Install git-annex-remote-rclone
-echo ""
-echo "Checking git-annex-remote-rclone installation..."
-if ! command -v git-annex-remote-rclone &> /dev/null; then
-    echo -e "${YELLOW}Installing git-annex-remote-rclone...${NC}"
-    # Install via pip as it may not be in package repos
-    python3 -m pip install --user git-annex-remote-rclone
-    # Add to PATH if not already there
-    export PATH="$HOME/.local/bin:$PATH"
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-else
-    echo -e "${GREEN}git-annex-remote-rclone is already installed.${NC}"
-fi
-
 # Install tkinter for labeling GUI
 echo ""
 echo "Checking tkinter installation..."

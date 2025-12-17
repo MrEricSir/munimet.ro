@@ -27,10 +27,8 @@ Before starting, you'll need to install these base dependencies:
 | **Python 3.13+** | Runtime for all Python scripts | All workflows |
 | **Git** | Version control | All workflows |
 | **git-annex** | Large file management (training data & models) | Data access, training |
-| **rclone** | Cloud storage backend for git-annex | Data access, training |
-| **git-annex-remote-rclone** | Connects git-annex to rclone | Data access, training |
 | **tkinter** | GUI framework for image labeling | Training only |
-| **Google Cloud SDK** | Cloud deployment tools | Cloud deployment only |
+| **Google Cloud SDK** | Cloud deployment and S3 API access | Cloud deployment, collaborators |
 | **Docker** | Containerization | Local/cloud deployment |
 
 ### Quick Start (Automated Installation)
@@ -112,12 +110,6 @@ brew install git
 # Install git-annex (large file management)
 brew install git-annex
 
-# Install rclone (cloud storage backend)
-brew install rclone
-
-# Install git-annex-remote-rclone (connects git-annex to rclone)
-brew install git-annex-remote-rclone
-
 # Install tkinter (for labeling GUI)
 brew install python-tk@3.13
 ```
@@ -156,16 +148,6 @@ sudo apt-get install -y build-essential
 
 # Install tkinter (for labeling GUI)
 sudo apt-get install -y python3-tk
-
-# Install rclone
-curl https://rclone.org/install.sh | sudo bash
-
-# Install git-annex-remote-rclone via pip
-python3 -m pip install --user git-annex-remote-rclone
-
-# Add pip user binaries to PATH
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
 ```
 
 #### RHEL/CentOS/Fedora
@@ -194,16 +176,6 @@ sudo yum install -y gcc gcc-c++ make
 
 # Install tkinter
 sudo yum install -y python3-tkinter
-
-# Install rclone
-curl https://rclone.org/install.sh | sudo bash
-
-# Install git-annex-remote-rclone via pip
-python3 -m pip install --user git-annex-remote-rclone
-
-# Add pip user binaries to PATH
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
 ```
 
 #### Optional: Install Development Tools
@@ -274,9 +246,6 @@ winget install --id Git.Git -e
 # Install Python 3.13
 winget install --id Python.Python.3.13 -e
 
-# Install rclone
-winget install --id Rclone.Rclone -e
-
 # Note: git-annex must be installed manually or via scoop
 # Visit: https://git-annex.branchable.com/install/Windows/
 ```
@@ -292,31 +261,7 @@ scoop install python
 
 # Install git-annex
 scoop install git-annex
-
-# Install rclone
-scoop install rclone
 ```
-
-**Install git-annex-remote-rclone (both methods):**
-
-
-```powershell
-# Create ~/bin directory if it doesn't exist
-mkdir -Force "$env:USERPROFILE\bin"
-
-# Download git-annex-remote-rclone script from GitHub
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/DanielDent/git-annex-remote-rclone/master/git-annex-remote-rclone" -OutFile "$env:USERPROFILE\bin\git-annex-remote-rclone"
-
-# Add ~/bin to PATH (if not already)
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($userPath -notlike "*$env:USERPROFILE\bin*") {
-    [Environment]::SetEnvironmentVariable("Path", "$userPath;$env:USERPROFILE\bin", "User")
-}
-
-# Restart your terminal after adding to PATH
-```
-
-**Note:** The pip package `git-annex-remote-rclone` is not available on Windows. The script must be downloaded directly from GitHub and placed in a directory that is in your PATH.
 
 **Note about tkinter:** tkinter is included with the official Python installer on Windows. If you encounter issues, reinstall Python and ensure the "tcl/tk and IDLE" option is checked during installation.
 
@@ -481,7 +426,7 @@ If you're a collaborator with access to the private training data, see [GCS_SETU
 
 If you have access to the shared Google Cloud Storage bucket:
 
-1. Follow [GCS_SETUP.md](GCS_SETUP.md) to configure rclone and enable the remote
+1. Follow [GCS_SETUP.md](GCS_SETUP.md) to configure S3 credentials and enable the remote
 2. Download training data:
    ```bash
    # Download all training data (270MB)
@@ -526,9 +471,6 @@ git --version
 
 # Check git-annex
 git annex version
-
-# Check rclone
-rclone version
 
 # Check git-annex initialization
 git annex info
@@ -619,7 +561,7 @@ git annex info
 # Check remote configuration
 git annex info google-cloud
 
-# For collaborators: Ensure rclone is configured
+# For collaborators: Ensure S3 credentials are configured
 # See GCS_SETUP.md for configuration instructions
 
 # Re-enable remote (if previously configured)

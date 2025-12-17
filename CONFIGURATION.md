@@ -75,13 +75,14 @@ This document records the actual configuration values used for this deployment.
 ### Remote Configuration
 
 - **Remote Name**: `google-cloud`
-- **Type**: external (rclone)
-- **rclone Remote**: `munimetro-gcs`
-- **Target Bucket**: `munimetro-annex`
-- **Prefix**: `munimetro-annex`
+- **Type**: S3 (built-in git-annex S3 special remote)
+- **Host**: `storage.googleapis.com`
+- **Bucket**: `munimetro-annex`
+- **Port**: 443
+- **Protocol**: HTTPS
+- **Request Style**: path
 - **Chunk Size**: 50MiB
 - **Encryption**: none
-- **Layout**: lower
 
 ### Repository
 

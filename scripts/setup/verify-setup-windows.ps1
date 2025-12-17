@@ -9,7 +9,7 @@ Write-Host ""
 $allGood = $true
 
 # Check Git
-Write-Host "[1/8] Checking Git..." -ForegroundColor White
+Write-Host "[1/6] Checking Git..." -ForegroundColor White
 $git = Get-Command git -ErrorAction SilentlyContinue
 if ($git) {
     $gitVersion = git --version
@@ -21,7 +21,7 @@ if ($git) {
 Write-Host ""
 
 # Check Python
-Write-Host "[2/8] Checking Python..." -ForegroundColor White
+Write-Host "[2/6] Checking Python..." -ForegroundColor White
 $python = Get-Command python -ErrorAction SilentlyContinue
 if ($python) {
     $pythonVersion = python --version
@@ -33,7 +33,7 @@ if ($python) {
 Write-Host ""
 
 # Check git-annex
-Write-Host "[3/8] Checking git-annex..." -ForegroundColor White
+Write-Host "[3/6] Checking git-annex..." -ForegroundColor White
 $gitAnnex = Get-Command git-annex -ErrorAction SilentlyContinue
 if ($gitAnnex) {
     $annexVersion = git-annex version --raw 2>$null
@@ -45,41 +45,8 @@ if ($gitAnnex) {
 }
 Write-Host ""
 
-# Check rclone
-Write-Host "[4/8] Checking rclone..." -ForegroundColor White
-$rclone = Get-Command rclone -ErrorAction SilentlyContinue
-if ($rclone) {
-    $rcloneVersion = rclone version 2>&1 | Select-String "^rclone" | Select-Object -First 1
-    Write-Host "  OK rclone installed: $rcloneVersion" -ForegroundColor Green
-
-    # Check for rclone remotes
-    $remotes = rclone listremotes 2>$null
-    if ($remotes -match "munimetro-gcs:") {
-        Write-Host "  OK rclone remote configured: munimetro-gcs" -ForegroundColor Green
-    } else {
-        Write-Host "  WARNING rclone remote not configured" -ForegroundColor Yellow
-        Write-Host "    Run: rclone config create munimetro-gcs gcs" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "  ERROR rclone not found" -ForegroundColor Red
-    $allGood = $false
-}
-Write-Host ""
-
-# Check rclone git-annex support
-Write-Host "[5/8] Checking rclone git-annex support..." -ForegroundColor White
-$rcloneGitAnnex = rclone gitannex --help 2>&1
-if ($rcloneGitAnnex -match "gitannex") {
-    Write-Host "  OK rclone has built-in git-annex support" -ForegroundColor Green
-} else {
-    Write-Host "  WARNING rclone git-annex subcommand not found" -ForegroundColor Yellow
-    Write-Host "    Update rclone to version 1.50+ for git-annex support" -ForegroundColor Yellow
-    Write-Host "    Run: scoop update rclone" -ForegroundColor Yellow
-}
-Write-Host ""
-
 # Check gcloud (optional)
-Write-Host "[6/8] Checking Google Cloud SDK (optional)..." -ForegroundColor White
+Write-Host "[4/8] Checking Google Cloud SDK (optional)..." -ForegroundColor White
 $gcloud = Get-Command gcloud -ErrorAction SilentlyContinue
 if ($gcloud) {
     $gcloudInfo = gcloud version 2>$null | Select-String "Google Cloud SDK" | Select-Object -First 1
@@ -100,7 +67,7 @@ if ($gcloud) {
 Write-Host ""
 
 # Check git-annex repository
-Write-Host "[7/8] Checking git-annex repository..." -ForegroundColor White
+Write-Host "[5/6] Checking git-annex repository..." -ForegroundColor White
 if (Test-Path ".git") {
     $annexInit = git config --local annex.uuid 2>$null
     if ($annexInit) {
@@ -125,7 +92,7 @@ if (Test-Path ".git") {
 Write-Host ""
 
 # Check Python virtual environment
-Write-Host "[8/8] Checking Python virtual environment..." -ForegroundColor White
+Write-Host "[6/6] Checking Python virtual environment..." -ForegroundColor White
 if (Test-Path "training/venv") {
     Write-Host "  OK Training virtual environment exists" -ForegroundColor Green
 } else {
@@ -153,8 +120,8 @@ Write-Host ""
 
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "1. Run setup scripts if needed: .\scripts\setup\setup-python-env.ps1" -ForegroundColor White
-Write-Host "2. Configure rclone: rclone config create munimetro-gcs gcs" -ForegroundColor White
-Write-Host "3. Initialize gcloud: gcloud init" -ForegroundColor White
+Write-Host "2. Initialize git-annex: git annex init your-computer-name" -ForegroundColor White
+Write-Host "3. For collaborators: Set S3 credentials (see GCS_SETUP.md)" -ForegroundColor White
 Write-Host "4. Enable git-annex remote: git annex enableremote google-cloud" -ForegroundColor White
 Write-Host "5. Download model files: git annex get artifacts/models/v1/" -ForegroundColor White
 Write-Host ""

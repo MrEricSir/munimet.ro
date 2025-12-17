@@ -55,26 +55,6 @@ else
     echo -e "${GREEN}git-annex is already installed.${NC}"
 fi
 
-# Install rclone (for Google Cloud Storage backend)
-echo ""
-echo "Checking rclone installation..."
-if ! command -v rclone &> /dev/null; then
-    echo -e "${YELLOW}Installing rclone...${NC}"
-    brew install rclone
-else
-    echo -e "${GREEN}rclone is already installed.${NC}"
-fi
-
-# Install git-annex-remote-rclone
-echo ""
-echo "Checking git-annex-remote-rclone installation..."
-if ! command -v git-annex-remote-rclone &> /dev/null; then
-    echo -e "${YELLOW}Installing git-annex-remote-rclone...${NC}"
-    brew install git-annex-remote-rclone
-else
-    echo -e "${GREEN}git-annex-remote-rclone is already installed.${NC}"
-fi
-
 # Install tkinter for labeling GUI
 echo ""
 echo "Checking tkinter installation..."
