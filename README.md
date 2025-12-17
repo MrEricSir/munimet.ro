@@ -24,13 +24,16 @@ Quick checklist:
 git clone https://github.com/MrEricSir/munimet.ro.git
 cd munimet.ro
 
-# Initialize git-annex with a descriptive name for this computer
-# Replace "your-computer-name" with any name (e.g., "laptop", "work-desktop")
-git annex init "your-computer-name"
-
-# Download pre-trained model (856MB)
-git annex get artifacts/models/v1/
+# Run automated git-annex setup (initializes, downloads model)
+./scripts/setup/setup-git-annex.sh      # macOS/Linux
+# or
+.\scripts\setup\setup-git-annex.ps1     # Windows
 ```
+
+The setup script will:
+- Initialize git-annex with a computer name you provide
+- Enable automatic annexing for large files
+- Download the pre-trained model (856MB)
 
 **Need help with installation?** See [SETUP.md](SETUP.md) for automated setup scripts and platform-specific instructions.
 
@@ -63,18 +66,15 @@ The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are 
 
 1. Follow [SETUP.md](SETUP.md) to install base dependencies (git-annex, gcloud, etc.)
 
-2. Initialize git-annex and configure automatic annexing:
+2. Run automated setup script:
    ```bash
-   # Replace "your-computer-name" with any name (e.g., "laptop", "alice-desktop")
-   git annex init "your-computer-name"
-
-   # Configure automatic annexing for large files
+   # This initializes git-annex, enables automatic annexing, and downloads the model
    ./scripts/setup/setup-git-annex.sh   # macOS/Linux
    # or
    .\scripts\setup\setup-git-annex.ps1  # Windows
    ```
 
-3. Configure S3 credentials for Google Cloud Storage:
+3. Configure S3 credentials for private training data access:
    ```bash
    # Set up HMAC credentials (ask project maintainer for keys)
    export AWS_ACCESS_KEY_ID="<your-access-id>"
@@ -82,15 +82,9 @@ The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are 
 
    # Enable the remote
    git annex enableremote google-cloud
-   ```
 
-4. Download files:
-   ```bash
-   # Download all training data
-   git annex get artifacts/training_data/images/
-
-   # Download model files
-   git annex get artifacts/models/v1/
+   # Download all training data (270MB)
+   git annex get artifacts/training_data/
    ```
 
 See [GCS_SETUP.md](GCS_SETUP.md) for detailed Google Cloud Storage configuration.

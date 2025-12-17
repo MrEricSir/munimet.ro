@@ -49,7 +49,7 @@ git annex config --set annex.largefiles 'largerthan=100kb or mimetype=image/*'
 echo "✓ Files >100KB or images will be automatically annexed"
 echo ""
 
-echo "[3/3] Verifying .gitattributes..."
+echo "[3/5] Verifying .gitattributes..."
 if [ -f .gitattributes ]; then
     echo "✓ .gitattributes exists"
 else
@@ -58,16 +58,53 @@ else
 fi
 echo ""
 
+echo "[4/5] Enabling google-cloud remote..."
+# Check if remote exists
+if git annex info google-cloud >/dev/null 2>&1; then
+    echo "✓ google-cloud remote is already available"
+else
+    echo "Attempting to enable google-cloud remote..."
+    if git annex enableremote google-cloud 2>/dev/null; then
+        echo "✓ google-cloud remote enabled successfully"
+    else
+        echo "⚠ Could not enable remote (this is normal for first-time setup)"
+        echo "  The remote will be configured automatically when you clone"
+    fi
+fi
+echo ""
+
+echo "[5/5] Downloading pre-trained model..."
+# Check if model files are already present
+if [ -e "artifacts/models/v1/model.safetensors" ] && [ ! -L "artifacts/models/v1/model.safetensors" ]; then
+    echo "✓ Model files already downloaded"
+elif git annex whereis artifacts/models/v1/ >/dev/null 2>&1; then
+    echo "Downloading model files (856MB, this may take a few minutes)..."
+    if git annex get artifacts/models/v1/ --jobs=4; then
+        echo "✓ Model files downloaded successfully"
+    else
+        echo "⚠ Could not download model files"
+        echo "  You can download them later with: git annex get artifacts/models/v1/"
+    fi
+else
+    echo "⚠ Model files not available yet (repository may need to be pushed)"
+    echo "  You can download them later with: git annex get artifacts/models/v1/"
+fi
+echo ""
+
 echo "=========================================="
 echo "✓ Git-annex configuration complete!"
 echo "=========================================="
 echo ""
-echo "Automatic annexing is now enabled. When you run:"
-echo "  git add artifacts/training_data/images/*.jpg"
+echo "Summary:"
+echo "• Automatic annexing enabled for files >100KB or images"
+echo "• Large files will be symlinked instead of added to git"
+echo "• Pre-commit hook prevents accidental large file commits"
+echo "• Model files downloaded (if available)"
 echo ""
-echo "Large files will be automatically annexed (symlinked)"
-echo "instead of being added to regular git."
+echo "For collaborators with training data access:"
+echo "  1. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+echo "  2. Run: git annex enableremote google-cloud"
+echo "  3. Download training data: git annex get artifacts/training_data/"
 echo ""
-echo "The pre-commit hook will prevent accidental commits"
-echo "of large files that weren't properly annexed."
+echo "See GCS_SETUP.md for detailed instructions."
 echo ""

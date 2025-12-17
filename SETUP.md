@@ -387,34 +387,44 @@ Git-annex manages large files (training data and models) separately from the mai
 - **Actual Files**: Large files are stored in `.git/annex/objects/` and synced to Google Cloud Storage
 - **Selective Download**: You only download the files you need
 
-### Initialize git-annex
+### Automated Setup (Recommended)
 
-After cloning the repository, initialize git-annex:
+Use the automated setup script to initialize git-annex, enable automatic annexing, and download the model:
 
+**macOS/Linux:**
 ```bash
 cd /path/to/munimet.ro
-
-# Initialize git-annex with a descriptive name for this computer
-# The name is user-defined and can be anything (e.g., "laptop", "work-machine", "john-desktop")
-git annex init "your-computer-name"
+./scripts/setup/setup-git-annex.sh
 ```
 
-**Important:** Replace `"your-computer-name"` with a descriptive name for this machine. This helps identify where files are stored when working across multiple computers. Examples:
-- `"macbook-pro"`
-- `"home-desktop"`
-- `"office-laptop"`
-- `"alice-workstation"`
+**Windows:**
+```powershell
+cd \path\to\munimet.ro
+.\scripts\setup\setup-git-annex.ps1
+```
 
-### Download Pre-trained Model (Minimum Setup)
+The script will:
+1. Prompt for a descriptive computer name (e.g., "laptop", "work-machine", "alice-desktop")
+2. Initialize git-annex with that name
+3. Configure automatic annexing for files >100KB or images
+4. Enable the google-cloud remote (if available)
+5. Download the pre-trained model (856MB, from public Google Cloud Storage)
 
-For basic usage (API deployment), you only need the pre-trained model:
+### Manual Setup (Alternative)
+
+If you prefer manual configuration:
 
 ```bash
-# Download model files (856MB)
+# 1. Initialize git-annex
+git annex init "your-computer-name"
+
+# 2. Enable automatic annexing
+git config filter.annex.process 'git-annex filter-process'
+git annex config --set annex.largefiles 'largerthan=100kb or mimetype=image/*'
+
+# 3. Download model files
 git annex get artifacts/models/v1/
 ```
-
-The model will download from the public Google Cloud Storage bucket. No authentication required.
 
 ### For Collaborators: Access Full Training Data
 

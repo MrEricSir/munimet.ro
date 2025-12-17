@@ -46,7 +46,7 @@ git annex config --set annex.largefiles 'largerthan=100kb or mimetype=image/*'
 Write-Host "OK Files >100KB or images will be automatically annexed" -ForegroundColor Green
 Write-Host ""
 
-Write-Host "[3/3] Verifying .gitattributes..." -ForegroundColor White
+Write-Host "[3/5] Verifying .gitattributes..." -ForegroundColor White
 if (Test-Path .gitattributes) {
     Write-Host "OK .gitattributes exists" -ForegroundColor Green
 } else {
@@ -55,16 +55,60 @@ if (Test-Path .gitattributes) {
 }
 Write-Host ""
 
+Write-Host "[4/5] Enabling google-cloud remote..." -ForegroundColor White
+# Check if remote exists
+$remoteCheck = git annex info google-cloud 2>$null
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "OK google-cloud remote is already available" -ForegroundColor Green
+} else {
+    Write-Host "Attempting to enable google-cloud remote..." -ForegroundColor White
+    git annex enableremote google-cloud 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "OK google-cloud remote enabled successfully" -ForegroundColor Green
+    } else {
+        Write-Host "WARNING Could not enable remote (this is normal for first-time setup)" -ForegroundColor Yellow
+        Write-Host "  The remote will be configured automatically when you clone" -ForegroundColor Yellow
+    }
+}
+Write-Host ""
+
+Write-Host "[5/5] Downloading pre-trained model..." -ForegroundColor White
+# Check if model files are already present
+$modelFile = "artifacts/models/v1/model.safetensors"
+if ((Test-Path $modelFile) -and (-not (Get-Item $modelFile).LinkType)) {
+    Write-Host "OK Model files already downloaded" -ForegroundColor Green
+} else {
+    $whereisCheck = git annex whereis artifacts/models/v1/ 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Downloading model files (856MB, this may take a few minutes)..." -ForegroundColor White
+        git annex get artifacts/models/v1/ --jobs=4 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "OK Model files downloaded successfully" -ForegroundColor Green
+        } else {
+            Write-Host "WARNING Could not download model files" -ForegroundColor Yellow
+            Write-Host "  You can download them later with: git annex get artifacts/models/v1/" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "WARNING Model files not available yet (repository may need to be pushed)" -ForegroundColor Yellow
+        Write-Host "  You can download them later with: git annex get artifacts/models/v1/" -ForegroundColor Yellow
+    }
+}
+Write-Host ""
+
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host "OK Git-annex configuration complete!" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Automatic annexing is now enabled. When you run:" -ForegroundColor White
-Write-Host "  git add artifacts/training_data/images/*.jpg" -ForegroundColor Cyan
+Write-Host "Summary:" -ForegroundColor White
+Write-Host "  Automatic annexing enabled for files >100KB or images" -ForegroundColor White
+Write-Host "  Large files will be symlinked instead of added to git" -ForegroundColor White
+Write-Host "  Pre-commit hook prevents accidental large file commits" -ForegroundColor White
+Write-Host "  Model files downloaded (if available)" -ForegroundColor White
 Write-Host ""
-Write-Host "Large files will be automatically annexed (symlinked)" -ForegroundColor White
-Write-Host "instead of being added to regular git." -ForegroundColor White
+Write-Host "For collaborators with training data access:" -ForegroundColor Cyan
+Write-Host "  1. Set `$env:AWS_ACCESS_KEY_ID and `$env:AWS_SECRET_ACCESS_KEY" -ForegroundColor White
+Write-Host "  2. Run: git annex enableremote google-cloud" -ForegroundColor White
+Write-Host "  3. Download training data: git annex get artifacts/training_data/" -ForegroundColor White
 Write-Host ""
-Write-Host "The pre-commit hook will prevent accidental commits" -ForegroundColor White
-Write-Host "of large files that weren't properly annexed." -ForegroundColor White
+Write-Host "See GCS_SETUP.md for detailed instructions." -ForegroundColor Cyan
 Write-Host ""

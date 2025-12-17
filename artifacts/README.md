@@ -70,37 +70,27 @@ Quick checklist:
 - git-annex
 - Google Cloud SDK (gcloud) - for collaborators only
 
-### Step 2: Initialize git-annex
+### Step 2: Run Automated Setup Script
 
-After cloning the repository, initialize git-annex:
+Use the automated setup script to initialize git-annex and download the model:
 
 ```bash
 cd /path/to/munimet.ro
 
-# Initialize git-annex with a descriptive name for this computer
-# Replace "your-computer-name" with any name (e.g., "laptop", "work-desktop", "alice-machine")
-# This name helps identify where files are stored when using multiple computers
-git annex init "your-computer-name"
+# Run automated setup
+./scripts/setup/setup-git-annex.sh      # macOS/Linux
+# or
+.\scripts\setup\setup-git-annex.ps1     # Windows
 ```
 
-**Important:** The name is user-defined. Choose something descriptive for this machine. Examples:
-- `"macbook-pro"`
-- `"home-desktop"`
-- `"work-laptop"`
-- `"alice-workstation"`
+The script will:
+1. Prompt for a descriptive computer name (e.g., "laptop", "alice-desktop", "work-machine")
+2. Initialize git-annex with that name
+3. Configure automatic annexing for large files
+4. Enable the google-cloud remote (if available)
+5. Download the pre-trained model (856MB) - no authentication required
 
-### Step 3: Download Files (Public Access - No Authentication)
-
-For basic usage (running the API), download the pre-trained model:
-
-```bash
-# Download model files (856MB) - no authentication required
-git annex get artifacts/models/v1/
-```
-
-The model is publicly accessible and will download automatically.
-
-### Step 4: For Collaborators with Private Data Access
+### Step 3: For Collaborators with Private Data Access
 
 If you're a collaborator with access to the private training dataset:
 
@@ -310,16 +300,13 @@ New to git-annex? Follow these steps:
 git clone https://github.com/MrEricSir/munimet.ro.git
 cd munimet.ro
 
-# 2. Initialize git-annex (replace "laptop" with your machine name)
-git annex init "laptop"
+# 2. Run automated setup script
+./scripts/setup/setup-git-annex.sh   # Initializes, downloads model
 
-# 3. Download pre-trained model (856MB, public access)
-git annex get artifacts/models/v1/
-
-# 4. Verify download
+# 3. Verify setup
 git annex whereis artifacts/models/v1/
 
-# 5. (Optional) For collaborators: configure GCS and download training data
+# 4. (Optional) For collaborators: configure GCS and download training data
 # See GCS_SETUP.md for configuration instructions
 git annex enableremote google-cloud
 git annex get artifacts/training_data/
