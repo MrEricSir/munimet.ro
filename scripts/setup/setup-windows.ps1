@@ -104,51 +104,6 @@ if (-not $gitAnnexInstalled) {
 }
 Write-Host ""
 
-# Install rclone
-Install-Package -packageName "rclone" -wingetId "Rclone.Rclone" -scoopName "rclone"
-
-
-# Install git-annex-remote-rclone (required to connect git-annex to rclone)
-Write-Host "Checking git-annex-remote-rclone installation..." -ForegroundColor White
-$binDir = "$env:USERPROFILE\bin"
-$rcloneRemotePath = "$binDir\git-annex-remote-rclone"
-
-# Check if already installed
-$gitAnnexRemoteRclone = Get-Command git-annex-remote-rclone -ErrorAction SilentlyContinue
-if ($gitAnnexRemoteRclone) {
-    Write-Host "git-annex-remote-rclone is already installed." -ForegroundColor Green
-} else {
-    Write-Host "Installing git-annex-remote-rclone..." -ForegroundColor Yellow
-
-    # Create ~/bin if it doesn't exist
-    if (-not (Test-Path $binDir)) {
-        New-Item -ItemType Directory -Path $binDir -Force | Out-Null
-        Write-Host "Created $binDir directory" -ForegroundColor Gray
-    }
-
-    # Download the script from GitHub
-    $downloadUrl = "https://raw.githubusercontent.com/DanielDent/git-annex-remote-rclone/master/git-annex-remote-rclone"
-    try {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $rcloneRemotePath -UseBasicParsing
-        Write-Host "Downloaded git-annex-remote-rclone to $rcloneRemotePath" -ForegroundColor Green
-    } catch {
-        Write-Host "ERROR: Failed to download git-annex-remote-rclone" -ForegroundColor Red
-        Write-Host "Please download manually from: $downloadUrl" -ForegroundColor Yellow
-        Write-Host "And save to: $rcloneRemotePath" -ForegroundColor Yellow
-    }
-
-    # Check if ~/bin is in PATH
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($userPath -notlike "*$binDir*") {
-        Write-Host "Adding $binDir to user PATH..." -ForegroundColor Yellow
-        [Environment]::SetEnvironmentVariable("Path", "$userPath;$binDir", "User")
-        $env:Path = "$env:Path;$binDir"
-        Write-Host "Added $binDir to PATH. You may need to restart your terminal." -ForegroundColor Cyan
-    }
-}
-Write-Host ""
-
-
 # Note about tkinter
 Write-Host "Note: tkinter should be included with Python on Windows." -ForegroundColor Cyan
 Write-Host "If you encounter issues, reinstall Python with the 'tcl/tk' option enabled." -ForegroundColor Cyan
@@ -202,7 +157,8 @@ Write-Host "3. Verify setup: .\scripts\setup\verify-setup-windows.ps1" -Foregrou
 Write-Host "4. Follow SETUP.md for git-annex and cloud storage configuration" -ForegroundColor White
 Write-Host ""
 Write-Host "For collaborators downloading training data:" -ForegroundColor Cyan
-Write-Host "  - Configure rclone: rclone config create munimetro-gcs gcs" -ForegroundColor White
+Write-Host "  - Set up HMAC credentials (ask project maintainer)" -ForegroundColor White
 Write-Host "  - Enable git-annex remote: git annex enableremote google-cloud" -ForegroundColor White
 Write-Host "  - Download files: git annex get artifacts/models/v1/" -ForegroundColor White
+Write-Host "  - See GCS_SETUP.md for detailed instructions" -ForegroundColor White
 Write-Host ""

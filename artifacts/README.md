@@ -68,8 +68,7 @@ Before using git-annex, install required tools:
 
 Quick checklist:
 - git-annex
-- rclone
-- git-annex-remote-rclone
+- Google Cloud SDK (gcloud) - for collaborators only
 
 ### Step 2: Initialize git-annex
 
@@ -105,21 +104,26 @@ The model is publicly accessible and will download automatically.
 
 If you're a collaborator with access to the private training dataset:
 
-1. **Configure Google Cloud Storage access** - See [GCS_SETUP.md](../GCS_SETUP.md) for rclone configuration
+1. **Configure Google Cloud Storage access** - See [GCS_SETUP.md](../GCS_SETUP.md) for HMAC credentials setup
 
-2. **Enable the remote**:
+2. **Set up credentials and enable the remote**:
    ```bash
+   # Set up HMAC credentials (ask project maintainer for keys)
+   export AWS_ACCESS_KEY_ID="<your-access-id>"
+   export AWS_SECRET_ACCESS_KEY="<your-secret-key>"
+
+   # Enable the remote
    git annex enableremote google-cloud
    ```
 
-3. **Download training data**:
-   ```bash
-   # Download all training data (270MB)
-   git annex get artifacts/training_data/
+**Download training data**:
+```bash
+# Download all training data (270MB)
+git annex get artifacts/training_data/
 
-   # Unlock labels file for editing (needed for labeling workflow)
-   git annex unlock artifacts/training_data/labels.json
-   ```
+# Unlock labels file for editing (needed for labeling workflow)
+git annex unlock artifacts/training_data/labels.json
+```
 
 ### Verification
 
@@ -385,17 +389,22 @@ git annex info | grep -A5 "remotes"
 
 **Solution:**
 ```bash
-# Re-authenticate with Google Cloud
-gcloud auth application-default login
+# Verify HMAC credentials are set
+echo $AWS_ACCESS_KEY_ID
+echo $AWS_SECRET_ACCESS_KEY
 
-# Verify active account
-gcloud auth list
+# Set credentials if missing (ask project maintainer for keys)
+export AWS_ACCESS_KEY_ID="<your-access-id>"
+export AWS_SECRET_ACCESS_KEY="<your-secret-key>"
 
-# Test rclone connectivity
-rclone lsd munimetro-gcs:
+# Re-enable remote
+git annex enableremote google-cloud
 
-# Reconfigure rclone if needed (see GCS_SETUP.md)
-rclone config
+# Test connectivity
+git annex testremote google-cloud
+
+# Verify with gsutil
+gsutil ls gs://munimetro-annex
 ```
 
 ### Transfer Failures
@@ -410,11 +419,14 @@ git annex --debug get artifacts/models/v1/
 # Try with fewer parallel jobs
 git annex get --jobs=1 artifacts/models/v1/
 
-# Test rclone connectivity directly
-rclone lsd munimetro-gcs:
+# Verify credentials are set
+echo $AWS_ACCESS_KEY_ID
 
 # For collaborators: Verify bucket access
 gsutil ls gs://munimetro-annex
+
+# Test S3 connectivity
+git annex testremote google-cloud
 
 # Check network connectivity
 ping google.com
@@ -513,14 +525,17 @@ git annex whereis artifacts/models/v1/model.safetensors
 # Use parallel transfers (4 jobs)
 git annex get --jobs=4 artifacts/training_data/
 
-# Check rclone performance
-rclone ls munimetro-gcs: --transfers 4 --checkers 8
-
 # Test network speed
 speedtest-cli  # Install if needed
 
-# Try different region/network
+# Verify bucket region matches your location
+gsutil ls -L gs://munimetro-annex | grep Location
+
+# Try different network
 # Sometimes switching networks (e.g., WiFi to Ethernet) helps
+
+# For very large files, downloads may be slower on first access
+# Subsequent downloads use chunked resumable transfers
 ```
 
 ### "No space left on device" in .git/annex

@@ -11,17 +11,16 @@ Before starting, ensure you have:
 - Google Cloud account with billing enabled
 - Base dependencies installed (see [SETUP.md](SETUP.md) for platform-specific instructions):
   - `gcloud` CLI (Google Cloud SDK)
-  - `rclone`
-  - `git-annex-remote-rclone`
   - `git-annex`
 - Git-annex initialized repository (`git annex init "your-computer-name"`)
 
-## Advantages of Google Cloud Storage
+## Advantages of S3 Special Remote
 
+- **Built into git-annex**: No external dependencies required
+- **Cross-platform**: Excellent Windows, macOS, and Linux support
+- **Reliable**: Direct integration with git-annex
+- **Simple**: Fewer moving parts than rclone setup
 - **Cost Effective**: Free tier covers 5GB storage
-- **Reliability**: Google's infrastructure
-- **Performance**: High-speed transfers
-- **Flexibility**: Compatible with S3-compatible backends
 
 ## Initial Setup
 
@@ -35,7 +34,7 @@ Follow [SETUP.md](SETUP.md) for platform-specific installation instructions.
 <summary><b>macOS</b></summary>
 
 ```bash
-brew install google-cloud-sdk rclone git-annex-remote-rclone
+brew install google-cloud-sdk git-annex
 ```
 </details>
 
@@ -47,13 +46,7 @@ brew install google-cloud-sdk rclone git-annex-remote-rclone
 echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
 curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
 sudo apt-get update
-sudo apt-get install -y google-cloud-sdk
-
-# rclone
-curl https://rclone.org/install.sh | sudo bash
-
-# git-annex-remote-rclone
-python3 -m pip install --user git-annex-remote-rclone
+sudo apt-get install -y google-cloud-sdk git-annex
 ```
 </details>
 
@@ -63,15 +56,14 @@ python3 -m pip install --user git-annex-remote-rclone
 **Using winget:**
 ```powershell
 winget install --id Google.CloudSDK -e
-winget install --id Rclone.Rclone -e
-python -m pip install --user git-annex-remote-rclone
+winget install --id Git-Annex.Git-Annex -e
 ```
 
 **Using Scoop:**
 ```powershell
-scoop install gcloud
-scoop install rclone
-python -m pip install --user git-annex-remote-rclone
+# Add extras bucket for gcloud
+scoop bucket add extras
+scoop install gcloud git-annex
 ```
 </details>
 
@@ -106,88 +98,89 @@ gsutil mb -p PROJECT_ID -l us-west1 gs://BUCKET_NAME
 
 Replace `BUCKET_NAME` with a globally unique bucket name.
 
-### 4. Configure rclone
+### 4. Create HMAC Keys for S3 API Access
+
+Google Cloud Storage supports S3-compatible API access via HMAC keys:
+
+```bash
+# Create HMAC key for your service account
+gsutil hmac create PROJECT_ID@appspot.gserviceaccount.com
+```
+
+This outputs:
+```
+Access ID:   GOOG1E...
+Secret:      Oi4+781...
+```
+
+**Save these credentials securely!** You'll need them for git-annex configuration.
+
+### 5. Initialize git-annex S3 Remote
 
 **macOS/Linux:**
 ```bash
-rclone config create REMOTE_NAME gcs project_number=PROJECT_ID bucket_policy_only=true
-```
+export AWS_ACCESS_KEY_ID="<Access ID from step 4>"
+export AWS_SECRET_ACCESS_KEY="<Secret from step 4>"
 
-**Windows (PowerShell):**
-```powershell
-rclone config create REMOTE_NAME gcs project_number=PROJECT_ID bucket_policy_only=true
-```
-
-This opens a browser for OAuth authentication.
-
-**Parameter Explanation:**
-- `REMOTE_NAME`: A name you choose for this rclone connection (e.g., `munimetro-gcs`, `project-gcs`). This is user-defined and can be anything memorable.
-- `gcs`: Tells rclone to use Google Cloud Storage
-- `PROJECT_ID`: Your GCP project ID (e.g., `munimetro`)
-- `bucket_policy_only=true`: Uses bucket-level permissions instead of ACLs
-
-**Example:**
-```bash
-rclone config create munimetro-gcs gcs project_number=munimetro bucket_policy_only=true
-```
-
-### 5. Initialize git-annex Remote
-
-**macOS/Linux:**
-```bash
-git annex initremote REMOTE_NAME \
-  type=external \
-  externaltype=rclone \
-  target=REMOTE_NAME \
-  prefix=BUCKET_PREFIX \
-  chunk=50MiB \
-  encryption=none \
-  rclone_layout=lower
-```
-
-**Windows (PowerShell):**
-```powershell
-git annex initremote REMOTE_NAME `
-  type=external `
-  externaltype=rclone `
-  target=REMOTE_NAME `
-  prefix=BUCKET_PREFIX `
-  chunk=50MiB `
-  encryption=none `
-  rclone_layout=lower
-```
-
-**Parameter Explanation:**
-- `REMOTE_NAME`: A name for this git-annex remote (e.g., `google-cloud`). This is user-defined and identifies this remote in git-annex commands.
-- `type=external`: Tells git-annex to use an external special remote
-- `externaltype=rclone`: Specifies we're using the rclone backend
-- `target=REMOTE_NAME`: Must match the rclone remote name from step 4
-- `prefix=BUCKET_PREFIX`: Subdirectory within bucket (e.g., `annex/`, or empty for root)
-- `chunk=50MiB`: Split large files into 50MB chunks for better reliability
-- `encryption=none`: No encryption (use `encryption=hybrid` for encrypted storage)
-- `rclone_layout=lower`: Use lowercase directory structure
-
-**Example:**
-```bash
 git annex initremote google-cloud \
-  type=external \
-  externaltype=rclone \
-  target=munimetro-gcs \
-  prefix=annex/ \
-  chunk=50MiB \
+  type=S3 \
   encryption=none \
-  rclone_layout=lower
+  host=storage.googleapis.com \
+  bucket=BUCKET_NAME \
+  port=443 \
+  protocol=https \
+  requeststyle=path \
+  chunk=50MiB
 ```
+
+**Windows (PowerShell):**
+```powershell
+$env:AWS_ACCESS_KEY_ID="<Access ID from step 4>"
+$env:AWS_SECRET_ACCESS_KEY="<Secret from step 4>"
+
+git annex initremote google-cloud `
+  type=S3 `
+  encryption=none `
+  host=storage.googleapis.com `
+  bucket=BUCKET_NAME `
+  port=443 `
+  protocol=https `
+  requeststyle=path `
+  chunk=50MiB
+```
+
+**Parameter Explanation:**
+- `type=S3`: Use built-in S3 special remote
+- `encryption=none`: No encryption (use `encryption=hybrid` for encrypted storage)
+- `host=storage.googleapis.com`: Google Cloud Storage S3 endpoint
+- `bucket=BUCKET_NAME`: Your GCS bucket name
+- `port=443`: HTTPS port
+- `protocol=https`: Secure connection
+- `requeststyle=path`: GCS-compatible path style
+- `chunk=50MiB`: Split large files into 50MB chunks for better reliability
 
 ### 6. Upload Annexed Files
 
+**macOS/Linux:**
 ```bash
+export AWS_ACCESS_KEY_ID="<Access ID>"
+export AWS_SECRET_ACCESS_KEY="<Secret>"
+
 # Upload all annexed files
-git annex copy --to=REMOTE_NAME --jobs=4
+git annex copy --to=google-cloud --jobs=4
 
 # Upload specific directories
-git annex copy artifacts/training_data/ --to=REMOTE_NAME
-git annex copy artifacts/models/ --to=REMOTE_NAME
+git annex copy artifacts/training_data/ --to=google-cloud
+git annex copy artifacts/models/ --to=google-cloud
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:AWS_ACCESS_KEY_ID="<Access ID>"
+$env:AWS_SECRET_ACCESS_KEY="<Secret>"
+
+# Upload all annexed files
+git annex copy --to=google-cloud --jobs=4
 ```
 
 Initial upload time: approximately 10-20 minutes for 1.1GB.
@@ -206,10 +199,13 @@ cd munimet.ro
 
 # Initialize git-annex with a descriptive name for this computer
 # Replace "your-computer-name" with any name (e.g., "laptop", "alice-desktop", "work-machine")
-# This helps identify where files are stored when working across multiple computers
 git annex init "your-computer-name"
 
-# Enable the cloud remote (requires rclone configuration from step 4)
+# Set up credentials (ask project maintainer for HMAC keys)
+export AWS_ACCESS_KEY_ID="<Access ID>"
+export AWS_SECRET_ACCESS_KEY="<Secret>"
+
+# Enable the cloud remote
 git annex enableremote google-cloud
 ```
 
@@ -222,6 +218,10 @@ cd munimet.ro
 # Initialize git-annex with a descriptive name for this computer
 git annex init "your-computer-name"
 
+# Set up credentials (ask project maintainer for HMAC keys)
+$env:AWS_ACCESS_KEY_ID="<Access ID>"
+$env:AWS_SECRET_ACCESS_KEY="<Secret>"
+
 # Enable the cloud remote
 git annex enableremote google-cloud
 ```
@@ -232,8 +232,26 @@ git annex enableremote google-cloud
   - `"alice-workstation"`
   - `"home-desktop"`
   - `"lab-server"`
-- The `enableremote` command requires you to have completed the rclone configuration (step 4) first
 - You must have access permissions to the Google Cloud Storage bucket
+- HMAC credentials should be kept secure (never commit to git)
+
+### Saving Credentials
+
+To avoid setting environment variables every time:
+
+**macOS/Linux** - Add to `~/.bashrc` or `~/.zshrc`:
+```bash
+export AWS_ACCESS_KEY_ID="<Access ID>"
+export AWS_SECRET_ACCESS_KEY="<Secret>"
+```
+
+**Windows** - Add to PowerShell profile (`$PROFILE`):
+```powershell
+$env:AWS_ACCESS_KEY_ID="<Access ID>"
+$env:AWS_SECRET_ACCESS_KEY="<Secret>"
+```
+
+Alternatively, use AWS credential files (`~/.aws/credentials`) which git-annex reads automatically.
 
 ### Downloading Files
 
@@ -292,7 +310,7 @@ git annex whereis PATH
 git annex find --in=here
 
 # List files in cloud storage
-git annex find --in=REMOTE_NAME
+git annex find --in=google-cloud
 ```
 
 ### Disk Space Management
@@ -312,10 +330,10 @@ git annex sync --content
 
 ```bash
 # Upload new or modified files
-git annex copy --to=REMOTE_NAME
+git annex copy --to=google-cloud
 
 # Upload with parallel transfers
-git annex copy --to=REMOTE_NAME --jobs=4
+git annex copy --to=google-cloud --jobs=4
 ```
 
 ## Cost Monitoring
@@ -327,7 +345,7 @@ git annex copy --to=REMOTE_NAME --jobs=4
 gsutil du -sh gs://BUCKET_NAME
 
 # List objects with sizes
-gsutil ls -lh gs://BUCKET_NAME/PREFIX/
+gsutil ls -lh gs://BUCKET_NAME/
 
 # View billing
 gcloud billing accounts list
@@ -338,6 +356,7 @@ gcloud billing accounts list
 - Storage: ~1.1GB
 - Monthly cost: $0 (within 5GB free tier)
 - Network egress: Free within same region
+- S3 API requests: Minimal cost (typically <$0.01/month)
 
 ## Troubleshooting
 
@@ -347,10 +366,10 @@ gcloud billing accounts list
 
 ```bash
 # Re-enable remote
-git annex enableremote REMOTE_NAME
+git annex enableremote google-cloud
 
 # Check remote configuration
-git annex info REMOTE_NAME
+git annex info google-cloud
 ```
 
 ### Authentication Errors
@@ -361,6 +380,9 @@ gcloud auth application-default login
 
 # Verify credentials
 gcloud auth list
+
+# Check HMAC keys
+gsutil hmac list
 ```
 
 ### Bucket Permission Issues
@@ -382,11 +404,15 @@ gsutil iam ch user:EMAIL:objectAdmin gs://BUCKET_NAME
 # Check git-annex logs
 git annex info --debug
 
-# Test rclone connectivity
-rclone lsd REMOTE_NAME:
-
-# Verify bucket access
+# Test connectivity
 gsutil ls gs://BUCKET_NAME
+
+# Verify HMAC credentials work
+export AWS_ACCESS_KEY_ID="<Access ID>"
+export AWS_SECRET_ACCESS_KEY="<Secret>"
+gsutil -o "Credentials:gs_access_key_id=$AWS_ACCESS_KEY_ID" \
+       -o "Credentials:gs_secret_access_key=$AWS_SECRET_ACCESS_KEY" \
+       ls gs://BUCKET_NAME
 ```
 
 ## Security Considerations
@@ -396,11 +422,12 @@ gsutil ls gs://BUCKET_NAME
 For sensitive data, enable git-annex encryption:
 
 ```bash
-git annex initremote REMOTE_NAME \
-  type=external \
-  externaltype=rclone \
+git annex initremote google-cloud \
+  type=S3 \
   encryption=hybrid \
   keyid=GPG_KEY_ID \
+  host=storage.googleapis.com \
+  bucket=BUCKET_NAME \
   ...
 ```
 
@@ -412,20 +439,36 @@ This encrypts files before upload, preventing cloud provider access.
 - Enable IAM policies for bucket access
 - Implement bucket versioning for recovery
 - Enable audit logging for compliance
+- Store HMAC credentials securely (never in git)
+- Rotate HMAC keys periodically
 
 ## Alternative Backends
 
 git-annex supports multiple storage backends:
 
-- **Amazon S3**: AWS S3-compatible storage
-- **Backblaze B2**: Cost-effective alternative
+- **Amazon S3**: AWS S3 storage
+- **Backblaze B2**: Cost-effective alternative (S3-compatible)
+- **Wasabi**: S3-compatible hot storage
 - **Local Server**: rsync/ssh to dedicated server
 - **WebDAV**: Self-hosted storage
 
-Configuration details: See git-annex special remote documentation.
+All S3-compatible providers work with the same `type=S3` configuration.
+
+## Migrating from rclone
+
+If you previously used the rclone remote:
+
+1. The S3 remote uses a different key structure
+2. Files must be copied to the new remote
+3. Both remotes can coexist during migration
+4. After migration, remove the old remote:
+   ```bash
+   git annex enableremote google-cloud-old dead=true
+   ```
 
 ## Reference
 
 - [git-annex documentation](https://git-annex.branchable.com/)
-- [rclone documentation](https://rclone.org/docs/)
+- [git-annex S3 special remote](https://git-annex.branchable.com/special_remotes/S3/)
+- [GCS S3-compatible API](https://cloud.google.com/storage/docs/interoperability)
 - [GCS pricing](https://cloud.google.com/storage/pricing)

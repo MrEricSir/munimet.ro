@@ -65,6 +65,29 @@ python download_muni_image.py
 
 **Recommendation**: Collect over multiple days to capture diverse status conditions (normal operation, delays, service interruptions).
 
+### Adding Downloaded Images to Git-Annex
+
+Downloaded images are regular files until committed. Git-annex is configured to **automatically annex large files** when you use `git add`:
+
+```bash
+# Add new images - they'll be automatically annexed
+git add artifacts/training_data/images/
+
+# Commit the symlinks (not the actual files!)
+git commit -m "Add new training images"
+
+# Verify files are symlinks
+ls -l artifacts/training_data/images/*.jpg | head -5
+```
+
+**How it works:**
+1. The `.gitattributes` file tells git to use the annex filter
+2. When you `git add` a large file, git-annex intercepts and creates a symlink
+3. The actual file content goes to `.git/annex/objects/`
+4. Only the symlink is committed to git
+
+**Safety:** A pre-commit hook prevents accidentally committing large files that weren't properly annexed.
+
 ## Image Labeling
 
 Launch the labeling GUI:

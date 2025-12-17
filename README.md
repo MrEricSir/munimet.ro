@@ -61,26 +61,30 @@ The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are 
 
 ### For Collaborators with GCS Access
 
-1. Follow [SETUP.md](SETUP.md) to install base dependencies (git-annex, rclone, etc.)
+1. Follow [SETUP.md](SETUP.md) to install base dependencies (git-annex, gcloud, etc.)
 
-2. Initialize git-annex with a descriptive name for this computer:
+2. Initialize git-annex and configure automatic annexing:
    ```bash
    # Replace "your-computer-name" with any name (e.g., "laptop", "alice-desktop")
    git annex init "your-computer-name"
+
+   # Configure automatic annexing for large files
+   ./scripts/setup/setup-git-annex.sh   # macOS/Linux
+   # or
+   .\scripts\setup\setup-git-annex.ps1  # Windows
    ```
 
-3. Configure rclone for Google Cloud Storage:
+3. Configure S3 credentials for Google Cloud Storage:
    ```bash
-   rclone config create munimetro-gcs gcs project_number=munimetro bucket_policy_only=true
-   # Follow OAuth flow in browser
-   ```
+   # Set up HMAC credentials (ask project maintainer for keys)
+   export AWS_ACCESS_KEY_ID="<your-access-id>"
+   export AWS_SECRET_ACCESS_KEY="<your-secret-key>"
 
-4. Enable the remote:
-   ```bash
+   # Enable the remote
    git annex enableremote google-cloud
    ```
 
-5. Download files:
+4. Download files:
    ```bash
    # Download all training data
    git annex get artifacts/training_data/images/
@@ -227,7 +231,7 @@ Users
 - **Frontend**: Vanilla JavaScript (no build step)
 - **Deployment**: Docker, Google Cloud Run, Cloud Scheduler
 - **Storage**: Google Cloud Storage (model files, cache)
-- **Data Management**: git-annex with rclone GCS backend
+- **Data Management**: git-annex with S3-compatible GCS backend
 
 ## Requirements
 
@@ -248,8 +252,7 @@ Users
 ### Development Tools
 - Docker & Docker Compose
 - git-annex (for training data access)
-- rclone (for GCS backend)
-- Google Cloud SDK (for cloud deployment)
+- Google Cloud SDK (for cloud deployment and GCS S3 API)
 
 ## License
 
