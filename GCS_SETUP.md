@@ -22,7 +22,70 @@ Before starting, ensure you have:
 - **Simple**: Fewer moving parts than rclone setup
 - **Cost Effective**: Free tier covers 5GB storage
 
-## Initial Setup
+## Quick Start (Automated Setup)
+
+**Recommended for most collaborators.** This automated script handles HMAC key generation and credential storage.
+
+### Prerequisites
+
+1. Install base dependencies (see [SETUP.md](SETUP.md))
+2. Authenticate with Google Cloud and get project access from maintainer
+
+### Run Automated Setup
+
+**macOS/Linux:**
+```bash
+# Run the automated credential setup script
+./scripts/setup/setup-gcs-credentials.sh
+```
+
+**Windows:**
+```powershell
+# Run the automated credential setup script
+.\scripts\setup\setup-gcs-credentials.ps1
+```
+
+The script will:
+1. Verify `gcloud` authentication
+2. Check project and bucket access
+3. Generate HMAC keys automatically
+4. Save credentials to `~/.aws/credentials` under `[munimetro]` profile
+5. Enable the git-annex remote
+6. Test the connection
+
+### Using the Credentials
+
+After running the setup script, set the AWS profile:
+
+**macOS/Linux:**
+```bash
+# Set for current session
+export AWS_PROFILE=munimetro
+
+# Or set permanently (add to ~/.bashrc or ~/.zshrc)
+echo 'export AWS_PROFILE=munimetro' >> ~/.bashrc
+```
+
+**Windows:**
+```powershell
+# Set for current session
+$env:AWS_PROFILE = "munimetro"
+
+# Or set permanently (add to PowerShell profile)
+Add-Content $PROFILE '$env:AWS_PROFILE = "munimetro"'
+```
+
+### Download Training Data
+
+```bash
+# Download all training data (270MB)
+git annex get artifacts/training_data/
+
+# Unlock labels file for editing
+git annex unlock artifacts/training_data/labels.json
+```
+
+## Manual Setup (Advanced)
 
 ### 1. Install Dependencies
 
