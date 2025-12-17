@@ -131,7 +131,7 @@ h2 {
 
 .description {
     font-family: "handodle";
-    font-size: 2.2em;
+    font-size: 2.0em;
     color: #4a5568;
     margin: 15px 0;
     flex-shrink: 0;
@@ -144,12 +144,13 @@ h2 {
 }
 
 .about-page p, .about-page ol {
-    font-size: 1.8em;
+    font-size: 1.5em;
     line-height: 150%;
 }
 
 p.sub-credits {
     font-size: 1.0em;
+    margin-bottom: 1.0em;
 }
 
 .spinner {
