@@ -1,0 +1,35 @@
+# Configure git-annex filter to automatically annex large files
+* filter=annex
+*.json filter=annex
+*.txt filter=annex
+*.md filter=annex
+*.py filter=annex
+*.sh filter=annex
+*.yaml filter=annex
+*.yml filter=annex
+
+# Automatically annex large files
+* annex.largefiles=((largerthan=100kb)or(mimetype=image/*))
+
+# Specifically annex all JPEGs and PNGs in training data
+artifacts/training_data/images/*.jpg annex.largefiles=anything
+artifacts/training_data/images/*.png annex.largefiles=anything
+
+# Annex model files
+artifacts/models/**/*.safetensors annex.largefiles=anything
+artifacts/models/**/*.pt annex.largefiles=anything
+artifacts/models/**/*.bin annex.largefiles=anything
+artifacts/models/**/*.ckpt annex.largefiles=anything
+
+# Don't annex text files (JSON, config files, etc.)
+*.json annex.largefiles=nothing
+*.txt annex.largefiles=nothing
+*.md annex.largefiles=nothing
+*.py annex.largefiles=nothing
+*.sh annex.largefiles=nothing
+*.yaml annex.largefiles=nothing
+*.yml annex.largefiles=nothing
+*.ps1 annex.largefiles=nothing
+*.html annex.largefiles=nothing
+*.css annex.largefiles=nothing
+*.js annex.largefiles=nothing
