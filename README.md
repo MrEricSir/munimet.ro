@@ -74,14 +74,17 @@ The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are 
    .\scripts\setup\setup-git-annex.ps1  # Windows
    ```
 
-3. Configure S3 credentials for private training data access:
+3. Set up GCS credentials and download training data:
    ```bash
-   # Set up HMAC credentials (ask project maintainer for keys)
-   export AWS_ACCESS_KEY_ID="<your-access-id>"
-   export AWS_SECRET_ACCESS_KEY="<your-secret-key>"
+   # Run automated credential setup (generates HMAC keys, saves to ~/.aws/credentials)
+   ./scripts/setup/setup-gcs-credentials.sh   # macOS/Linux
+   # or
+   .\scripts\setup\setup-gcs-credentials.ps1  # Windows
 
-   # Enable the remote
-   git annex enableremote google-cloud
+   # Set AWS profile for this session
+   export AWS_PROFILE=munimetro  # macOS/Linux
+   # or
+   $env:AWS_PROFILE = "munimetro"  # Windows
 
    # Download all training data (270MB)
    git annex get artifacts/training_data/
