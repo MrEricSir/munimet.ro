@@ -33,3 +33,6 @@ artifacts/models/**/*.ckpt annex.largefiles=anything
 *.html annex.largefiles=nothing
 *.css annex.largefiles=nothing
 *.js annex.largefiles=nothing
+
+# Don't annex files in api/html (frontend assets, even if large)
+api/html/** annex.largefiles=nothing
