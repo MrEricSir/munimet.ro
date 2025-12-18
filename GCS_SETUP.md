@@ -185,7 +185,7 @@ Secret:      Oi4+781...
 export AWS_ACCESS_KEY_ID="<Access ID from step 4>"
 export AWS_SECRET_ACCESS_KEY="<Secret from step 4>"
 
-git annex initremote google-cloud \
+git annex initremote gcs \
   type=S3 \
   encryption=none \
   host=storage.googleapis.com \
@@ -193,7 +193,8 @@ git annex initremote google-cloud \
   port=443 \
   protocol=https \
   requeststyle=path \
-  chunk=50MiB
+  chunk=50MiB \
+  datacenter=us-west1
 ```
 
 **Windows (PowerShell):**
@@ -201,7 +202,7 @@ git annex initremote google-cloud \
 $env:AWS_ACCESS_KEY_ID="<Access ID from step 4>"
 $env:AWS_SECRET_ACCESS_KEY="<Secret from step 4>"
 
-git annex initremote google-cloud `
+git annex initremote gcs `
   type=S3 `
   encryption=none `
   host=storage.googleapis.com `
@@ -209,7 +210,8 @@ git annex initremote google-cloud `
   port=443 `
   protocol=https `
   requeststyle=path `
-  chunk=50MiB
+  chunk=50MiB `
+  datacenter=us-west1
 ```
 
 **Parameter Explanation:**
@@ -230,11 +232,11 @@ export AWS_ACCESS_KEY_ID="<Access ID>"
 export AWS_SECRET_ACCESS_KEY="<Secret>"
 
 # Upload all annexed files
-git annex copy --to=google-cloud --jobs=4
+git annex copy --to=gcs --jobs=4
 
 # Upload specific directories
-git annex copy artifacts/training_data/ --to=google-cloud
-git annex copy artifacts/models/ --to=google-cloud
+git annex copy artifacts/training_data/ --to=gcs
+git annex copy artifacts/models/ --to=gcs
 ```
 
 **Windows (PowerShell):**
@@ -243,7 +245,7 @@ $env:AWS_ACCESS_KEY_ID="<Access ID>"
 $env:AWS_SECRET_ACCESS_KEY="<Secret>"
 
 # Upload all annexed files
-git annex copy --to=google-cloud --jobs=4
+git annex copy --to=gcs --jobs=4
 ```
 
 Initial upload time: approximately 10-20 minutes for 1.1GB.
@@ -269,7 +271,7 @@ export AWS_ACCESS_KEY_ID="<Access ID>"
 export AWS_SECRET_ACCESS_KEY="<Secret>"
 
 # Enable the cloud remote
-git annex enableremote google-cloud
+git annex enableremote gcs
 ```
 
 **Windows (PowerShell):**
@@ -286,7 +288,7 @@ $env:AWS_ACCESS_KEY_ID="<Access ID>"
 $env:AWS_SECRET_ACCESS_KEY="<Secret>"
 
 # Enable the cloud remote
-git annex enableremote google-cloud
+git annex enableremote gcs
 ```
 
 **Important Notes:**
@@ -373,7 +375,7 @@ git annex whereis PATH
 git annex find --in=here
 
 # List files in cloud storage
-git annex find --in=google-cloud
+git annex find --in=gcs
 ```
 
 ### Disk Space Management
@@ -393,10 +395,10 @@ git annex sync --content
 
 ```bash
 # Upload new or modified files
-git annex copy --to=google-cloud
+git annex copy --to=gcs
 
 # Upload with parallel transfers
-git annex copy --to=google-cloud --jobs=4
+git annex copy --to=gcs --jobs=4
 ```
 
 ## Cost Monitoring
@@ -429,10 +431,10 @@ gcloud billing accounts list
 
 ```bash
 # Re-enable remote
-git annex enableremote google-cloud
+git annex enableremote gcs
 
 # Check remote configuration
-git annex info google-cloud
+git annex info gcs
 ```
 
 ### Authentication Errors
@@ -485,7 +487,7 @@ gsutil -o "Credentials:gs_access_key_id=$AWS_ACCESS_KEY_ID" \
 For sensitive data, enable git-annex encryption:
 
 ```bash
-git annex initremote google-cloud \
+git annex initremote gcs \
   type=S3 \
   encryption=hybrid \
   keyid=GPG_KEY_ID \

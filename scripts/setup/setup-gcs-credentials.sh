@@ -153,26 +153,63 @@ else
 fi
 echo ""
 
-echo "[6/6] Configuring git-annex to use munimetro profile..."
-# Set environment variable for git-annex to use the munimetro profile
-export AWS_PROFILE=munimetro
+echo "[6/6] Configuring git-annex remote..."
 
-# Enable the google-cloud remote
-if git annex enableremote google-cloud 2>/dev/null; then
-    echo -e "${GREEN}✓ git-annex remote enabled successfully${NC}"
-else
-    echo -e "${YELLOW}⚠ Could not enable remote (may not exist yet)${NC}"
-    echo "This is normal if the repository hasn't been fully set up yet"
+# Read credentials from file for git-annex (it doesn't support AWS_PROFILE properly)
+if [ -f "$AWS_CREDS_FILE" ]; then
+    export AWS_ACCESS_KEY_ID=$(grep -A2 '\[munimetro\]' "$AWS_CREDS_FILE" | grep aws_access_key_id | cut -d'=' -f2 | tr -d ' ')
+    export AWS_SECRET_ACCESS_KEY=$(grep -A2 '\[munimetro\]' "$AWS_CREDS_FILE" | grep aws_secret_access_key | cut -d'=' -f2 | tr -d ' ')
 fi
+
+if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+    echo -e "${RED}ERROR: Could not read credentials from $AWS_CREDS_FILE${NC}"
+    exit 1
+fi
+
+# Check if gcs remote already exists as S3 type
+REMOTE_INFO=$(git annex info gcs 2>&1 || true)
+if echo "$REMOTE_INFO" | grep -q "type: S3"; then
+    echo "Remote 'gcs' already configured as S3 type"
+    git annex enableremote gcs 2>/dev/null || true
+else
+    # Check if remote exists at all
+    if git config --get remote.gcs.annex-uuid &>/dev/null; then
+        echo "Enabling existing gcs remote..."
+        git annex enableremote gcs 2>/dev/null || true
+    else
+        echo "Initializing new S3 remote..."
+        # Workaround for GCS "BucketAlreadyOwnedByYou" error:
+        # Create with a temporary bucket name, then switch to actual bucket
+        TEMP_BUCKET="munimetro-annex-init-temp-$(date +%s)"
+
+        if ! git annex initremote gcs type=S3 encryption=none host=storage.googleapis.com \
+            bucket="$TEMP_BUCKET" port=443 protocol=https requeststyle=path \
+            chunk=50MiB datacenter=us-west1 2>&1; then
+            echo -e "${RED}ERROR: Failed to initialize remote${NC}"
+            exit 1
+        fi
+
+        # Switch to actual bucket
+        if ! git annex enableremote gcs bucket=munimetro-annex 2>/dev/null; then
+            echo -e "${RED}ERROR: Failed to configure bucket${NC}"
+            exit 1
+        fi
+
+        # Clean up temporary bucket
+        echo "Cleaning up temporary bucket..."
+        gsutil rb "gs://${TEMP_BUCKET}/" 2>/dev/null || true
+    fi
+fi
+
+echo -e "${GREEN}✓ git-annex remote configured successfully${NC}"
 echo ""
 
-# Test the connection
+# Quick connection test
 echo "Testing connection to Google Cloud Storage..."
-if AWS_PROFILE=munimetro git annex testremote google-cloud --fast 2>/dev/null; then
-    echo -e "${GREEN}✓ Connection test successful!${NC}"
+if git annex info gcs 2>&1 | grep -q "bucket: munimetro-annex"; then
+    echo -e "${GREEN}✓ Connection configured!${NC}"
 else
-    echo -e "${YELLOW}⚠ Connection test failed or remote not fully configured${NC}"
-    echo "You may need to complete git-annex setup first"
+    echo -e "${YELLOW}⚠ Remote may not be fully configured${NC}"
 fi
 echo ""
 
@@ -183,13 +220,14 @@ echo ""
 echo "Your credentials are saved in: ${AWS_CREDS_FILE}"
 echo "Profile name: munimetro"
 echo ""
-echo -e "${CYAN}To use these credentials:${NC}"
+echo -e "${CYAN}To use these credentials in a new session:${NC}"
 echo ""
-echo "  # Option 1: Set for current session"
-echo "  export AWS_PROFILE=munimetro"
+echo "  # Option 1: Source the helper script"
+echo "  source scripts/setup/gcs-env.sh"
 echo ""
-echo "  # Option 2: Set permanently (add to ~/.bashrc or ~/.zshrc)"
-echo "  echo 'export AWS_PROFILE=munimetro' >> ~/.bashrc"
+echo "  # Option 2: Set manually for current session"
+echo "  export AWS_ACCESS_KEY_ID=\$(grep -A2 '\[munimetro\]' ~/.aws/credentials | grep aws_access_key_id | cut -d'=' -f2 | tr -d ' ')"
+echo "  export AWS_SECRET_ACCESS_KEY=\$(grep -A2 '\[munimetro\]' ~/.aws/credentials | grep aws_secret_access_key | cut -d'=' -f2 | tr -d ' ')"
 echo ""
 echo "  # Then use git-annex normally:"
 echo "  git annex get artifacts/training_data/"

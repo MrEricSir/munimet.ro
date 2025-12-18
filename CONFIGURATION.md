@@ -74,7 +74,7 @@ This document records the actual configuration values used for this deployment.
 
 ### Remote Configuration
 
-- **Remote Name**: `google-cloud`
+- **Remote Name**: `gcs`
 - **Type**: S3 (built-in git-annex S3 special remote)
 - **Host**: `storage.googleapis.com`
 - **Bucket**: `munimetro-annex`

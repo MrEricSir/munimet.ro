@@ -158,7 +158,7 @@ Write-Host "4. Follow SETUP.md for git-annex and cloud storage configuration" -F
 Write-Host ""
 Write-Host "For collaborators downloading training data:" -ForegroundColor Cyan
 Write-Host "  - Set up HMAC credentials (ask project maintainer)" -ForegroundColor White
-Write-Host "  - Enable git-annex remote: git annex enableremote google-cloud" -ForegroundColor White
+Write-Host "  - Enable git-annex remote: git annex enableremote gcs" -ForegroundColor White
 Write-Host "  - Download files: git annex get artifacts/models/v1/" -ForegroundColor White
 Write-Host "  - See GCS_SETUP.md for detailed instructions" -ForegroundColor White
 Write-Host ""

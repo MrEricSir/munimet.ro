@@ -159,29 +159,70 @@ aws_secret_access_key = ${secretAccessKey}
 }
 Write-Host ""
 
-Write-Host "[6/6] Configuring git-annex to use munimetro profile..." -ForegroundColor White
-# Set environment variable for git-annex to use the munimetro profile
-$env:AWS_PROFILE = "munimetro"
+Write-Host "[6/6] Configuring git-annex remote..." -ForegroundColor White
 
-# Enable the google-cloud remote
-git annex enableremote google-cloud 2>$null
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "OK git-annex remote enabled successfully" -ForegroundColor Green
+# Read credentials from file for git-annex (it doesn't support AWS_PROFILE properly)
+$credsContent = Get-Content $awsCredsFile -Raw
+$accessKeyMatch = [regex]::Match($credsContent, '(?<=\[munimetro\][\s\S]*?aws_access_key_id\s*=\s*)\S+')
+$secretKeyMatch = [regex]::Match($credsContent, '(?<=\[munimetro\][\s\S]*?aws_secret_access_key\s*=\s*)\S+')
+
+if ($accessKeyMatch.Success -and $secretKeyMatch.Success) {
+    $env:AWS_ACCESS_KEY_ID = $accessKeyMatch.Value
+    $env:AWS_SECRET_ACCESS_KEY = $secretKeyMatch.Value
 } else {
-    Write-Host "WARNING Could not enable remote (may not exist yet)" -ForegroundColor Yellow
-    Write-Host "This is normal if the repository hasn't been fully set up yet" -ForegroundColor Yellow
+    Write-Host "ERROR: Could not read credentials from $awsCredsFile" -ForegroundColor Red
+    exit 1
 }
+
+# Check if gcs remote already exists
+$remoteInfo = git annex info gcs 2>&1 | Out-String
+if ($remoteInfo -match "type: S3") {
+    Write-Host "Remote 'gcs' already configured as S3 type" -ForegroundColor Green
+    # Just enable it
+    git annex enableremote gcs 2>$null
+} else {
+    # Check if remote exists at all (might be rclone type or not exist)
+    $remoteExists = git config --get remote.gcs.annex-uuid 2>$null
+
+    if ($remoteExists) {
+        Write-Host "Enabling existing gcs remote..." -ForegroundColor White
+        git annex enableremote gcs 2>$null
+    } else {
+        Write-Host "Initializing new S3 remote..." -ForegroundColor White
+        # Workaround for GCS "BucketAlreadyOwnedByYou" error:
+        # Create with a temporary bucket name, then switch to actual bucket
+        $tempBucket = "munimetro-annex-init-temp-" + [DateTimeOffset]::Now.ToUnixTimeSeconds()
+
+        $initResult = git annex initremote gcs type=S3 encryption=none host=storage.googleapis.com bucket=$tempBucket port=443 protocol=https requeststyle=path chunk=50MiB datacenter=us-west1 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to initialize remote" -ForegroundColor Red
+            Write-Host $initResult -ForegroundColor Red
+            exit 1
+        }
+
+        # Switch to actual bucket
+        git annex enableremote gcs bucket=munimetro-annex 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to configure bucket" -ForegroundColor Red
+            exit 1
+        }
+
+        # Clean up temporary bucket
+        Write-Host "Cleaning up temporary bucket..." -ForegroundColor White
+        gsutil rb "gs://${tempBucket}/" 2>$null
+    }
+}
+
+Write-Host "OK git-annex remote configured successfully" -ForegroundColor Green
 Write-Host ""
 
-# Test the connection
+# Quick connection test (just check if we can list the bucket)
 Write-Host "Testing connection to Google Cloud Storage..." -ForegroundColor White
-$env:AWS_PROFILE = "munimetro"
-git annex testremote google-cloud --fast 2>$null
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "OK Connection test successful!" -ForegroundColor Green
+$testResult = git annex info gcs 2>&1 | Out-String
+if ($testResult -match "bucket: munimetro-annex") {
+    Write-Host "OK Connection configured!" -ForegroundColor Green
 } else {
-    Write-Host "WARNING Connection test failed or remote not fully configured" -ForegroundColor Yellow
-    Write-Host "You may need to complete git-annex setup first" -ForegroundColor Yellow
+    Write-Host "WARNING Remote may not be fully configured" -ForegroundColor Yellow
 }
 Write-Host ""
 
@@ -192,13 +233,15 @@ Write-Host ""
 Write-Host "Your credentials are saved in: $awsCredsFile" -ForegroundColor White
 Write-Host "Profile name: munimetro" -ForegroundColor White
 Write-Host ""
-Write-Host "To use these credentials:" -ForegroundColor Cyan
+Write-Host "To use these credentials in a new session:" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  # Option 1: Set for current session" -ForegroundColor White
-Write-Host "  `$env:AWS_PROFILE = 'munimetro'" -ForegroundColor Yellow
+Write-Host "  `$creds = Get-Content `$env:USERPROFILE\.aws\credentials -Raw" -ForegroundColor Yellow
+Write-Host "  `$env:AWS_ACCESS_KEY_ID = [regex]::Match(`$creds, '(?<=\[munimetro\][\s\S]*?aws_access_key_id\s*=\s*)\S+').Value" -ForegroundColor Yellow
+Write-Host "  `$env:AWS_SECRET_ACCESS_KEY = [regex]::Match(`$creds, '(?<=\[munimetro\][\s\S]*?aws_secret_access_key\s*=\s*)\S+').Value" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  # Option 2: Set permanently (add to PowerShell profile)" -ForegroundColor White
-Write-Host "  Add-Content `$PROFILE '`$env:AWS_PROFILE = `"munimetro`"'" -ForegroundColor Yellow
+Write-Host "  # Option 2: Add a helper function to your PowerShell profile" -ForegroundColor White
+Write-Host "  # See scripts/setup/gcs-env.ps1 for a helper script" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  # Then use git-annex normally:" -ForegroundColor White
 Write-Host "  git annex get artifacts/training_data/" -ForegroundColor Yellow

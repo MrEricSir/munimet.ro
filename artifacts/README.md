@@ -87,7 +87,7 @@ The script will:
 1. Prompt for a descriptive computer name (e.g., "laptop", "alice-desktop", "work-machine")
 2. Initialize git-annex with that name
 3. Configure automatic annexing for large files
-4. Enable the google-cloud remote (if available)
+4. Enable the gcs remote (if available)
 5. Download the pre-trained model (856MB) - no authentication required
 
 ### Step 3: For Collaborators with Private Data Access
@@ -103,7 +103,7 @@ If you're a collaborator with access to the private training dataset:
    export AWS_SECRET_ACCESS_KEY="<your-secret-key>"
 
    # Enable the remote
-   git annex enableremote google-cloud
+   git annex enableremote gcs
    ```
 
 **Download training data**:
@@ -152,7 +152,7 @@ cd ..
 git annex add artifacts/training_data/images/
 
 # Upload to cloud storage
-git annex copy artifacts/training_data/images/ --to=google-cloud --jobs=4
+git annex copy artifacts/training_data/images/ --to=gcs --jobs=4
 
 # Commit and push
 git commit -m "Add training snapshots"
@@ -177,7 +177,7 @@ git add artifacts/training_data/labels.json
 git commit -m "Update training labels"
 
 # Upload to cloud
-git annex copy artifacts/training_data/labels.json --to=google-cloud
+git annex copy artifacts/training_data/labels.json --to=gcs
 git push
 ```
 
@@ -197,7 +197,7 @@ cd ..
 git annex add artifacts/models/v1/
 
 # Upload to cloud storage
-git annex copy artifacts/models/v1/ --to=google-cloud
+git annex copy artifacts/models/v1/ --to=gcs
 
 # Commit and push
 git commit -m "Update trained model"
@@ -233,10 +233,10 @@ This section provides a comprehensive reference for all git-annex operations you
 
 | Command | Function | Example |
 |---------|----------|---------|
-| `git annex copy --to=REMOTE` | Upload files to remote | `git annex copy artifacts/models/v1/ --to=google-cloud` |
-| `git annex copy --from=REMOTE` | Download files from remote | `git annex copy --from=google-cloud` |
+| `git annex copy --to=REMOTE` | Upload files to remote | `git annex copy artifacts/models/v1/ --to=gcs` |
+| `git annex copy --from=REMOTE` | Download files from remote | `git annex copy --from=gcs` |
 | `git annex sync --content` | Sync all changes bidirectionally | `git annex sync --content` |
-| `git annex enableremote REMOTE` | Enable a configured remote | `git annex enableremote google-cloud` |
+| `git annex enableremote REMOTE` | Enable a configured remote | `git annex enableremote gcs` |
 
 ### Performance Options
 
@@ -282,7 +282,7 @@ git add artifacts/training_data/labels.json
 git commit -m "Update training labels"
 
 # Upload to cloud
-git annex copy artifacts/training_data/labels.json --to=google-cloud
+git annex copy artifacts/training_data/labels.json --to=gcs
 git push
 
 # Optional: Re-lock file (converts back to symlink)
@@ -308,7 +308,7 @@ git annex whereis artifacts/models/v1/
 
 # 4. (Optional) For collaborators: configure GCS and download training data
 # See GCS_SETUP.md for configuration instructions
-git annex enableremote google-cloud
+git annex enableremote gcs
 git annex get artifacts/training_data/
 ```
 
@@ -361,10 +361,10 @@ git annex info
 git annex init "your-computer-name"
 
 # Re-enable cloud remote
-git annex enableremote google-cloud
+git annex enableremote gcs
 
 # Verify remote configuration
-git annex info google-cloud
+git annex info gcs
 
 # List all remotes
 git annex info | grep -A5 "remotes"
@@ -385,10 +385,10 @@ export AWS_ACCESS_KEY_ID="<your-access-id>"
 export AWS_SECRET_ACCESS_KEY="<your-secret-key>"
 
 # Re-enable remote
-git annex enableremote google-cloud
+git annex enableremote gcs
 
 # Test connectivity
-git annex testremote google-cloud
+git annex testremote gcs
 
 # Verify with gsutil
 gsutil ls gs://munimetro-annex
@@ -413,7 +413,7 @@ echo $AWS_ACCESS_KEY_ID
 gsutil ls gs://munimetro-annex
 
 # Test S3 connectivity
-git annex testremote google-cloud
+git annex testremote gcs
 
 # Check network connectivity
 ping google.com
@@ -493,7 +493,7 @@ git annex whereis
 
 # Count files in each location
 git annex find --in=here | wc -l           # Files present locally
-git annex find --in=google-cloud | wc -l   # Files in cloud
+git annex find --in=gcs | wc -l   # Files in cloud
 git annex find --not --in=here | wc -l     # Files missing locally
 
 # List all annexed files with locations

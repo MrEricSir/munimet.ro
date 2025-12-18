@@ -73,13 +73,13 @@ if (Test-Path ".git") {
     if ($annexInit) {
         Write-Host "  OK git-annex repository initialized" -ForegroundColor Green
 
-        # Check for google-cloud remote
-        $remoteExists = git annex info google-cloud 2>&1
+        # Check for gcs remote
+        $remoteExists = git annex info gcs 2>&1
         if ($remoteExists -notmatch "not found") {
-            Write-Host "  OK google-cloud remote configured" -ForegroundColor Green
+            Write-Host "  OK gcs remote configured" -ForegroundColor Green
         } else {
-            Write-Host "  WARNING google-cloud remote not enabled" -ForegroundColor Yellow
-            Write-Host "    Run: git annex enableremote google-cloud" -ForegroundColor Yellow
+            Write-Host "  WARNING gcs remote not enabled" -ForegroundColor Yellow
+            Write-Host "    Run: git annex enableremote gcs" -ForegroundColor Yellow
         }
     } else {
         Write-Host "  WARNING git-annex not initialized" -ForegroundColor Yellow
@@ -122,7 +122,7 @@ Write-Host "Next steps:" -ForegroundColor White
 Write-Host "1. Run setup scripts if needed: .\scripts\setup\setup-python-env.ps1" -ForegroundColor White
 Write-Host "2. Initialize git-annex: git annex init your-computer-name" -ForegroundColor White
 Write-Host "3. For collaborators: Set S3 credentials (see GCS_SETUP.md)" -ForegroundColor White
-Write-Host "4. Enable git-annex remote: git annex enableremote google-cloud" -ForegroundColor White
+Write-Host "4. Enable git-annex remote: git annex enableremote gcs" -ForegroundColor White
 Write-Host "5. Download model files: git annex get artifacts/models/v1/" -ForegroundColor White
 Write-Host ""
 Write-Host "For detailed setup instructions, see SETUP.md" -ForegroundColor Cyan

@@ -118,7 +118,7 @@ brew install python-tk@3.13
 
 ```bash
 # Google Cloud SDK (for cloud deployment)
-brew install google-cloud-sdk
+brew install gcs-sdk
 
 # Docker (for containerized deployment)
 brew install --cask docker
@@ -182,10 +182,10 @@ sudo yum install -y python3-tkinter
 
 ```bash
 # Google Cloud SDK (Debian/Ubuntu)
-echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/gcs-sdk.list
 curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
 sudo apt-get update
-sudo apt-get install -y google-cloud-sdk
+sudo apt-get install -y gcs-sdk
 
 # Docker (Ubuntu)
 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -407,7 +407,7 @@ The script will:
 1. Prompt for a descriptive computer name (e.g., "laptop", "work-machine", "alice-desktop")
 2. Initialize git-annex with that name
 3. Configure automatic annexing for files >100KB or images
-4. Enable the google-cloud remote (if available)
+4. Enable the gcs remote (if available)
 5. Download the pre-trained model (856MB, from public Google Cloud Storage)
 
 ### Manual Setup (Alternative)
@@ -569,13 +569,13 @@ sudo yum install python3-devel gcc gcc-c++
 git annex info
 
 # Check remote configuration
-git annex info google-cloud
+git annex info gcs
 
 # For collaborators: Ensure S3 credentials are configured
 # See GCS_SETUP.md for configuration instructions
 
 # Re-enable remote (if previously configured)
-git annex enableremote google-cloud
+git annex enableremote gcs
 ```
 
 ### Broken Symlinks

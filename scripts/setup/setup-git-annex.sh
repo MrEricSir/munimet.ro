@@ -58,14 +58,14 @@ else
 fi
 echo ""
 
-echo "[4/5] Enabling google-cloud remote..."
+echo "[4/5] Enabling gcs remote..."
 # Check if remote exists
-if git annex info google-cloud >/dev/null 2>&1; then
-    echo "✓ google-cloud remote is already available"
+if git annex info gcs >/dev/null 2>&1; then
+    echo "✓ gcs remote is already available"
 else
-    echo "Attempting to enable google-cloud remote..."
-    if git annex enableremote google-cloud 2>/dev/null; then
-        echo "✓ google-cloud remote enabled successfully"
+    echo "Attempting to enable gcs remote..."
+    if git annex enableremote gcs 2>/dev/null; then
+        echo "✓ gcs remote enabled successfully"
     else
         echo "⚠ Could not enable remote (this is normal for first-time setup)"
         echo "  The remote will be configured automatically when you clone"
@@ -103,7 +103,7 @@ echo "• Model files downloaded (if available)"
 echo ""
 echo "For collaborators with training data access:"
 echo "  1. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
-echo "  2. Run: git annex enableremote google-cloud"
+echo "  2. Run: git annex enableremote gcs"
 echo "  3. Download training data: git annex get artifacts/training_data/"
 echo ""
 echo "See GCS_SETUP.md for detailed instructions."

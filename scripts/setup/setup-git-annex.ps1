@@ -55,16 +55,16 @@ if (Test-Path .gitattributes) {
 }
 Write-Host ""
 
-Write-Host "[4/5] Enabling google-cloud remote..." -ForegroundColor White
+Write-Host "[4/5] Enabling gcs remote..." -ForegroundColor White
 # Check if remote exists
-$remoteCheck = git annex info google-cloud 2>$null
+$remoteCheck = git annex info gcs 2>$null
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "OK google-cloud remote is already available" -ForegroundColor Green
+    Write-Host "OK gcs remote is already available" -ForegroundColor Green
 } else {
-    Write-Host "Attempting to enable google-cloud remote..." -ForegroundColor White
-    git annex enableremote google-cloud 2>$null
+    Write-Host "Attempting to enable gcs remote..." -ForegroundColor White
+    git annex enableremote gcs 2>$null
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "OK google-cloud remote enabled successfully" -ForegroundColor Green
+        Write-Host "OK gcs remote enabled successfully" -ForegroundColor Green
     } else {
         Write-Host "WARNING Could not enable remote (this is normal for first-time setup)" -ForegroundColor Yellow
         Write-Host "  The remote will be configured automatically when you clone" -ForegroundColor Yellow
@@ -107,7 +107,7 @@ Write-Host "  Model files downloaded (if available)" -ForegroundColor White
 Write-Host ""
 Write-Host "For collaborators with training data access:" -ForegroundColor Cyan
 Write-Host "  1. Set `$env:AWS_ACCESS_KEY_ID and `$env:AWS_SECRET_ACCESS_KEY" -ForegroundColor White
-Write-Host "  2. Run: git annex enableremote google-cloud" -ForegroundColor White
+Write-Host "  2. Run: git annex enableremote gcs" -ForegroundColor White
 Write-Host "  3. Download training data: git annex get artifacts/training_data/" -ForegroundColor White
 Write-Host ""
 Write-Host "See GCS_SETUP.md for detailed instructions." -ForegroundColor Cyan
