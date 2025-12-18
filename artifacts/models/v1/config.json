@@ -1,1 +1,13 @@
-/annex/objects/SHA256E-s168--4a56cc121f3d8f4488d83cf3c27135ce0ad0b84c37402d121cf079882f9e093d.json
+{
+  "status_to_label": {
+    "green": 0,
+    "yellow": 1,
+    "red": 2,
+    "": -1
+  },
+  "label_to_status": {
+    "0": "green",
+    "1": "yellow",
+    "2": "red"
+  }
+}
