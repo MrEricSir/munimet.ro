@@ -34,19 +34,36 @@ if (-not $annexUuid) {
     }
 }
 
-Write-Host "[1/3] Configuring git-annex filter..." -ForegroundColor White
+Write-Host "[1/6] Enabling adjusted branch for Windows..." -ForegroundColor White
+# Windows doesn't handle symlinks well, so use adjusted branch with unlocked files
+$currentBranch = git branch --show-current 2>$null
+if ($currentBranch -notmatch "adjusted/") {
+    Write-Host "Switching to adjusted/unlocked branch..." -ForegroundColor White
+    git annex adjust --unlock 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "OK Adjusted branch enabled (files stored as regular files, not symlinks)" -ForegroundColor Green
+    } else {
+        Write-Host "WARNING Could not enable adjusted branch" -ForegroundColor Yellow
+        Write-Host "  You may need to run: git annex adjust --unlock" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "OK Already on adjusted branch" -ForegroundColor Green
+}
+Write-Host ""
+
+Write-Host "[2/6] Configuring git-annex filter..." -ForegroundColor White
 # Enable automatic annexing via git filter
 git config filter.annex.process 'git-annex filter-process'
 Write-Host "OK Git-annex filter enabled" -ForegroundColor Green
 Write-Host ""
 
-Write-Host "[2/3] Setting largefiles configuration..." -ForegroundColor White
+Write-Host "[3/6] Setting largefiles configuration..." -ForegroundColor White
 # Configure which files should be automatically annexed
 git annex config --set annex.largefiles 'largerthan=100kb or mimetype=image/*'
 Write-Host "OK Files >100KB or images will be automatically annexed" -ForegroundColor Green
 Write-Host ""
 
-Write-Host "[3/5] Verifying .gitattributes..." -ForegroundColor White
+Write-Host "[4/6] Verifying .gitattributes..." -ForegroundColor White
 if (Test-Path .gitattributes) {
     Write-Host "OK .gitattributes exists" -ForegroundColor Green
 } else {
@@ -55,7 +72,7 @@ if (Test-Path .gitattributes) {
 }
 Write-Host ""
 
-Write-Host "[4/5] Enabling gcs remote..." -ForegroundColor White
+Write-Host "[5/6] Enabling gcs remote..." -ForegroundColor White
 # Check if remote exists
 $remoteCheck = git annex info gcs 2>$null
 if ($LASTEXITCODE -eq 0) {
@@ -72,7 +89,7 @@ if ($LASTEXITCODE -eq 0) {
 }
 Write-Host ""
 
-Write-Host "[5/5] Downloading pre-trained model..." -ForegroundColor White
+Write-Host "[6/6] Downloading pre-trained model..." -ForegroundColor White
 # Check if model files are already present
 $modelFile = "artifacts/models/v1/model.safetensors"
 if ((Test-Path $modelFile) -and (-not (Get-Item $modelFile).LinkType)) {
@@ -100,9 +117,8 @@ Write-Host "OK Git-annex configuration complete!" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Summary:" -ForegroundColor White
+Write-Host "  Adjusted branch enabled (files as regular files, not symlinks)" -ForegroundColor White
 Write-Host "  Automatic annexing enabled for files >100KB or images" -ForegroundColor White
-Write-Host "  Large files will be symlinked instead of added to git" -ForegroundColor White
-Write-Host "  Pre-commit hook prevents accidental large file commits" -ForegroundColor White
 Write-Host "  Model files downloaded (if available)" -ForegroundColor White
 Write-Host ""
 Write-Host "For collaborators with training data access:" -ForegroundColor Cyan

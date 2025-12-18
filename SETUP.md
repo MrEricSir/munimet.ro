@@ -406,9 +406,12 @@ cd \path\to\munimet.ro
 The script will:
 1. Prompt for a descriptive computer name (e.g., "laptop", "work-machine", "alice-desktop")
 2. Initialize git-annex with that name
-3. Configure automatic annexing for files >100KB or images
-4. Enable the gcs remote (if available)
-5. Download the pre-trained model (856MB, from public Google Cloud Storage)
+3. **Windows only:** Enable adjusted branch mode (stores files as regular files instead of symlinks)
+4. Configure automatic annexing for files >100KB or images
+5. Enable the gcs remote (if available)
+6. Download the pre-trained model (856MB, from public Google Cloud Storage)
+
+**Windows Note:** The setup script automatically enables "adjusted branch" mode (`git annex adjust --unlock`), which stores files as regular files instead of symlinks. This is necessary because Windows doesn't handle symlinks well without admin privileges. Your branch will appear as `adjusted/main(unlocked)` instead of `main`.
 
 ### Manual Setup (Alternative)
 
@@ -418,11 +421,14 @@ If you prefer manual configuration:
 # 1. Initialize git-annex
 git annex init "your-computer-name"
 
-# 2. Enable automatic annexing
+# 2. Windows only: Enable adjusted branch (stores files as regular files)
+git annex adjust --unlock
+
+# 3. Enable automatic annexing
 git config filter.annex.process 'git-annex filter-process'
 git annex config --set annex.largefiles 'largerthan=100kb or mimetype=image/*'
 
-# 3. Download model files
+# 4. Download model files
 git annex get artifacts/models/v1/
 ```
 

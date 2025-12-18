@@ -58,6 +58,27 @@ Git Repository (GitHub)
 
 When you run `git annex get`, files download from Google Cloud Storage to `.git/annex/objects/` and symlinks become functional.
 
+### Windows: Adjusted Branch Mode
+
+Windows doesn't handle symlinks well by default (requires admin privileges or Developer Mode). Git-annex provides an **adjusted branch** feature that stores files as regular files instead of symlinks.
+
+**How it works:**
+- Run `git annex adjust --unlock` to switch to an adjusted branch (e.g., `adjusted/main(unlocked)`)
+- Files are stored as regular files in your working directory
+- Git-annex automatically manages syncing between the adjusted branch and the main branch
+- The Windows setup script (`setup-git-annex.ps1`) enables this automatically
+
+**Key differences:**
+
+| Feature | Regular Branch (macOS/Linux) | Adjusted Branch (Windows) |
+|---------|------------------------------|---------------------------|
+| File storage | Symlinks → `.git/annex/objects/` | Regular files |
+| `git annex unlock` | Needed to edit files | Not needed (files already unlocked) |
+| Branch name | `main` | `adjusted/main(unlocked)` |
+| Symlink support | Required | Not required |
+
+**Note:** The adjusted branch is a local view - commits are automatically synced to the underlying main branch when you push.
+
 ## Initial Setup
 
 ### Step 1: Install Dependencies
