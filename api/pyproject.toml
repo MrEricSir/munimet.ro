@@ -19,5 +19,7 @@ ignore_undeclared = [
     "lib",  # Local shared library (../lib/muni_lib.py)
 ]
 
+[tool.fawltydeps.custom_mapping]
 # Map import names to their package names
-custom_mapping = {PIL = ["pillow"], google = ["google-cloud-storage"]}
+PIL = ["pillow"]
+google = ["google-cloud-storage"]

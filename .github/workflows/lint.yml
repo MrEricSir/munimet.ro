@@ -16,7 +16,14 @@ jobs:
       - name: Install FawltyDeps
         run: pip install fawltydeps
       - name: Check API dependencies
-        run: fawltydeps --detailed
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Files present:"
+          ls -la
+          echo "pyproject.toml contents:"
+          cat pyproject.toml
+          echo "Running fawltydeps..."
+          fawltydeps --detailed
         working-directory: api
 
   fawltydeps-training:
@@ -32,5 +39,12 @@ jobs:
       - name: Install FawltyDeps
         run: pip install fawltydeps
       - name: Check Training dependencies
-        run: fawltydeps --detailed
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Files present:"
+          ls -la
+          echo "pyproject.toml contents:"
+          cat pyproject.toml
+          echo "Running fawltydeps..."
+          fawltydeps --detailed
         working-directory: training
