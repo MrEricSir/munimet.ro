@@ -10,10 +10,12 @@ Usage:
 """
 
 import falcon
+import hashlib
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from whitenoise import WhiteNoise
 
 # Path resolution - get absolute paths relative to project root
 API_DIR = Path(__file__).resolve().parent
@@ -187,32 +189,52 @@ class HealthResource:
 
 
 class StaticResource:
-    """Serve the frontend files."""
+    """Serve the frontend HTML files with proper caching."""
     def __init__(self, filename):
         self.filename = filename
 
     def on_get(self, req, resp):
-        """Handle GET request"""
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'text/html'
-
-        # Return file data
+        """Handle GET request with cache headers"""
         index_path = str(API_DIR / 'html' / self.filename)
         try:
             with open(index_path, 'rb') as f:
-                resp.text = f.read()
+                content = f.read()
+
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'text/html; charset=utf-8'
+            resp.text = content
+
+            # Add cache headers for HTML files (shorter cache than static assets)
+            # Cache for 5 minutes, but allow revalidation
+            resp.set_header('Cache-Control', 'public, max-age=300, must-revalidate')
+
+            # Add ETag based on file content for efficient revalidation
+            etag = hashlib.md5(content).hexdigest()
+            resp.set_header('ETag', f'"{etag}"')
+
         except FileNotFoundError:
             resp.status = falcon.HTTP_404
             resp.text = '<h1>Not found</h1><p>Something\'s missing</p>'
 
 
 # Create Falcon app
-app = falcon.App()
+falcon_app = falcon.App()
 
 # Add routes
-app.add_route('/', StaticResource('index.html'))
-app.add_route('/dashboard', StaticResource('dashboard.html'))
-app.add_route('/about', StaticResource('about.html'))
-app.add_static_route('/static', str(API_DIR / 'html' / 'static'))
-app.add_route('/status', StatusResource())
-app.add_route('/health', HealthResource())
+falcon_app.add_route('/', StaticResource('index.html'))
+falcon_app.add_route('/dashboard', StaticResource('dashboard.html'))
+falcon_app.add_route('/about', StaticResource('about.html'))
+falcon_app.add_route('/status', StatusResource())
+falcon_app.add_route('/health', HealthResource())
+
+# Wrap with WhiteNoise for efficient static file serving with compression and caching
+# WhiteNoise automatically compresses files (gzip/brotli) and adds proper headers
+app = WhiteNoise(
+    falcon_app,
+    root=str(API_DIR / 'html' / 'static'),
+    prefix='/static/',
+    # Cache static files aggressively (1 year)
+    max_age=31536000,  # 1 year in seconds
+    # Add immutable directive for better caching
+    immutable_file_test=lambda path, url: True  # All static files are immutable
+)
