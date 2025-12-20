@@ -7,7 +7,7 @@ Displays images and allows user to enter descriptions.
 import os
 import json
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 from datetime import datetime
 from pathlib import Path
@@ -134,15 +134,23 @@ class ImageLabeler:
         self.image_label = ttk.Label(main_frame)
         self.image_label.grid(row=1, column=0, pady=10)
 
-        # Status frame (moved above description for faster access)
-        status_frame = ttk.LabelFrame(main_frame, text="Overall Status - Keys: 1=Green (Normal), 2=Yellow, 3=Red (Offline), 0=Clear", padding="10")
-        status_frame.grid(row=2, column=0, pady=10, sticky=tk.W)
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=8, column=0, pady=10)
 
-        ttk.Label(status_frame, text="Select overall system status:").grid(row=0, column=0, padx=5)
+        # Column 0: Index
+        index_frame = ttk.LabelFrame(button_frame, text='Index')
+        index_frame.grid(row=0, column=0, rowspan=3, padx=5, pady=5, sticky=tk.W)
 
-        # Radio buttons for status
+        self.jump_entry = ttk.Entry(index_frame, width=10)
+        self.jump_entry.grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+
+        self.jump_button = ttk.Button(index_frame, text="Jump To", command=self.jump_to_index)
+        self.jump_button.grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+
+        # Row 1: Main navigation and save buttons
         self.green_radio = tk.Radiobutton(
-            status_frame,
+            button_frame,
             text="🟢 Green (Normal)",
             variable=self.current_status,
             value="green",
@@ -151,10 +159,11 @@ class ImageLabeler:
             activebackground='#90EE90',
             selectcolor='#90EE90'
         )
-        self.green_radio.grid(row=0, column=1, padx=10)
+        self.green_radio.grid(row=0, column=3, padx=10)
 
+        # Row 2: Yellow and description
         self.yellow_radio = tk.Radiobutton(
-            status_frame,
+            button_frame,
             text="🟡 Yellow (Delays)",
             variable=self.current_status,
             value="yellow",
@@ -163,10 +172,19 @@ class ImageLabeler:
             activebackground='#FFFFE0',
             selectcolor='#FFFFE0'
         )
-        self.yellow_radio.grid(row=0, column=2, padx=10)
+        self.yellow_radio.grid(row=1, column=3, padx=10)
 
+        # Text entry for description
+        self.description_text = tk.Entry(
+            button_frame,
+            width=55,
+            font=('Arial', 10)
+        )
+        self.description_text.grid(row=1, column=4, columnspan=3, pady=5)
+
+        # Row 3: Red button
         self.red_radio = tk.Radiobutton(
-            status_frame,
+            button_frame,
             text="🔴 Red (Issues)",
             variable=self.current_status,
             value="red",
@@ -175,80 +193,51 @@ class ImageLabeler:
             activebackground='#FFB6C6',
             selectcolor='#FFB6C6'
         )
-        self.red_radio.grid(row=0, column=3, padx=10)
+        self.red_radio.grid(row=2, column=3, padx=10)
+
+        # Row 4: Navigation buttons
+        self.prev_unlabeled_button = ttk.Button(button_frame, text="⏮ Previous Unlabeled", command=self.prev_unlabeled)
+        self.prev_unlabeled_button.grid(row=3, column=1, padx=5, pady=5, sticky="E")
+
+        self.prev_button = ttk.Button(button_frame, text="← Previous", command=self.prev_image)
+        self.prev_button.grid(row=3, column=2, padx=5, sticky="E")
 
         self.clear_status_button = ttk.Button(
-            status_frame,
+            button_frame,
             text="Clear Status",
             command=lambda: self.current_status.set("")
         )
-        self.clear_status_button.grid(row=0, column=4, padx=10)
+        self.clear_status_button.grid(row=3, column=3, padx=10)
 
-        # Description frame
-        desc_frame = ttk.LabelFrame(main_frame, text="Image Description - Ctrl+Enter: Save & Next | Ctrl+←/→: Navigate | Ctrl+G: Jump to Index", padding="10")
-        desc_frame.grid(row=3, column=0, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
-        desc_frame.columnconfigure(0, weight=1)
+        self.save_button = ttk.Button(button_frame, text="Next →", command=self.save_and_next, style='Accent.TButton')
+        self.save_button.grid(row=3, column=4, padx=5, sticky="W")
 
-        # Instructions
-        instructions = ttk.Label(
-            desc_frame,
-            text="Enter a description of the subway status (line status, delays, incidents, general overview):",
-            wraplength=800
-        )
-        instructions.grid(row=0, column=0, pady=5, sticky=tk.W)
-
-        # Text area for description
-        self.description_text = scrolledtext.ScrolledText(
-            desc_frame,
-            height=6,
-            width=100,
-            wrap=tk.WORD,
-            font=('Arial', 10)
-        )
-        self.description_text.grid(row=1, column=0, pady=5, sticky=(tk.W, tk.E))
-
-        # Button frame
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=4, column=0, pady=10)
-
-        # Row 1: Main navigation and save buttons
-        self.prev_button = ttk.Button(button_frame, text="← Previous", command=self.prev_image)
-        self.prev_button.grid(row=0, column=0, padx=5)
-
-        self.save_button = ttk.Button(button_frame, text="💾 Save & Next", command=self.save_and_next, style='Accent.TButton')
-        self.save_button.grid(row=0, column=1, padx=5)
-
-        self.next_button = ttk.Button(button_frame, text="Next →", command=self.next_image)
-        self.next_button.grid(row=0, column=2, padx=5)
-
-        self.save_all_button = ttk.Button(button_frame, text="💾 Save All", command=self.save_labels)
-        self.save_all_button.grid(row=0, column=3, padx=20)
-
-        # Row 2: Skip to unlabeled buttons
-        self.prev_unlabeled_button = ttk.Button(button_frame, text="⏮ Previous Unlabeled", command=self.prev_unlabeled)
-        self.prev_unlabeled_button.grid(row=1, column=0, padx=5, pady=5)
+        self.next_button = ttk.Button(button_frame, text="Skip → →", command=self.next_image)
+        self.next_button.grid(row=3, column=5, padx=5, sticky="W")
 
         self.next_unlabeled_button = ttk.Button(button_frame, text="Next Unlabeled ⏭", command=self.next_unlabeled)
-        self.next_unlabeled_button.grid(row=1, column=2, padx=5, pady=5)
+        self.next_unlabeled_button.grid(row=3, column=6, padx=5, pady=5, sticky="W")
 
-        # Delete button
-        self.delete_button = ttk.Button(button_frame, text="🗑️ Delete Image (Del)", command=self.delete_current_image)
-        self.delete_button.grid(row=1, column=3, padx=20, pady=5)
+        # Column 7: Special
+        special_frame = ttk.LabelFrame(button_frame, text='Special')
+        special_frame.grid(row=0, column=7, rowspan=3, padx=5, pady=5, sticky=tk.W)
 
-        # Row 3: Jump to index
-        ttk.Label(button_frame, text="Jump to Index:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.E)
+        self.save_all_button = ttk.Button(special_frame, text="💾 Save All", command=self.save_labels)
+        self.save_all_button.grid(row=0, column=0, padx=20)
 
-        self.jump_entry = ttk.Entry(button_frame, width=10)
-        self.jump_entry.grid(row=2, column=1, padx=5, pady=5)
-
-        self.jump_button = ttk.Button(button_frame, text="Go (Ctrl+G)", command=self.jump_to_index)
-        self.jump_button.grid(row=2, column=2, padx=5, pady=5)
-
-        ttk.Label(button_frame, text="(0-based indexing)", foreground="gray", font=('Arial', 9)).grid(row=2, column=3, padx=5, pady=5, sticky=tk.W)
+        # Delete image
+        self.delete_button = ttk.Button(special_frame, text="🗑️ Delete Image", command=self.delete_current_image)
+        self.delete_button.grid(row=1, column=0, padx=20, pady=5)
 
         # Status bar
         self.status_label = ttk.Label(main_frame, text="", foreground="gray")
         self.status_label.grid(row=5, column=0, pady=5)
+
+        # Keyboard shortcuts
+        keyboard_1 = ttk.Label(main_frame, text="Save & Next: Ctrl+Enter | Prev or Skip: Ctrl+←/→ | Jump to Index: Ctrl+G")
+        keyboard_1.grid(row=6, column=0, pady=5)
+        keyboard_2 = ttk.Label(main_frame, text="Green: 1 | Yellow: 2 | Red: 3 | Clear: 0")
+        keyboard_2.grid(row=7, column=0, pady=5)
 
         # Keyboard shortcuts - bind to root for global access
         self.root.bind('<Control-s>', lambda e: self.save_and_next())
@@ -286,17 +275,17 @@ class ImageLabeler:
 
     def on_status_change(self, *args):
         """Called when status changes - auto-populate text for green/red if empty."""
-        current_text = self.description_text.get('1.0', tk.END).strip()
+        current_text = self.description_text.get().strip()
         new_status = self.current_status.get()
 
         # Only auto-populate if text box is empty
         if not current_text:
             if new_status == "green":
-                self.description_text.delete('1.0', tk.END)
-                self.description_text.insert('1.0', "Normal")
+                self.description_text.delete(0, tk.END)
+                self.description_text.insert(0, "Normal")
             elif new_status == "red":
-                self.description_text.delete('1.0', tk.END)
-                self.description_text.insert('1.0', "Offline")
+                self.description_text.delete(0, tk.END)
+                self.description_text.insert(0, "Offline")
 
     def display_image(self):
         """Display the current image and its label if exists."""
@@ -306,9 +295,9 @@ class ImageLabeler:
         image_path = self.image_files[self.current_index]
 
         # Update progress (count fully labeled images)
-        labeled_count = sum(1 for f in self.image_files if self.is_fully_labeled(f))
+        unlabeled_count = len(self.image_files) - sum(1 for f in self.image_files if self.is_fully_labeled(f))
         self.progress_label.config(
-            text=f"Image {self.current_index + 1} of {len(self.image_files)} | {labeled_count} fully labeled"
+            text=f"Image {self.current_index + 1} of {len(self.image_files)} | {unlabeled_count} unlabeled"
         )
 
         # Load and display image
@@ -327,8 +316,8 @@ class ImageLabeler:
                 description = self.labels[image_path].get('description', '')
                 status = self.labels[image_path].get('status', '')
 
-                self.description_text.delete('1.0', tk.END)
-                self.description_text.insert('1.0', description)
+                self.description_text.delete(0, tk.END)
+                self.description_text.insert(0, description)
                 self.current_status.set(status)
 
                 # Check if fully labeled (has both description and status)
@@ -348,7 +337,7 @@ class ImageLabeler:
                 else:
                     self.status_label.config(text="⚠ Not yet labeled", foreground="orange")
             else:
-                self.description_text.delete('1.0', tk.END)
+                self.description_text.delete(0, tk.END)
                 self.current_status.set("")
                 self.status_label.config(text="⚠ Not yet labeled", foreground="orange")
 
@@ -368,6 +357,9 @@ class ImageLabeler:
             self.next_unlabeled_button.config(state=tk.NORMAL if has_unlabeled_after else tk.DISABLED)
             self.prev_unlabeled_button.config(state=tk.NORMAL if has_unlabeled_before else tk.DISABLED)
 
+            # Update jump index
+            self.set_index(self.current_index)
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load image: {e}")
 
@@ -377,7 +369,7 @@ class ImageLabeler:
             return False
 
         image_path = self.image_files[self.current_index]
-        description = self.description_text.get('1.0', tk.END).strip()
+        description = self.description_text.get().strip()
         status = self.current_status.get()
 
         if not description and not status:
@@ -450,10 +442,15 @@ class ImageLabeler:
             self.status_label.config(text=f"Jumped to index {index}", foreground="blue")
 
             # Clear the entry field
-            self.jump_entry.delete(0, tk.END)
+            self.set_index(index)
 
         except ValueError:
             messagebox.showerror("Invalid Input", "Please enter a valid number.")
+
+    def set_index(self, index):
+        """Set the index entry to a numerical value."""
+        self.jump_entry.delete(0, tk.END)
+        self.jump_entry.insert(0, str(index))
 
     def next_unlabeled(self):
         """Skip to next unlabeled image (missing description and/or status)."""
@@ -555,6 +552,10 @@ def main():
     x = (root.winfo_screenwidth() // 2) - (width // 2)
     y = (root.winfo_screenheight() // 2) - (height // 2)
     root.geometry(f'{width}x{height}+{x}+{y}')
+
+    # Hack: Make window appear on top
+    root.overrideredirect(True)
+    root.overrideredirect(False)
 
     root.mainloop()
 

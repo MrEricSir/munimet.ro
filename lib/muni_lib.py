@@ -17,7 +17,6 @@ from pathlib import Path
 from PIL import Image
 
 # Lazy imports for ML dependencies (only needed for prediction)
-# Lazy imports for Selenium (only needed for download)
 # These are imported inside functions to avoid cross-environment dependencies
 
 
@@ -164,7 +163,7 @@ def _get_classifier_class():
 
 def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True):
     """
-    Download a single Muni subway status image directly (no Selenium needed).
+    Download a single Muni subway status image.
 
     The SF Muni Central page uses JavaScript to update the image every 5 seconds,
     but we can access the actual image URL directly.
