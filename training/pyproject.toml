@@ -1,0 +1,15 @@
+[tool.fawltydeps]
+# FawltyDeps configuration for MuniMetro Training
+# This checks training-specific dependencies
+
+# Map import names to their package names
+[tool.fawltydeps.custom_mapping]
+PIL = ["pillow"]
+
+# Code to analyze (training code + shared lib)
+[tool.fawltydeps.code]
+include = [".", "../lib"]
+
+# Dependencies file
+[tool.fawltydeps.deps]
+include = ["requirements.txt"]
