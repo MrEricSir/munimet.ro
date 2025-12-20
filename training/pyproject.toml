@@ -2,14 +2,18 @@
 # FawltyDeps configuration for MuniMetro Training
 # This checks training-specific dependencies
 
+# Code to analyze (training code + shared lib)
+code = [".", "../lib"]
+
+# Dependencies file
+deps = ["requirements.txt"]
+
+# Ignore imports that aren't in requirements.txt (local modules)
+ignore_undeclared = [
+    "lib",     # Local shared library (../lib/muni_lib.py)
+    "google",  # google-cloud-storage only needed for API deployment
+]
+
 # Map import names to their package names
 [tool.fawltydeps.custom_mapping]
 PIL = ["pillow"]
-
-# Code to analyze (training code + shared lib)
-[tool.fawltydeps.code]
-include = [".", "../lib"]
-
-# Dependencies file
-[tool.fawltydeps.deps]
-include = ["requirements.txt"]

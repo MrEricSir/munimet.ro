@@ -12,8 +12,8 @@ pillow>=10.0.0
 
 # ML training dependencies
 # PyTorch with CUDA support - use --index-url https://download.pytorch.org/whl/cu124
+# Note: torchvision not needed (removed to reduce install size)
 torch>=2.0.0
-torchvision>=0.15.0
 transformers>=4.30.0
 numpy>=1.24.0
 tqdm>=4.65.0

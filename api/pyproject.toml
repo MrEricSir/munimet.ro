@@ -2,20 +2,24 @@
 # FawltyDeps configuration for MuniMetro API
 # This checks API-specific dependencies for deployment
 
-# Map import names to their package names
-[tool.fawltydeps.custom_mapping]
-PIL = ["pillow"]
-google = ["google-cloud-storage"]
+# Code to analyze (API code + shared lib)
+code = [".", "../lib"]
+
+# Dependencies file
+deps = ["requirements.txt"]
 
 # Ignore dependencies that are used but not imported
 ignore_unused = [
     "gunicorn",  # WSGI server, invoked as CLI tool
+    "numpy",     # Imported lazily inside lib functions
 ]
 
-# Code to analyze (API code + shared lib)
-[tool.fawltydeps.code]
-include = [".", "../lib"]
+# Ignore imports that aren't in requirements.txt (local modules)
+ignore_undeclared = [
+    "lib",  # Local shared library (../lib/muni_lib.py)
+]
 
-# Dependencies file
-[tool.fawltydeps.deps]
-include = ["requirements.txt"]
+# Map import names to their package names
+[tool.fawltydeps.custom_mapping]
+PIL = ["pillow"]
+google = ["google-cloud-storage"]

@@ -76,17 +76,20 @@ The API and training subprojects have:
 ### API (`api/pyproject.toml`)
 
 Key features:
-- Maps `PIL` to `pillow` package
-- Maps `google` to `google-cloud-storage` package
-- Ignores `gunicorn` (WSGI server, not imported)
+- Maps `PIL` to `pillow` package (custom_mapping)
+- Maps `google` to `google-cloud-storage` package (custom_mapping)
+- Ignores `gunicorn` as unused (CLI tool, not imported)
+- Ignores `numpy` as unused (lazy import in lib functions)
+- Ignores `lib` as undeclared (local module, not a package)
 - Includes shared `lib/` directory
 
 ### Training (`training/pyproject.toml`)
 
 Key features:
-- Maps `PIL` to `pillow` package
+- Maps `PIL` to `pillow` package (custom_mapping)
+- Ignores `lib` as undeclared (local module, not a package)
+- Ignores `google` as undeclared (only needed for API deployment)
 - Includes shared `lib/` directory
-- No special ignores (all packages should be imported)
 
 ## CI/CD Integration
 
@@ -116,11 +119,23 @@ The GitHub Actions workflow should check both:
 
 ### False Positive: "gunicorn unused"
 
-**Solution**: Already ignored in API config (it's a CLI tool)
+**Solution**: Already ignored in API config via `ignore_unused` (it's a CLI tool)
 
-### True Positive: "torchvision unused" (API only)
+### False Positive: "numpy unused"
 
-**Solution**: Removed from `api/requirements.txt` (only needed for training)
+**Solution**: Already ignored in API config via `ignore_unused` (imported lazily inside lib functions)
+
+### False Positive: "lib undeclared"
+
+**Solution**: Already ignored in both configs via `ignore_undeclared` (it's a local module, not a package)
+
+### False Positive: "google undeclared" (Training only)
+
+**Solution**: Already ignored in training config via `ignore_undeclared` (google-cloud-storage only needed for API)
+
+### True Positive: "torchvision unused"
+
+**Solution**: Removed from both `api/requirements.txt` and `training/requirements.txt` (not actually used)
 
 ## Benefits
 

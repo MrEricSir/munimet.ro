@@ -13,7 +13,7 @@ jobs:
         uses: tweag/FawltyDeps-action@v0.2.0
         with:
           # Run fawltydeps in the api/ directory
-          options: --detailed --base-dir=api
+          working-directory: api
 
   fawltydeps-training:
     name: FawltyDeps (Training)
@@ -25,4 +25,4 @@ jobs:
         uses: tweag/FawltyDeps-action@v0.2.0
         with:
           # Run fawltydeps in the training/ directory
-          options: --detailed --base-dir=training
+          working-directory: training
