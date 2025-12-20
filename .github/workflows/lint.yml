@@ -6,17 +6,18 @@ jobs:
   fawltydeps-api:
     name: FawltyDeps (API)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./api
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install FawltyDeps
+        run: pip install fawltydeps
       - name: Check API dependencies
-        uses: tweag/FawltyDeps-action@v0.2.0
-#        with:
-#          # Run fawltydeps in the api/ directory
-#          working-directory: api
+        run: fawltydeps --detailed
+        working-directory: api
 
   fawltydeps-training:
     name: FawltyDeps (Training)
@@ -24,8 +25,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Check Training dependencies
-        uses: tweag/FawltyDeps-action@v0.2.0
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          # Run fawltydeps in the training/ directory
-          working-directory: training
+          python-version: '3.11'
+      - name: Install FawltyDeps
+        run: pip install fawltydeps
+      - name: Check Training dependencies
+        run: fawltydeps --detailed
+        working-directory: training

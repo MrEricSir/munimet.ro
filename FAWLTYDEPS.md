@@ -93,19 +93,19 @@ Key features:
 
 ## CI/CD Integration
 
-The GitHub Actions workflow should check both:
+The GitHub Actions workflow runs FawltyDeps in each subdirectory:
 
 ```yaml
 - name: Check API dependencies
-  run: |
-    cd api
-    fawltydeps
+  run: fawltydeps --detailed
+  working-directory: api
 
 - name: Check Training dependencies
-  run: |
-    cd training
-    fawltydeps
+  run: fawltydeps --detailed
+  working-directory: training
 ```
+
+**Important**: Use step-level `working-directory`, not `--base-dir` flag. The `--base-dir` flag doesn't limit code scanning to that directory.
 
 ## Common Issues
 
