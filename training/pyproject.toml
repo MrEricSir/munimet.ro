@@ -15,5 +15,4 @@ ignore_undeclared = [
 ]
 
 # Map import names to their package names
-[tool.fawltydeps.custom_mapping]
-PIL = ["pillow"]
+custom_mapping = {PIL = ["pillow"]}

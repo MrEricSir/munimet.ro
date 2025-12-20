@@ -20,6 +20,4 @@ ignore_undeclared = [
 ]
 
 # Map import names to their package names
-[tool.fawltydeps.custom_mapping]
-PIL = ["pillow"]
-google = ["google-cloud-storage"]
+custom_mapping = {PIL = ["pillow"], google = ["google-cloud-storage"]}
