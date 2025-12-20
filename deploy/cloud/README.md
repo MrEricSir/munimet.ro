@@ -324,6 +324,10 @@ python3 -m api.check_status_job
 ```
 
 ### Rollback
+
+See [ROLLBACk.md](ROLLBACK.md) for how to run a rollback via the script or manually.
+
+Quick guide:
 ```bash
 # List revisions
 gcloud run revisions list --service API_SERVICE_NAME --region REGION
