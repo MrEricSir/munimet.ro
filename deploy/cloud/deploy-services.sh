@@ -36,17 +36,29 @@ cd "$(dirname "$0")/../.."
 echo "[1/4] Preparing model files for upload..."
 MODEL_DIR="artifacts/models/v1"
 
-# Check if files are git-annex symlinks
-if [ -L "$MODEL_DIR/status_classifier.pt" ]; then
-    echo "  Model files are git-annex symlinks, unlocking for build..."
+# Check if files are git-annex symlinks or pointer files
+MODEL_FILE="$MODEL_DIR/model.safetensors"
+if [ -L "$MODEL_FILE" ] || ([ -f "$MODEL_FILE" ] && [ $(wc -c < "$MODEL_FILE") -lt 1000 ]); then
+    echo "  Model files are git-annex managed, unlocking for build..."
 
     # Ensure files are present locally
+    echo "  Getting model files from git-annex..."
     git annex get "$MODEL_DIR/" 2>/dev/null || true
 
-    # Unlock files (converts symlinks to actual files)
+    # Unlock files (converts symlinks/pointers to actual files)
+    echo "  Unlocking model files..."
     git annex unlock "$MODEL_DIR/"* 2>/dev/null || {
         echo "  Warning: git annex unlock failed, files may already be unlocked"
     }
+
+    # Verify the file is now the actual model (should be ~856MB)
+    ACTUAL_SIZE=$(wc -c < "$MODEL_FILE" 2>/dev/null || echo "0")
+    if [ "$ACTUAL_SIZE" -lt 100000000 ]; then
+        echo "  ERROR: Model file is still too small ($ACTUAL_SIZE bytes)"
+        echo "  Expected ~856MB. Git-annex may not have the file."
+        exit 1
+    fi
+    echo "  ✓ Model file size: $(numfmt --to=iec --suffix=B $ACTUAL_SIZE 2>/dev/null || echo "$ACTUAL_SIZE bytes")"
 
     NEED_RELOCK=true
 else

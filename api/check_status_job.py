@@ -19,11 +19,19 @@ def main():
     """Run status check and write to cache."""
     try:
         print("Starting MuniMetro status check...")
-        check_status(should_write_cache=True)
-        print("\n✓ Status check completed successfully")
-        sys.exit(0)
+        print("-" * 60)
+        success = check_status(should_write_cache=True)
+
+        if success:
+            print("\n✓ Status check completed successfully")
+            sys.exit(0)
+        else:
+            print("\n❌ Status check failed - see logs above for details", file=sys.stderr)
+            sys.exit(1)
     except Exception as e:
         print(f"\n❌ Error during status check: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
