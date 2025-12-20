@@ -326,7 +326,7 @@ class ImageLabeler:
 
                 if has_description and has_status:
                     self.status_label.config(
-                        text=f"✓ Fully labeled (last updated: {self.labels[image_path].get('labeled_at', 'unknown')})",
+                        text=f"✓ Labeled (last updated: {self.labels[image_path].get('labeled_at', 'unknown')})",
                         foreground="green"
                     )
                 elif has_description or has_status:
