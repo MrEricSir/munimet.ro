@@ -6,14 +6,17 @@ jobs:
   fawltydeps-api:
     name: FawltyDeps (API)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./api
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Check API dependencies
         uses: tweag/FawltyDeps-action@v0.2.0
-        with:
-          # Run fawltydeps in the api/ directory
-          working-directory: api
+#        with:
+#          # Run fawltydeps in the api/ directory
+#          working-directory: api
 
   fawltydeps-training:
     name: FawltyDeps (Training)
