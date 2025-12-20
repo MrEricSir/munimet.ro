@@ -23,6 +23,7 @@ muni_ml_venv/
 *.swo
 *~
 .DS_Store
+__MACOSX/
 
 # Generated artifacts - runtime data (not version controlled)
 artifacts/runtime/
