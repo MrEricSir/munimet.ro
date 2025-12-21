@@ -53,46 +53,42 @@ try {
     exit 1
 }
 
-switch ($Command.ToLower()) {
-    "upload" {
-        Write-Host "Uploading training data to GCS..."
-        Write-Host ""
-        $args = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
-        & gsutil $args
-        Write-Host ""
-        Write-Host "✓ Training data uploaded to $BUCKET/training_data" -ForegroundColor Green
-    }
-
-    "download" {
-        Write-Host "Downloading training data from GCS (~270MB)..."
-        Write-Host ""
-        New-Item -ItemType Directory -Force -Path "artifacts/training_data" | Out-Null
-        $args = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
-        & gsutil $args
-        Write-Host ""
-        Write-Host "✓ Training data downloaded to artifacts/training_data" -ForegroundColor Green
-    }
-
-    "both" {
-        Write-Host "Syncing training data bidirectionally..."
-        Write-Host ""
-        $args1 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
-        & gsutil $args1
-        $args2 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
-        & gsutil $args2
-        Write-Host ""
-        Write-Host "✓ Training data synced" -ForegroundColor Green
-    }
-
-    default {
-        Write-Host "Error: Unknown command '$Command'" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "Usage:"
-        Write-Host "  .\scripts\sync-training-data.ps1 upload    # Upload local changes to GCS"
-        Write-Host "  .\scripts\sync-training-data.ps1 download  # Download changes from GCS"
-        Write-Host "  .\scripts\sync-training-data.ps1 both      # Sync both directions"
-        exit 1
-    }
+$cmd = $Command.ToLower()
+if ($cmd -eq "upload") {
+    Write-Host "Uploading training data to GCS..."
+    Write-Host ""
+    $gsutilArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
+    & gsutil $gsutilArgs
+    Write-Host ""
+    Write-Host "OK Training data uploaded to $BUCKET/training_data" -ForegroundColor Green
+}
+elseif ($cmd -eq "download") {
+    Write-Host "Downloading training data from GCS (~270MB)..."
+    Write-Host ""
+    New-Item -ItemType Directory -Force -Path "artifacts/training_data" | Out-Null
+    $gsutilArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
+    & gsutil $gsutilArgs
+    Write-Host ""
+    Write-Host "OK Training data downloaded to artifacts/training_data" -ForegroundColor Green
+}
+elseif ($cmd -eq "both") {
+    Write-Host "Syncing training data bidirectionally..."
+    Write-Host ""
+    $uploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
+    & gsutil $uploadArgs
+    $downloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
+    & gsutil $downloadArgs
+    Write-Host ""
+    Write-Host "OK Training data synced" -ForegroundColor Green
+}
+else {
+    Write-Host "Error: Unknown command '$Command'" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Usage:"
+    Write-Host "  .\scripts\sync-training-data.ps1 upload    # Upload local changes to GCS"
+    Write-Host "  .\scripts\sync-training-data.ps1 download  # Download changes from GCS"
+    Write-Host "  .\scripts\sync-training-data.ps1 both      # Sync both directions"
+    exit 1
 }
 
 Write-Host ""
