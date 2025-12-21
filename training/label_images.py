@@ -15,6 +15,7 @@ from pathlib import Path
 # Configuration
 IMAGE_FOLDER = "../artifacts/training_data/images"
 LABELS_FILE = "../artifacts/training_data/labels.json"
+OUTLIER_REPORT_FILE = "../artifacts/models/v1/outlier_report.json"
 MAX_IMAGE_WIDTH = 1200
 MAX_IMAGE_HEIGHT = 800
 
@@ -26,15 +27,21 @@ class ImageLabeler:
 
         # Data
         self.image_files = []
+        self.all_image_files = []  # Store all images for switching modes
         self.current_index = 0
         self.labels = {}
         self.current_status = tk.StringVar(value="")  # Track selected status
+        self.current_mode = "all"  # "all" or "outliers"
+        self.outlier_data = {}  # Map image_path -> outlier info
 
         # Set up status change callback
         self.current_status.trace_add('write', self.on_status_change)
 
         # Load existing labels
         self.load_labels()
+
+        # Load outlier report
+        self.load_outlier_report()
 
         # Load image files
         self.load_image_files()
@@ -63,6 +70,41 @@ class ImageLabeler:
                 self.labels = {}
         else:
             self.labels = {}
+
+    def load_outlier_report(self):
+        """Load outlier report from JSON file (read-only)."""
+        if not os.path.exists(OUTLIER_REPORT_FILE):
+            print(f"No outlier report found at {OUTLIER_REPORT_FILE}")
+            return
+
+        try:
+            with open(OUTLIER_REPORT_FILE, 'r') as f:
+                report = json.load(f)
+
+            # Process all outlier categories
+            for item in report.get('misclassified', []):
+                self.outlier_data[item['image_path']] = {
+                    'type': 'misclassified',
+                    'explanation': f"Predicted {item['predicted_status']} but should be {item['true_status']} (confidence: {item['confidence']*100:.1f}%)"
+                }
+
+            for item in report.get('low_confidence', []):
+                status_emoji = {'green': '🟢', 'yellow': '🟡', 'red': '🔴'}.get(item['true_status'], '')
+                self.outlier_data[item['image_path']] = {
+                    'type': 'low_confidence',
+                    'explanation': f"Correctly predicted {status_emoji} {item['true_status']} but with low confidence ({item['confidence']*100:.1f}%)"
+                }
+
+            for item in report.get('high_confidence_errors', []):
+                self.outlier_data[item['image_path']] = {
+                    'type': 'high_confidence_error',
+                    'explanation': f"High confidence error: predicted {item['predicted_status']} instead of {item['true_status']} ({item['confidence']*100:.1f}%)"
+                }
+
+            print(f"Loaded {len(self.outlier_data)} outliers from report")
+        except Exception as e:
+            print(f"Error loading outlier report: {e}")
+            self.outlier_data = {}
 
     def save_labels(self):
         """Save labels to JSON file."""
@@ -97,22 +139,35 @@ class ImageLabeler:
         return has_description and has_status
 
     def load_image_files(self):
-        """Load all image files from the folder."""
+        """Load image files based on current mode."""
         if not os.path.exists(IMAGE_FOLDER):
             return
 
-        # Get all jpg files
+        # Get all jpg files (both .jpg and .JPG)
         image_dir = Path(IMAGE_FOLDER)
-        self.image_files = sorted([
-            str(f) for f in image_dir.glob("*.jpg")
+        jpg_files = list(image_dir.glob("*.jpg"))
+        JPG_files = list(image_dir.glob("*.JPG"))
+        all_files = sorted([
+            str(f) for f in jpg_files + JPG_files
         ])
 
-        fully_labeled = sum(1 for img in self.image_files if self.is_fully_labeled(img))
-        partially_labeled = sum(1 for img in self.image_files if img in self.labels and not self.is_fully_labeled(img))
-        print(f"Found {len(self.image_files)} total images")
-        print(f"Fully labeled: {fully_labeled}")
-        print(f"Partially labeled: {partially_labeled}")
-        print(f"Not labeled: {len(self.image_files) - fully_labeled - partially_labeled}")
+        # Store all images for mode switching
+        self.all_image_files = all_files
+
+        # Filter based on mode
+        if self.current_mode == "outliers":
+            # Only show images that are in the outlier report
+            self.image_files = [f for f in all_files if f in self.outlier_data]
+            print(f"Found {len(self.image_files)} outlier images")
+        else:
+            # Show all images
+            self.image_files = all_files
+            fully_labeled = sum(1 for img in self.image_files if self.is_fully_labeled(img))
+            partially_labeled = sum(1 for img in self.image_files if img in self.labels and not self.is_fully_labeled(img))
+            print(f"Found {len(self.image_files)} total images")
+            print(f"Fully labeled: {fully_labeled}")
+            print(f"Partially labeled: {partially_labeled}")
+            print(f"Not labeled: {len(self.image_files) - fully_labeled - partially_labeled}")
 
     def setup_ui(self):
         """Setup the user interface."""
@@ -124,15 +179,46 @@ class ImageLabeler:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(2, weight=1)
+
+        # Mode tabs
+        tab_frame = ttk.Frame(main_frame)
+        tab_frame.grid(row=0, column=0, pady=5, sticky=tk.W)
+
+        self.all_tab_button = ttk.Button(
+            tab_frame,
+            text="All Images",
+            command=lambda: self.switch_mode("all"),
+            style='Accent.TButton' if self.current_mode == "all" else 'TButton'
+        )
+        self.all_tab_button.grid(row=0, column=0, padx=5)
+
+        self.outliers_tab_button = ttk.Button(
+            tab_frame,
+            text="Outliers",
+            command=lambda: self.switch_mode("outliers")
+        )
+        self.outliers_tab_button.grid(row=0, column=1, padx=5)
 
         # Progress label
         self.progress_label = ttk.Label(main_frame, text="", font=('Arial', 12, 'bold'))
-        self.progress_label.grid(row=0, column=0, pady=5, sticky=tk.W)
+        self.progress_label.grid(row=1, column=0, pady=5, sticky=tk.W)
 
         # Image display
         self.image_label = ttk.Label(main_frame)
-        self.image_label.grid(row=1, column=0, pady=10)
+        self.image_label.grid(row=2, column=0, pady=10)
+
+        # Outlier explanation (only visible in outliers mode)
+        self.outlier_frame = ttk.LabelFrame(main_frame, text='Outlier Details', labelanchor='w', padding="5")
+        self.outlier_frame.grid(row=3, column=0, pady=5)
+        self.outlier_frame.grid_remove()  # Hidden by default
+
+        self.outlier_explanation = ttk.Label(
+            self.outlier_frame,
+            text="",
+            wraplength=1200  # Allow wrapping but keep it to one line visually
+        )
+        self.outlier_explanation.pack(fill=tk.X, expand=True)
 
         # Button frame
         button_frame = ttk.Frame(main_frame)
@@ -231,13 +317,13 @@ class ImageLabeler:
 
         # Status bar
         self.status_label = ttk.Label(main_frame, text="", foreground="gray")
-        self.status_label.grid(row=5, column=0, pady=5)
+        self.status_label.grid(row=9, column=0, pady=5)
 
         # Keyboard shortcuts
         keyboard_1 = ttk.Label(main_frame, text="Save & Next: Ctrl+Enter | Prev or Skip: Ctrl+←/→ | Jump to Index: Ctrl+G")
-        keyboard_1.grid(row=6, column=0, pady=5)
+        keyboard_1.grid(row=10, column=0, pady=5)
         keyboard_2 = ttk.Label(main_frame, text="Green: 1 | Yellow: 2 | Red: 3 | Clear: 0")
-        keyboard_2.grid(row=7, column=0, pady=5)
+        keyboard_2.grid(row=11, column=0, pady=5)
 
         # Keyboard shortcuts - bind to root for global access
         self.root.bind('<Control-s>', lambda e: self.save_and_next())
@@ -310,6 +396,14 @@ class ImageLabeler:
             photo = ImageTk.PhotoImage(img)
             self.image_label.config(image=photo)
             self.image_label.image = photo  # Keep a reference
+
+            # Show/hide outlier explanation based on mode
+            if self.current_mode == "outliers" and image_path in self.outlier_data:
+                self.outlier_frame.grid()
+                outlier_info = self.outlier_data[image_path]
+                self.outlier_explanation.config(text=outlier_info['explanation'])
+            else:
+                self.outlier_frame.grid_remove()
 
             # Load existing description and status if available
             if image_path in self.labels:
@@ -536,6 +630,35 @@ class ImageLabeler:
 
         except Exception as e:
             messagebox.showerror("Delete Error", f"Failed to delete image: {e}")
+
+    def switch_mode(self, mode):
+        """Switch between 'all' and 'outliers' modes."""
+        if mode == self.current_mode:
+            return  # Already in this mode
+
+        self.current_mode = mode
+
+        # Update button styles
+        if mode == "all":
+            self.all_tab_button.configure(style='Accent.TButton')
+            self.outliers_tab_button.configure(style='TButton')
+        else:
+            self.all_tab_button.configure(style='TButton')
+            self.outliers_tab_button.configure(style='Accent.TButton')
+
+        # Reload image files for the new mode
+        self.load_image_files()
+
+        # Reset to first image
+        self.current_index = 0
+        if self.image_files:
+            self.jump_to_first_unlabeled()
+            self.display_image()
+        else:
+            if mode == "outliers":
+                messagebox.showinfo("No Outliers", "No outlier images found. Make sure the outlier report exists.")
+            else:
+                messagebox.showinfo("No Images", f"No images found in {IMAGE_FOLDER}")
 
 
 def main():
