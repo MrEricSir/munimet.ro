@@ -10,13 +10,17 @@ deps = ["requirements.txt"]
 
 # Ignore dependencies that are used but not imported
 ignore_unused = [
-    "gunicorn",  # WSGI server, invoked as CLI tool
-    "numpy",     # Imported lazily inside lib functions
+    "gunicorn",             # WSGI server, invoked as CLI tool
+    "numpy",                # Imported lazily inside lib functions
+    "pillow",               # Imported as PIL
+    "google-cloud-storage", # Imported as google
 ]
 
 # Ignore imports that aren't in requirements.txt (local modules)
 ignore_undeclared = [
-    "lib",  # Local shared library (../lib/muni_lib.py)
+    "lib",     # Local shared library (../lib/muni_lib.py)
+    "PIL",     # Import name for pillow package
+    "google",  # Import name for google-cloud-storage package
 ]
 
 # Custom mapping file for import name to package name mappings

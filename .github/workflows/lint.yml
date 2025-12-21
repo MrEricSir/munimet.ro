@@ -16,9 +16,7 @@ jobs:
       - name: Install FawltyDeps
         run: pip install fawltydeps
       - name: Check API dependencies
-        run: |
-          fawltydeps --detailed \
-            --custom-mapping-file .fawltydeps_custom_mapping.toml
+        run: fawltydeps --detailed
         working-directory: api
 
   fawltydeps-training:
