@@ -71,6 +71,27 @@
       "image_size": 121470
     },
     {
+      "image_path": "../artifacts/training_data/images/IMG_9857.JPG",
+      "description": "Normal",
+      "status": "green",
+      "labeled_at": "2025-12-20T19:17:55.945782",
+      "image_size": 100278
+    },
+    {
+      "image_path": "../artifacts/training_data/images/IMG_9858.JPG",
+      "description": "Normal",
+      "status": "green",
+      "labeled_at": "2025-12-20T19:18:00.728872",
+      "image_size": 103151
+    },
+    {
+      "image_path": "../artifacts/training_data/images/IMG_9859.JPG",
+      "description": "Normal",
+      "status": "green",
+      "labeled_at": "2025-12-20T19:18:15.178778",
+      "image_size": 102502
+    },
+    {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_134756.jpg",
       "description": "Normal",
       "status": "green",
@@ -24844,6 +24865,6 @@
       "image_size": 92655
     }
   ],
-  "total_images": 3549,
-  "last_updated": "2025-12-20T01:31:03.000800"
+  "total_images": 3552,
+  "last_updated": "2025-12-20T19:18:15.179139"
 }
