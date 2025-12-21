@@ -14,6 +14,5 @@ ignore_undeclared = [
     "google",  # google-cloud-storage only needed for API deployment
 ]
 
-[tool.fawltydeps.custom_mapping]
-# Map import names to their package names
-PIL = ["pillow"]
+# Custom mapping file for import name to package name mappings
+custom_mapping_file = [".fawltydeps_custom_mapping.toml"]

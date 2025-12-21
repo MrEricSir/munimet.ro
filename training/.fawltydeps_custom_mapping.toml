@@ -1,0 +1,2 @@
+[tool.fawltydeps.custom_mapping]
+PIL = ["pillow"]
