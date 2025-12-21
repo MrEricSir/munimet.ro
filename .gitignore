@@ -28,9 +28,9 @@ __MACOSX/
 # Generated artifacts - runtime data (not version controlled)
 artifacts/runtime/
 
-# NOTE: artifacts/ contains git-annex symlinks which SHOULD be tracked by git
-# The .gitattributes file controls which files are annexed vs regular git
-# DO NOT add artifacts/training_data/images/* or artifacts/models/* to gitignore
+# Training data and models (managed via GCS - use sync scripts)
+artifacts/training_data/
+artifacts/models/
 
 # Logs
 *.log
