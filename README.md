@@ -1,5 +1,7 @@
 # Muni Metro Subway Status
 
+[![lint](https://github.com/MrEricSir/munimet.ro/actions/workflows/lint.yml/badge.svg)](https://github.com/MrEricSir/munimet.ro/actions/workflows/lint.yml)
+
 Real-time monitoring of San Francisco's Muni Metro subway using computer vision to classify status from internal SFMTA status images.
 
 URL: https://munimet.ro
