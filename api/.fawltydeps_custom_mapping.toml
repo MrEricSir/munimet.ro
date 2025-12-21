@@ -1,3 +1,2 @@
-[tool.fawltydeps.custom_mapping]
 PIL = ["pillow"]
 google = ["google-cloud-storage"]
