@@ -137,7 +137,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_135850.jpg",
       "description": "Eastbound delay from Forest Hill to Church",
       "status": "yellow",
-      "labeled_at": "2025-12-14T09:16:25.758596",
+      "labeled_at": "2025-12-20T19:57:23.478059",
       "image_size": 113098
     },
     {
@@ -340,7 +340,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_141813.jpg",
       "description": "Eastbound delay from Powell to Montgomery",
       "status": "yellow",
-      "labeled_at": "2025-12-13T18:16:31.184053",
+      "labeled_at": "2025-12-20T19:57:27.743793",
       "image_size": 120983
     },
     {
@@ -984,7 +984,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_152106.jpg",
       "description": "Westbound delay at Embarcadero",
       "status": "yellow",
-      "labeled_at": "2025-12-13T18:27:00.231963",
+      "labeled_at": "2025-12-20T19:58:05.244260",
       "image_size": 112994
     },
     {
@@ -1831,7 +1831,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_164156.jpg",
       "description": "Westbound delay at Montgomery",
       "status": "yellow",
-      "labeled_at": "2025-12-13T21:13:31.106498",
+      "labeled_at": "2025-12-20T19:58:22.759757",
       "image_size": 111272
     },
     {
@@ -4351,7 +4351,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_204357.jpg",
       "description": "Eastbound delay at Church",
       "status": "yellow",
-      "labeled_at": "2025-12-13T22:04:14.116345",
+      "labeled_at": "2025-12-20T19:58:31.810291",
       "image_size": 106320
     },
     {
@@ -4386,7 +4386,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_204717.jpg",
       "description": "Eastbound delay at Van Ness",
       "status": "yellow",
-      "labeled_at": "2025-12-06T20:51:55.059124",
+      "labeled_at": "2025-12-20T19:58:42.027142",
       "image_size": 107734
     },
     {
@@ -6108,7 +6108,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_233155.jpg",
       "description": "Normal",
       "status": "green",
-      "labeled_at": "2025-12-06T23:37:12.485426",
+      "labeled_at": "2025-12-20T19:58:48.560619",
       "image_size": 99937
     },
     {
@@ -9426,7 +9426,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251207_092107.jpg",
       "description": "Eastbound delay from Civic Center to Powell",
       "status": "yellow",
-      "labeled_at": "2025-12-13T23:20:57.878320",
+      "labeled_at": "2025-12-20T19:58:59.727078",
       "image_size": 112397
     },
     {
@@ -10259,14 +10259,14 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251207_104040.jpg",
       "description": "Eastbound delay at Embarcadero",
       "status": "yellow",
-      "labeled_at": "2025-12-13T23:26:33.961236",
+      "labeled_at": "2025-12-20T19:59:13.243756",
       "image_size": 108248
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251207_104120.jpg",
       "description": "Eastbound delay at Embarcadero",
       "status": "yellow",
-      "labeled_at": "2025-12-13T23:26:41.795152",
+      "labeled_at": "2025-12-20T19:59:16.743923",
       "image_size": 108168
     },
     {
@@ -17077,7 +17077,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251208_015740.jpg",
       "description": "Offline",
       "status": "red",
-      "labeled_at": "2025-12-14T01:07:54.992730",
+      "labeled_at": "2025-12-20T19:59:25.159723",
       "image_size": 92787
     },
     {
@@ -18001,7 +18001,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251208_192720.jpg",
       "description": "Eastbound delay from Castro to Church",
       "status": "yellow",
-      "labeled_at": "2025-12-14T01:15:25.040138",
+      "labeled_at": "2025-12-20T19:59:34.059954",
       "image_size": 114502
     },
     {
@@ -18589,7 +18589,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251209_182246.jpg",
       "description": "Eastbound delay from Powell to Montgomery",
       "status": "yellow",
-      "labeled_at": "2025-12-14T01:25:35.068830",
+      "labeled_at": "2025-12-20T19:59:38.859993",
       "image_size": 114747
     },
     {
@@ -18603,7 +18603,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251209_182840.jpg",
       "description": "Eastbound delay at Powell",
       "status": "yellow",
-      "labeled_at": "2025-12-14T01:26:09.622745",
+      "labeled_at": "2025-12-20T19:59:42.810301",
       "image_size": 120438
     },
     {
@@ -19296,7 +19296,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_052631.jpg",
       "description": "Normal",
       "status": "green",
-      "labeled_at": "2025-12-10T12:59:35.992860",
+      "labeled_at": "2025-12-20T20:00:01.293471",
       "image_size": 101726
     },
     {
@@ -20031,7 +20031,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_172148.jpg",
       "description": "Eastbound delay from West Portal to Forest Hill",
       "status": "yellow",
-      "labeled_at": "2025-12-10T18:42:39.363788",
+      "labeled_at": "2025-12-20T20:00:27.276579",
       "image_size": 120713
     },
     {
@@ -20556,7 +20556,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_231043.jpg",
       "description": "Eastbound delay from Civic Center to Powell",
       "status": "yellow",
-      "labeled_at": "2025-12-10T23:48:49.702560",
+      "labeled_at": "2025-12-20T20:00:44.359183",
       "image_size": 108341
     },
     {
@@ -20605,14 +20605,14 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_234544.jpg",
       "description": "Eastbound delay at West Portal and Westbound delay at Forest Hill",
       "status": "yellow",
-      "labeled_at": "2025-12-10T23:52:01.997284",
+      "labeled_at": "2025-12-20T20:01:18.044166",
       "image_size": 105872
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_234733.jpg",
       "description": "Eastbound delay at West Portal and Westbound delay at Forest Hill",
       "status": "yellow",
-      "labeled_at": "2025-12-10T23:52:06.467739",
+      "labeled_at": "2025-12-20T20:01:32.610482",
       "image_size": 108450
     },
     {
@@ -20682,7 +20682,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251211_001558.jpg",
       "description": "Offline",
       "status": "red",
-      "labeled_at": "2025-12-11T15:19:37.732555",
+      "labeled_at": "2025-12-20T20:01:42.560147",
       "image_size": 97625
     },
     {
@@ -22159,7 +22159,7 @@
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251212_112332.jpg",
       "description": "Westbound delay at Forest Hill",
       "status": "yellow",
-      "labeled_at": "2025-12-13T04:45:31.203266",
+      "labeled_at": "2025-12-20T20:01:56.376454",
       "image_size": 117973
     },
     {
@@ -24866,5 +24866,5 @@
     }
   ],
   "total_images": 3552,
-  "last_updated": "2025-12-20T19:18:15.179139"
+  "last_updated": "2025-12-20T20:01:56.376757"
 }
