@@ -96,6 +96,13 @@ Launch the labeling GUI:
 python label_images.py
 ```
 
+### Interface Modes
+
+The labeling tool provides two modes accessible via tabs:
+
+- **All Images**: Label all images in the dataset
+- **Outliers**: Focus on model prediction errors for targeted relabeling
+
 ### Interface Controls
 
 | Shortcut         | Action                             |
@@ -122,6 +129,42 @@ python label_images.py
 Labels are saved to `artifacts/training_data/labels.json`.
 
 For git-annex version control workflows (committing and uploading changes), see [artifacts/README.md](../artifacts/README.md).
+
+### Outliers Mode
+
+After training a model, the **Outliers** tab provides focused relabeling of problematic predictions:
+
+**What are outliers?**
+
+During model evaluation (see `evaluate_test_set.py`), the system identifies three categories of problematic predictions:
+
+1. **Misclassified**: Model predicted wrong status (e.g., predicted yellow but should be green)
+2. **Low Confidence**: Model predicted correctly but with low confidence (<95%)
+3. **High Confidence Errors**: Model was very confident but wrong (worst case)
+
+These outliers are saved to `artifacts/models/v1/outlier_report.json`.
+
+**Using Outliers Mode:**
+
+1. Click the **Outliers** tab in the labeling tool
+2. Images are filtered to show only outliers from the report
+3. Each image displays an explanation of why it's an outlier
+4. Review and correct labels as needed
+5. Retrain the model with improved labels
+
+**Benefits:**
+
+- Targeted relabeling of problematic images
+- Understand where the model struggles
+- Improve model accuracy more efficiently than random relabeling
+- Clear explanations for each outlier
+
+**Example outlier explanation:**
+```
+High confidence error: predicted green instead of yellow (99.8%)
+```
+
+This indicates the model needs better training examples to distinguish between these states.
 
 ## Model Training
 
@@ -264,6 +307,22 @@ The training script outputs validation metrics:
 - **Per-class metrics**: Precision/recall for each status level
 
 Review these metrics to assess model quality before deployment.
+
+### Outlier Analysis
+
+After training, run the evaluation script to generate an outlier report:
+
+```bash
+python evaluate_test_set.py
+```
+
+This creates `artifacts/models/v1/outlier_report.json` containing:
+
+- **Misclassified images**: Wrong predictions to investigate
+- **Low confidence predictions**: Correct but uncertain classifications
+- **High confidence errors**: Model confidently predicted wrong status
+
+**Usage**: Review outliers in the labeling tool's **Outliers** tab to identify and fix labeling issues or collect more diverse training examples for problematic cases.
 
 ## Next Steps
 

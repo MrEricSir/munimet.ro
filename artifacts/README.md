@@ -11,6 +11,10 @@ artifacts/
 │   └── labels.json     # Image labels with status and descriptions
 ├── models/             # Trained ML models (git-annex tracked)
 │   └── v1/             # Model version 1 (BLIP-based classifier)
+│       ├── model.safetensors      # Vision transformer weights
+│       ├── status_classifier.pt   # Classification head
+│       ├── outlier_report.json    # Model evaluation outliers
+│       └── [config files]         # Model configuration
 └── runtime/            # Transient runtime data (gitignored)
     ├── cache/          # API response cache
     └── downloads/      # Recent snapshot downloads
@@ -27,9 +31,10 @@ Training data and models use git-annex for efficient large file storage:
 ### Storage Allocation
 
 ```
-~270MB  artifacts/training_data/images/    # 2,666 training images
-856MB   artifacts/models/v1/               # BLIP model + classifier
-570KB   artifacts/training_data/labels.json  # Training labels (unlocked)
+~270MB  artifacts/training_data/images/       # 2,666 training images
+856MB   artifacts/models/v1/                  # BLIP model + classifier
+570KB   artifacts/training_data/labels.json   # Training labels (unlocked)
+12KB    artifacts/models/v1/outlier_report.json  # Model evaluation outliers
 ```
 
 **Total**: ~1.1GB tracked via git-annex in Google Cloud Storage bucket `munimetro-annex` (within 5GB free tier).
