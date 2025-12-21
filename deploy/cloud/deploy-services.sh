@@ -32,39 +32,25 @@ echo ""
 # Navigate to project root
 cd "$(dirname "$0")/../.."
 
-# Prepare model files for Cloud Build (unlock git-annex symlinks)
-echo "[1/4] Preparing model files for upload..."
+# Verify model files are present
+echo "[1/4] Verifying model files..."
 MODEL_DIR="artifacts/models/v1"
-
-# Check if files are git-annex symlinks or pointer files
 MODEL_FILE="$MODEL_DIR/model.safetensors"
-if [ -L "$MODEL_FILE" ] || ([ -f "$MODEL_FILE" ] && [ $(wc -c < "$MODEL_FILE") -lt 1000 ]); then
-    echo "  Model files are git-annex managed, unlocking for build..."
 
-    # Ensure files are present locally
-    echo "  Getting model files from git-annex..."
-    git annex get "$MODEL_DIR/" 2>/dev/null || true
-
-    # Unlock files (converts symlinks/pointers to actual files)
-    echo "  Unlocking model files..."
-    git annex unlock "$MODEL_DIR/"* 2>/dev/null || {
-        echo "  Warning: git annex unlock failed, files may already be unlocked"
-    }
-
-    # Verify the file is now the actual model (should be ~856MB)
-    ACTUAL_SIZE=$(wc -c < "$MODEL_FILE" 2>/dev/null || echo "0")
-    if [ "$ACTUAL_SIZE" -lt 100000000 ]; then
-        echo "  ERROR: Model file is still too small ($ACTUAL_SIZE bytes)"
-        echo "  Expected ~856MB. Git-annex may not have the file."
-        exit 1
-    fi
-    echo "  ✓ Model file size: $(numfmt --to=iec --suffix=B $ACTUAL_SIZE 2>/dev/null || echo "$ACTUAL_SIZE bytes")"
-
-    NEED_RELOCK=true
-else
-    echo "  Model files are already unlocked"
-    NEED_RELOCK=false
+if [ ! -f "$MODEL_FILE" ]; then
+    echo "  ERROR: Model file not found: $MODEL_FILE"
+    echo "  Run: ./scripts/sync-models.sh download"
+    exit 1
 fi
+
+# Verify the file is the actual model (should be ~856MB)
+ACTUAL_SIZE=$(wc -c < "$MODEL_FILE" 2>/dev/null || echo "0")
+if [ "$ACTUAL_SIZE" -lt 100000000 ]; then
+    echo "  ERROR: Model file is too small ($ACTUAL_SIZE bytes)"
+    echo "  Expected ~856MB. Run: ./scripts/sync-models.sh download"
+    exit 1
+fi
+echo "  ✓ Model file size: $(numfmt --to=iec --suffix=B $ACTUAL_SIZE 2>/dev/null || echo "$ACTUAL_SIZE bytes")"
 echo ""
 
 # Build and push Docker image
@@ -78,15 +64,6 @@ gcloud builds submit \
 BUILD_STATUS=$?
 echo ""
 
-# Re-lock git-annex files if we unlocked them
-if [ "$NEED_RELOCK" = true ]; then
-    echo "[3/4] Re-locking model files..."
-    git annex lock "$MODEL_DIR/"* 2>/dev/null || {
-        echo "  Warning: git annex lock failed"
-    }
-    echo ""
-fi
-
 # Check build status
 if [ $BUILD_STATUS -ne 0 ]; then
     echo "❌ Docker build failed"
@@ -97,7 +74,7 @@ echo "✓ Image built and pushed: $API_IMAGE"
 echo ""
 
 # Deploy services
-echo "[4/4] Deploying services..."
+echo "[3/4] Deploying services..."
 echo ""
 echo "  Deploying API service..."
 gcloud run deploy "$API_SERVICE" \

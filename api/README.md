@@ -332,8 +332,8 @@ python3 -c "from lib.muni_lib import load_model; load_model()"
 # Check PyTorch installation
 python3 -c "import torch; print(torch.__version__)"
 
-# Download model from git-annex (if missing)
-git annex get artifacts/models/v1/
+# Download model from GCS (if missing)
+./scripts/sync-models.sh download
 ```
 
 ## Performance Optimization

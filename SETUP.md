@@ -231,9 +231,6 @@ winget install --id Git.Git -e
 
 # Install Python 3.13
 winget install --id Python.Python.3.13 -e
-
-# Note: git-annex must be installed manually or via scoop
-# Visit: https://git-annex.branchable.com/install/Windows/
 ```
 
 **Using Scoop:**
@@ -244,9 +241,6 @@ scoop install git
 
 # Install Python
 scoop install python
-
-# Install git-annex
-scoop install git-annex
 ```
 
 **Note about tkinter:** tkinter is included with the official Python installer on Windows. If you encounter issues, reinstall Python and ensure the "tcl/tk and IDLE" option is checked during installation.
@@ -460,7 +454,7 @@ deactivate
 
 ### Command Not Found Errors
 
-**Symptom:** `command not found: git-annex` or similar errors
+**Symptom:** `command not found: gcloud` or similar errors
 
 **Solution:**
 - Verify installation completed successfully
@@ -522,37 +516,38 @@ sudo yum install python3-devel gcc gcc-c++
 # Download from: https://visualstudio.microsoft.com/downloads/
 ```
 
-### git-annex Remote Not Available
+### GCS Authentication Issues
 
-**Symptom:** `git annex get` fails with "unable to access remote"
+**Symptom:** `gsutil` or sync scripts fail with authentication errors
 
 **Solution:**
 ```bash
-# Verify git-annex initialization
-git annex info
+# Authenticate with Google Cloud
+gcloud auth login
 
-# Check remote configuration
-git annex info gcs
+# Verify authentication
+gcloud auth list
 
-# For collaborators: Ensure S3 credentials are configured
-# See GCS_SETUP.md for configuration instructions
-
-# Re-enable remote (if previously configured)
-git annex enableremote gcs
+# Test access to bucket
+gsutil ls gs://munimetro-annex/
 ```
 
-### Broken Symlinks
+### Missing Model or Training Data Files
 
-**Symptom:** Files in `artifacts/` appear as broken symlinks
+**Symptom:** Files in `artifacts/` are missing or empty
 
 **Solution:**
 ```bash
 # Download the missing files
-git annex get artifacts/models/v1/        # Model files
-git annex get artifacts/training_data/    # Training data
+./scripts/sync-models.sh download          # Model files (~856MB)
+./scripts/sync-training-data.sh download   # Training data (~270MB)
 
-# Check file locations
-git annex whereis artifacts/models/v1/
+# Or download everything
+./scripts/sync-artifacts.sh download       # All artifacts (~1.1GB)
+
+# Verify files downloaded
+ls -lh artifacts/models/v1/model.safetensors
+ls -lh artifacts/training_data/images/
 ```
 
 ### tkinter Import Errors
