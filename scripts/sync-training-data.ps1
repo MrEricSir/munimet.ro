@@ -57,7 +57,8 @@ switch ($Command.ToLower()) {
     "upload" {
         Write-Host "Uploading training data to GCS..."
         Write-Host ""
-        & gsutil -m rsync -r @EXCLUDE_FLAGS artifacts/training_data "$BUCKET/training_data"
+        $args = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
+        & gsutil $args
         Write-Host ""
         Write-Host "✓ Training data uploaded to $BUCKET/training_data" -ForegroundColor Green
     }
@@ -66,7 +67,8 @@ switch ($Command.ToLower()) {
         Write-Host "Downloading training data from GCS (~270MB)..."
         Write-Host ""
         New-Item -ItemType Directory -Force -Path "artifacts/training_data" | Out-Null
-        & gsutil -m rsync -r @EXCLUDE_FLAGS "$BUCKET/training_data" artifacts/training_data
+        $args = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
+        & gsutil $args
         Write-Host ""
         Write-Host "✓ Training data downloaded to artifacts/training_data" -ForegroundColor Green
     }
@@ -74,8 +76,10 @@ switch ($Command.ToLower()) {
     "both" {
         Write-Host "Syncing training data bidirectionally..."
         Write-Host ""
-        & gsutil -m rsync -r @EXCLUDE_FLAGS artifacts/training_data "$BUCKET/training_data"
-        & gsutil -m rsync -r @EXCLUDE_FLAGS "$BUCKET/training_data" artifacts/training_data
+        $args1 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
+        & gsutil $args1
+        $args2 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
+        & gsutil $args2
         Write-Host ""
         Write-Host "✓ Training data synced" -ForegroundColor Green
     }

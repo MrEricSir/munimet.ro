@@ -57,7 +57,8 @@ switch ($Command.ToLower()) {
     "upload" {
         Write-Host "Uploading models to GCS (~856MB)..."
         Write-Host ""
-        & gsutil -m rsync -r @EXCLUDE_FLAGS artifacts/models "$BUCKET/models"
+        $args = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/models", "$BUCKET/models")
+        & gsutil $args
         Write-Host ""
         Write-Host "✓ Models uploaded to $BUCKET/models" -ForegroundColor Green
     }
@@ -66,7 +67,8 @@ switch ($Command.ToLower()) {
         Write-Host "Downloading models from GCS (~856MB)..."
         Write-Host ""
         New-Item -ItemType Directory -Force -Path "artifacts/models" | Out-Null
-        & gsutil -m rsync -r @EXCLUDE_FLAGS "$BUCKET/models" artifacts/models
+        $args = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/models", "artifacts/models")
+        & gsutil $args
         Write-Host ""
         Write-Host "✓ Models downloaded to artifacts/models" -ForegroundColor Green
     }
@@ -74,8 +76,10 @@ switch ($Command.ToLower()) {
     "both" {
         Write-Host "Syncing models bidirectionally..."
         Write-Host ""
-        & gsutil -m rsync -r @EXCLUDE_FLAGS artifacts/models "$BUCKET/models"
-        & gsutil -m rsync -r @EXCLUDE_FLAGS "$BUCKET/models" artifacts/models
+        $args1 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/models", "$BUCKET/models")
+        & gsutil $args1
+        $args2 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/models", "artifacts/models")
+        & gsutil $args2
         Write-Host ""
         Write-Host "✓ Models synced" -ForegroundColor Green
     }
