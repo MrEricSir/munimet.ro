@@ -16,8 +16,8 @@ This project was "vibe coded" using Anthropic's Claude Code. Runs without requir
 
 Quick checklist:
 - Python 3.13+
-- Git with git-annex
-- Google Cloud SDK (for cloud deployment only)
+- Git
+- Google Cloud SDK with gsutil (for accessing training data and cloud deployment)
 
 ### Installation
 
@@ -26,18 +26,19 @@ Quick checklist:
 git clone https://github.com/MrEricSir/munimet.ro.git
 cd munimet.ro
 
-# Run automated git-annex setup (initializes, downloads model)
-./scripts/setup/setup-git-annex.sh      # macOS/Linux
+# Download models and training data from GCS
+./scripts/sync-artifacts.sh download    # macOS/Linux
 # or
-.\scripts\setup\setup-git-annex.ps1     # Windows
+.\scripts\sync-artifacts.ps1 download   # Windows
 ```
 
-The setup script will:
-- Initialize git-annex with a computer name you provide
-- Enable automatic annexing for large files
-- Download the pre-trained model (856MB)
+The sync script will download:
+- Pre-trained models (~856MB)
+- Training dataset (~270MB)
 
-**Need help with installation?** See [SETUP.md](SETUP.md) for automated setup scripts and platform-specific instructions.
+**Note:** Requires `gcloud` authentication. Run `gcloud auth login` first.
+
+**Need help with installation?** See [SETUP.md](SETUP.md) for platform-specific installation instructions.
 
 ### Deployment
 
@@ -62,37 +63,30 @@ See [deploy/README.md](deploy/README.md) for detailed deployment instructions.
 
 ## Accessing Training Data
 
-The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are managed via git-annex and stored in Google Cloud Storage.
+The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are stored in Google Cloud Storage and synced via rsync scripts.
 
 ### For Collaborators with GCS Access
 
-1. Follow [SETUP.md](SETUP.md) to install base dependencies (git-annex, gcloud, etc.)
+1. Follow [SETUP.md](SETUP.md) to install base dependencies (gcloud CLI, etc.)
 
-2. Run automated setup script:
+2. Authenticate with Google Cloud:
    ```bash
-   # This initializes git-annex, enables automatic annexing, and downloads the model
-   ./scripts/setup/setup-git-annex.sh   # macOS/Linux
-   # or
-   .\scripts\setup\setup-git-annex.ps1  # Windows
+   gcloud auth login
+   gcloud config set project munimetro
    ```
 
-3. Set up GCS credentials and download training data:
+3. Download training data and models using sync scripts:
    ```bash
-   # Run automated credential setup (generates HMAC keys, saves to ~/.aws/credentials)
-   ./scripts/setup/setup-gcs-credentials.sh   # macOS/Linux
-   # or
-   .\scripts\setup\setup-gcs-credentials.ps1  # Windows
+   # Download both training data and models
+   ./scripts/sync-artifacts.sh download    # macOS/Linux
+   .\scripts\sync-artifacts.ps1 download   # Windows
 
-   # Set AWS profile for this session
-   export AWS_PROFILE=munimetro  # macOS/Linux
-   # or
-   $env:AWS_PROFILE = "munimetro"  # Windows
-
-   # Download all training data (270MB)
-   git annex get artifacts/training_data/
+   # Or download individually:
+   ./scripts/sync-training-data.sh download  # Training data only (~270MB)
+   ./scripts/sync-models.sh download         # Models only (~856MB)
    ```
 
-See [GCS_SETUP.md](GCS_SETUP.md) for detailed Google Cloud Storage configuration.
+The sync scripts use `gsutil rsync` to efficiently download only changed files.
 
 ### For Contributors Without GCS Access
 
@@ -146,12 +140,12 @@ munimet.ro/
 ├── tests/                 # Test suite
 │   └── test_frontend.py   # Frontend integration tests
 │
-└── artifacts/             # Generated data
-    ├── training_data/     # ML training dataset (git-annex)
-    │   ├── images/        # 2,666 labeled snapshots (~270MB)
+└── artifacts/             # Generated data (synced via GCS)
+    ├── training_data/     # ML training dataset (~270MB)
+    │   ├── images/        # 2,666 labeled snapshots
     │   └── labels.json    # Training labels (570KB)
-    ├── models/            # Trained models (git-annex)
-    │   └── v1/            # BLIP model + classifier (856MB)
+    ├── models/            # Trained models (~856MB)
+    │   └── v1/            # BLIP model + classifier
     └── runtime/           # Transient runtime data (gitignored)
         ├── cache/         # API response cache
         └── downloads/     # Recent snapshots
@@ -163,9 +157,7 @@ munimet.ro/
 - **[Deployment Guide](deploy/README.md)** - Local and cloud deployment instructions
 - **[Training Guide](training/README.md)** - Data collection, labeling, and model training
 - **[API Documentation](api/README.md)** - API endpoints and configuration
-- **[Data Management](artifacts/README.md)** - Git-annex workflows and storage
 - **[Testing](tests/README.md)** - Automated test suite
-- **[GCS Setup](GCS_SETUP.md)** - Google Cloud Storage configuration for collaborators
 
 ## Architecture
 
@@ -229,8 +221,7 @@ Users
 - **Web Framework**: Falcon (async-ready, production WSGI)
 - **Frontend**: Vanilla JavaScript (no build step)
 - **Deployment**: Docker, Google Cloud Run, Cloud Scheduler
-- **Storage**: Google Cloud Storage (model files, cache)
-- **Data Management**: git-annex with S3-compatible GCS backend
+- **Storage**: Google Cloud Storage (model files, training data, cache)
 
 ## Requirements
 
@@ -250,8 +241,7 @@ Users
 
 ### Development Tools
 - Docker & Docker Compose
-- git-annex (for training data access)
-- Google Cloud SDK (for cloud deployment and GCS S3 API)
+- Google Cloud SDK with gsutil (for accessing training data and cloud deployment)
 
 ## License
 

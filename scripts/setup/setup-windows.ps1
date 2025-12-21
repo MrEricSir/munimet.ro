@@ -87,23 +87,6 @@ Install-Package -packageName "Python 3.13" -wingetId "Python.Python.3.13" -scoop
 # Refresh environment variables
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
-# Install git-annex (Windows port)
-Write-Host "Checking git-annex installation..." -ForegroundColor White
-$gitAnnexInstalled = Get-Command git-annex -ErrorAction SilentlyContinue
-if (-not $gitAnnexInstalled) {
-    Write-Host "Installing git-annex..." -ForegroundColor Yellow
-    if ($pkgManager -eq "scoop") {
-        scoop install git-annex
-    } else {
-        Write-Host "git-annex must be installed manually on Windows with winget." -ForegroundColor Yellow
-        Write-Host "Visit: https://git-annex.branchable.com/install/Windows/" -ForegroundColor Yellow
-        Write-Host "Or use scoop: scoop install git-annex" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "git-annex is already installed." -ForegroundColor Green
-}
-Write-Host ""
-
 # Note about tkinter
 Write-Host "Note: tkinter should be included with Python on Windows." -ForegroundColor Cyan
 Write-Host "If you encounter issues, reinstall Python with the 'tcl/tk' option enabled." -ForegroundColor Cyan
@@ -154,11 +137,11 @@ Write-Host "Next steps:" -ForegroundColor White
 Write-Host "1. Close and reopen PowerShell/Terminal to refresh environment variables" -ForegroundColor White
 Write-Host "2. Run: .\scripts\setup\setup-python-env.ps1" -ForegroundColor White
 Write-Host "3. Verify setup: .\scripts\setup\verify-setup-windows.ps1" -ForegroundColor White
-Write-Host "4. Follow SETUP.md for git-annex and cloud storage configuration" -ForegroundColor White
+Write-Host "4. Follow SETUP.md for project configuration" -ForegroundColor White
 Write-Host ""
 Write-Host "For collaborators downloading training data:" -ForegroundColor Cyan
-Write-Host "  - Set up HMAC credentials (ask project maintainer)" -ForegroundColor White
-Write-Host "  - Enable git-annex remote: git annex enableremote gcs" -ForegroundColor White
-Write-Host "  - Download files: git annex get artifacts/models/v1/" -ForegroundColor White
-Write-Host "  - See GCS_SETUP.md for detailed instructions" -ForegroundColor White
+Write-Host "  - Authenticate with Google Cloud: gcloud auth login" -ForegroundColor White
+Write-Host "  - Download models: .\scripts\sync-models.ps1 download" -ForegroundColor White
+Write-Host "  - Download training data: .\scripts\sync-training-data.ps1 download" -ForegroundColor White
+Write-Host "  - See SETUP.md for detailed instructions" -ForegroundColor White
 Write-Host ""

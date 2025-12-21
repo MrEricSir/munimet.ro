@@ -10,7 +10,6 @@ Complete installation and configuration guide for the Muni Metro project. This g
   - [Linux](#linux)
   - [Windows](#windows)
 - [Python Environment Setup](#python-environment-setup)
-- [Git-annex Configuration](#git-annex-configuration)
 - [Accessing Training Data](#accessing-training-data)
 - [Troubleshooting](#troubleshooting)
 
@@ -26,9 +25,8 @@ Before starting, you'll need to install these base dependencies:
 |------|---------|--------------|
 | **Python 3.13+** | Runtime for all Python scripts | All workflows |
 | **Git** | Version control | All workflows |
-| **git-annex** | Large file management (training data & models) | Data access, training |
 | **tkinter** | GUI framework for image labeling | Training only |
-| **Google Cloud SDK** | Cloud deployment and S3 API access | Cloud deployment, collaborators |
+| **Google Cloud SDK** | Cloud deployment and GCS access | Cloud deployment, accessing training data |
 | **Docker** | Containerization | Local/cloud deployment |
 
 ### Quick Start (Automated Installation)
@@ -77,7 +75,7 @@ Set-ExecutionPolicy RemoteSigned –Scope Process
 .\scripts\setup\setup-python-env.ps1
 ```
 
-After running the automated scripts, skip to [Git-annex Configuration](#git-annex-configuration).
+After running the automated scripts, skip to [Accessing Training Data](#accessing-training-data).
 
 ### Manual Installation
 
@@ -106,9 +104,6 @@ brew install python@3.13
 
 # Install Git
 brew install git
-
-# Install git-annex (large file management)
-brew install git-annex
 
 # Install tkinter (for labeling GUI)
 brew install python-tk@3.13
@@ -140,9 +135,6 @@ sudo apt-get install -y python3 python3-pip python3-venv python3-dev
 # Install Git
 sudo apt-get install -y git
 
-# Install git-annex
-sudo apt-get install -y git-annex
-
 # Install build tools (needed for some Python packages)
 sudo apt-get install -y build-essential
 
@@ -164,12 +156,6 @@ sudo yum install -y python3 python3-pip python3-devel
 
 # Install Git
 sudo yum install -y git
-
-# Enable EPEL repository (for git-annex)
-sudo yum install -y epel-release
-
-# Install git-annex
-sudo yum install -y git-annex
 
 # Install build tools
 sudo yum install -y gcc gcc-c++ make
@@ -245,9 +231,6 @@ winget install --id Git.Git -e
 
 # Install Python 3.13
 winget install --id Python.Python.3.13 -e
-
-# Note: git-annex must be installed manually or via scoop
-# Visit: https://git-annex.branchable.com/install/Windows/
 ```
 
 **Using Scoop:**
@@ -258,9 +241,6 @@ scoop install git
 
 # Install Python
 scoop install python
-
-# Install git-annex
-scoop install git-annex
 ```
 
 **Note about tkinter:** tkinter is included with the official Python installer on Windows. If you encounter issues, reinstall Python and ensure the "tcl/tk and IDLE" option is checked during installation.
@@ -377,64 +357,35 @@ pip install -r requirements.txt
 deactivate
 ```
 
-## Git-annex Configuration
+## Google Cloud Authentication
 
-Git-annex manages large files (training data and models) separately from the main Git repository. This section covers initial setup.
+To access training data and models stored in Google Cloud Storage, you need to authenticate with gcloud.
 
-### Understanding git-annex
+### Setup Google Cloud CLI
 
-- **Symlinks in Git**: The repository contains lightweight symbolic links to large files
-- **Actual Files**: Large files are stored in `.git/annex/objects/` and synced to Google Cloud Storage
-- **Selective Download**: You only download the files you need
+If you haven't installed the Google Cloud SDK yet, refer to the platform-specific installation sections above.
 
-### Automated Setup (Recommended)
-
-Use the automated setup script to initialize git-annex, enable automatic annexing, and download the model:
+### Authenticate
 
 **macOS/Linux:**
 ```bash
-cd /path/to/munimet.ro
-./scripts/setup/setup-git-annex.sh
+# Authenticate with your Google account
+gcloud auth login
+
+# Set the project (if you're a collaborator)
+gcloud config set project munimetro
 ```
 
 **Windows:**
 ```powershell
-cd \path\to\munimet.ro
-.\scripts\setup\setup-git-annex.ps1
+# Authenticate with your Google account
+gcloud auth login
+
+# Set the project (if you're a collaborator)
+gcloud config set project munimetro
 ```
 
-The script will:
-1. Prompt for a descriptive computer name (e.g., "laptop", "work-machine", "alice-desktop")
-2. Initialize git-annex with that name
-3. **Windows only:** Enable adjusted branch mode (stores files as regular files instead of symlinks)
-4. Configure automatic annexing for files >100KB or images
-5. Enable the gcs remote (if available)
-6. Download the pre-trained model (856MB, from public Google Cloud Storage)
-
-**Windows Note:** The setup script automatically enables "adjusted branch" mode (`git annex adjust --unlock`), which stores files as regular files instead of symlinks. This is necessary because Windows doesn't handle symlinks well without admin privileges. Your branch will appear as `adjusted/main(unlocked)` instead of `main`.
-
-### Manual Setup (Alternative)
-
-If you prefer manual configuration:
-
-```bash
-# 1. Initialize git-annex
-git annex init "your-computer-name"
-
-# 2. Windows only: Enable adjusted branch (stores files as regular files)
-git annex adjust --unlock
-
-# 3. Enable automatic annexing
-git config filter.annex.process 'git-annex filter-process'
-git annex config --set annex.largefiles 'largerthan=100kb or mimetype=image/*'
-
-# 4. Download model files
-git annex get artifacts/models/v1/
-```
-
-### For Collaborators: Access Full Training Data
-
-If you're a collaborator with access to the private training data, see [GCS_SETUP.md](GCS_SETUP.md) for configuring Google Cloud Storage access.
+After authentication, you can use the sync scripts to download training data and models.
 
 ## Accessing Training Data
 
@@ -442,17 +393,20 @@ If you're a collaborator with access to the private training data, see [GCS_SETU
 
 If you have access to the shared Google Cloud Storage bucket:
 
-1. Follow [GCS_SETUP.md](GCS_SETUP.md) to configure S3 credentials and enable the remote
-2. Download training data:
-   ```bash
-   # Download all training data (270MB)
-   git annex get artifacts/training_data/
+1. Authenticate with Google Cloud (see [Google Cloud Authentication](#google-cloud-authentication) above)
 
-   # Unlock labels file for editing
-   git annex unlock artifacts/training_data/labels.json
+2. Download training data and models using sync scripts:
+   ```bash
+   # Download both training data and models
+   ./scripts/sync-artifacts.sh download    # macOS/Linux
+   .\scripts\sync-artifacts.ps1 download   # Windows
+
+   # Or download individually:
+   ./scripts/sync-training-data.sh download  # Training data only (~270MB)
+   ./scripts/sync-models.sh download         # Models only (~856MB)
    ```
 
-See [artifacts/README.md](artifacts/README.md) for detailed git-annex workflows.
+The sync scripts use `gsutil rsync` to efficiently download only changed files.
 
 ### Option 2: Collect Your Own Data (No GCS Access Required)
 
@@ -485,11 +439,8 @@ python3 --version  # Should be 3.13+
 # Check Git
 git --version
 
-# Check git-annex
-git annex version
-
-# Check git-annex initialization
-git annex info
+# Check Google Cloud SDK
+gcloud --version
 
 # Check Python environment (from training/)
 cd training
@@ -503,7 +454,7 @@ deactivate
 
 ### Command Not Found Errors
 
-**Symptom:** `command not found: git-annex` or similar errors
+**Symptom:** `command not found: gcloud` or similar errors
 
 **Solution:**
 - Verify installation completed successfully
@@ -565,37 +516,38 @@ sudo yum install python3-devel gcc gcc-c++
 # Download from: https://visualstudio.microsoft.com/downloads/
 ```
 
-### git-annex Remote Not Available
+### GCS Authentication Issues
 
-**Symptom:** `git annex get` fails with "unable to access remote"
+**Symptom:** `gsutil` or sync scripts fail with authentication errors
 
 **Solution:**
 ```bash
-# Verify git-annex initialization
-git annex info
+# Authenticate with Google Cloud
+gcloud auth login
 
-# Check remote configuration
-git annex info gcs
+# Verify authentication
+gcloud auth list
 
-# For collaborators: Ensure S3 credentials are configured
-# See GCS_SETUP.md for configuration instructions
-
-# Re-enable remote (if previously configured)
-git annex enableremote gcs
+# Test access to bucket
+gsutil ls gs://munimetro-annex/
 ```
 
-### Broken Symlinks
+### Missing Model or Training Data Files
 
-**Symptom:** Files in `artifacts/` appear as broken symlinks
+**Symptom:** Files in `artifacts/` are missing or empty
 
 **Solution:**
 ```bash
 # Download the missing files
-git annex get artifacts/models/v1/        # Model files
-git annex get artifacts/training_data/    # Training data
+./scripts/sync-models.sh download          # Model files (~856MB)
+./scripts/sync-training-data.sh download   # Training data (~270MB)
 
-# Check file locations
-git annex whereis artifacts/models/v1/
+# Or download everything
+./scripts/sync-artifacts.sh download       # All artifacts (~1.1GB)
+
+# Verify files downloaded
+ls -lh artifacts/models/v1/model.safetensors
+ls -lh artifacts/training_data/images/
 ```
 
 ### tkinter Import Errors
@@ -649,16 +601,13 @@ chmod +x scripts/setup/*.sh
 
 After completing setup:
 
-1. **Download Model**: `git annex get artifacts/models/v1/` (if not already done)
+1. **Download Data**: Use sync scripts to download models and training data (see [Accessing Training Data](#accessing-training-data))
 2. **Run Locally**: See [deploy/README.md](deploy/README.md) for deployment instructions
 3. **Train Custom Model**: See [training/README.md](training/README.md) for training workflow
-4. **Configure GCS**: See [GCS_SETUP.md](GCS_SETUP.md) for collaborator access to training data
 
 ## Related Documentation
 
 - **[Main README](README.md)** - Project overview and quick start
-- **[Git-annex Workflows](artifacts/README.md)** - Detailed git-annex usage and file management
-- **[GCS Configuration](GCS_SETUP.md)** - Google Cloud Storage setup for collaborators
 - **[Training Guide](training/README.md)** - Data collection and model training
 - **[Deployment Guide](deploy/README.md)** - Local and cloud deployment
 - **[API Documentation](api/README.md)** - API endpoints and configuration
@@ -670,5 +619,4 @@ If you encounter issues not covered in this guide:
 
 1. Check the [Troubleshooting](#troubleshooting) section above
 2. Review component-specific documentation linked above
-3. Check git-annex documentation: https://git-annex.branchable.com/
-4. Open an issue on GitHub with details about your environment and error messages
+3. Open an issue on GitHub with details about your environment and error messages

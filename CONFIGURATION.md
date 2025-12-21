@@ -19,11 +19,11 @@ This document records the actual configuration values used for this deployment.
 - **Purpose**: API response cache for Cloud Run deployment
 - **Access**: Private (service account only)
 
-#### git-annex Bucket (Training Data)
+#### Training Data and Models Bucket
 - **Bucket Name**: `munimetro-annex`
 - **Region**: `us-west1`
 - **Storage Class**: Standard
-- **Purpose**: Training data and model storage
+- **Purpose**: Training data and model storage (synced via GCS rsync scripts)
 - **Size**: ~1.1GB
 - **Access**: Private (collaborators with GCS access)
 
@@ -70,26 +70,25 @@ This document records the actual configuration values used for this deployment.
   - Storage Object Admin on `gs://munimetro-cache`
   - Cloud Run Invoker on `munimetro-checker` job
 
-## git-annex Configuration
+## GCS Sync Configuration
 
-### Remote Configuration
+### Sync Scripts
 
-- **Remote Name**: `gcs`
-- **Type**: S3 (built-in git-annex S3 special remote)
-- **Host**: `storage.googleapis.com`
-- **Bucket**: `munimetro-annex`
-- **Port**: 443
-- **Protocol**: HTTPS
-- **Request Style**: path
-- **Chunk Size**: 50MiB
-- **Encryption**: none
+Training data and models are synced with Google Cloud Storage using `gsutil rsync`:
+
+- **Bucket**: `gs://munimetro-annex`
+- **Scripts**:
+  - `scripts/sync-models.sh` / `scripts/sync-models.ps1` - Sync model files (~856MB)
+  - `scripts/sync-training-data.sh` / `scripts/sync-training-data.ps1` - Sync training data (~270MB)
+  - `scripts/sync-artifacts.sh` / `scripts/sync-artifacts.ps1` - Sync all artifacts (~1.1GB)
+- **Authentication**: Google Cloud SDK (`gcloud auth login`)
+- **Protocol**: HTTPS via gsutil
 
 ### Repository
 
 - **GitHub URL**: `https://github.com/MrEricSir/munimet.ro.git`
 - **SSH URL**: `git@github.com:MrEricSir/munimet.ro.git`
 - **Branch**: `main`
-- **git-annex Branch**: `git-annex`
 
 ## Domain Configuration
 
@@ -119,7 +118,7 @@ This document records the actual configuration values used for this deployment.
 
 ## File Locations
 
-### Models (git-annex tracked)
+### Models (GCS synced)
 
 - **Directory**: `artifacts/models/v1/`
 - **Size**: ~856MB
@@ -128,13 +127,15 @@ This document records the actual configuration values used for this deployment.
   - `status_classifier.pt` (775KB) - Status classification head
   - `config.json`, `generation_config.json`, `preprocessor_config.json`
   - `tokenizer.json`, `tokenizer_config.json`, `vocab.txt`, `special_tokens_map.json`
+- **Sync**: Use `scripts/sync-models.sh download` to download from GCS
 
-### Training Data (git-annex tracked)
+### Training Data (GCS synced)
 
 - **Images Directory**: `artifacts/training_data/images/`
 - **Count**: 2,666 labeled images
 - **Size**: ~270MB
-- **Labels File**: `artifacts/training_data/labels.json` (570KB, unlocked for editing)
+- **Labels File**: `artifacts/training_data/labels.json` (570KB)
+- **Sync**: Use `scripts/sync-training-data.sh download` to download from GCS
 
 ## Environment Variables
 
@@ -163,7 +164,7 @@ PORT=8000
 - **Cloud Run Service (API)**: ~$0 (within free tier at current traffic)
 - **Cloud Run Jobs (Checker)**: ~$0.70 (14,400 executions/month @ ~10s each)
 - **Cloud Storage (Cache)**: ~$0.02 (1KB file, 100K reads/month)
-- **Cloud Storage (git-annex)**: ~$0 (1.1GB, within 5GB free tier)
+- **Cloud Storage (Training Data)**: ~$0 (1.1GB, within 5GB free tier)
 - **Cloud Scheduler**: $0.10 (1 job)
 - **Cloud Monitoring**: $0 (within free tier limits)
 - **Total**: ~$0.82/month
@@ -196,5 +197,5 @@ At 100K API requests/day:
 
 - All timestamps use UTC
 - Cloud Run uses Pacific time for scheduler display
-- git-annex uses SHA256 checksums for file integrity
+- Training data and models synced with GCS using `gsutil rsync`
 - Docker images are multi-stage builds (smaller production images)

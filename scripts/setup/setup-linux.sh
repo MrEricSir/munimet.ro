@@ -64,25 +64,6 @@ else
     echo -e "${GREEN}Git is already installed.${NC}"
 fi
 
-# Install git-annex
-echo ""
-echo "Checking git-annex installation..."
-if ! command -v git-annex &> /dev/null; then
-    echo -e "${YELLOW}Installing git-annex...${NC}"
-    if [ "$PKG_MANAGER" = "apt" ]; then
-        $INSTALL_CMD git-annex
-    else
-        # For yum/dnf, might need EPEL repository
-        echo -e "${YELLOW}Enabling EPEL repository for git-annex...${NC}"
-        if [ "$PKG_MANAGER" = "yum" ]; then
-            $INSTALL_CMD epel-release
-        fi
-        $INSTALL_CMD git-annex
-    fi
-else
-    echo -e "${GREEN}git-annex is already installed.${NC}"
-fi
-
 # Install tkinter for labeling GUI
 echo ""
 echo "Checking tkinter installation..."

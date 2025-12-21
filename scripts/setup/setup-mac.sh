@@ -45,16 +45,6 @@ else
     echo -e "${GREEN}Git is already installed.${NC}"
 fi
 
-# Install git-annex
-echo ""
-echo "Checking git-annex installation..."
-if ! command -v git-annex &> /dev/null; then
-    echo -e "${YELLOW}Installing git-annex...${NC}"
-    brew install git-annex
-else
-    echo -e "${GREEN}git-annex is already installed.${NC}"
-fi
-
 # Install tkinter for labeling GUI
 echo ""
 echo "Checking tkinter installation..."
