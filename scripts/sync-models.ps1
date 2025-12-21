@@ -14,6 +14,28 @@ $ErrorActionPreference = "Stop"
 
 $BUCKET = "gs://munimetro-annex"
 
+# Exclusions based on .gitignore (regex patterns for gsutil -x flag)
+$EXCLUDE_PATTERNS = @(
+    ".*\.DS_Store$",        # macOS metadata
+    ".*__MACOSX.*",         # macOS archive metadata
+    ".*__pycache__.*",      # Python cache
+    ".*\.pyc$",             # Python bytecode
+    ".*\.pyo$",             # Python optimized bytecode
+    ".*\.pyd$",             # Python DLL
+    ".*\.log$",             # Log files
+    ".*\.ipynb_checkpoints.*",  # Jupyter checkpoints
+    ".*\.swp$",             # Vim swap files
+    ".*\.swo$",             # Vim swap files
+    ".*~$"                  # Backup files
+)
+
+# Build exclusion flags
+$EXCLUDE_FLAGS = @()
+foreach ($pattern in $EXCLUDE_PATTERNS) {
+    $EXCLUDE_FLAGS += "-x"
+    $EXCLUDE_FLAGS += $pattern
+}
+
 Write-Host "=========================================="
 Write-Host "Sync Models with GCS"
 Write-Host "=========================================="
@@ -35,7 +57,7 @@ switch ($Command.ToLower()) {
     "upload" {
         Write-Host "Uploading models to GCS (~856MB)..."
         Write-Host ""
-        gsutil -m rsync -r artifacts/models "$BUCKET/models"
+        & gsutil -m rsync -r @EXCLUDE_FLAGS artifacts/models "$BUCKET/models"
         Write-Host ""
         Write-Host "✓ Models uploaded to $BUCKET/models" -ForegroundColor Green
     }
@@ -44,7 +66,7 @@ switch ($Command.ToLower()) {
         Write-Host "Downloading models from GCS (~856MB)..."
         Write-Host ""
         New-Item -ItemType Directory -Force -Path "artifacts/models" | Out-Null
-        gsutil -m rsync -r "$BUCKET/models" artifacts/models
+        & gsutil -m rsync -r @EXCLUDE_FLAGS "$BUCKET/models" artifacts/models
         Write-Host ""
         Write-Host "✓ Models downloaded to artifacts/models" -ForegroundColor Green
     }
@@ -52,8 +74,8 @@ switch ($Command.ToLower()) {
     "both" {
         Write-Host "Syncing models bidirectionally..."
         Write-Host ""
-        gsutil -m rsync -r artifacts/models "$BUCKET/models"
-        gsutil -m rsync -r "$BUCKET/models" artifacts/models
+        & gsutil -m rsync -r @EXCLUDE_FLAGS artifacts/models "$BUCKET/models"
+        & gsutil -m rsync -r @EXCLUDE_FLAGS "$BUCKET/models" artifacts/models
         Write-Host ""
         Write-Host "✓ Models synced" -ForegroundColor Green
     }
