@@ -274,9 +274,34 @@ def train_model():
         return counts
 
     print("\nClass distribution:")
-    print(f"  Train: {count_statuses(train_data)}")
+    train_counts = count_statuses(train_data)
+    print(f"  Train: {train_counts}")
     print(f"  Val:   {count_statuses(val_data)}")
     print(f"  Test:  {count_statuses(test_data)}")
+
+    # Calculate class weights to handle imbalance
+    # Weight is inversely proportional to class frequency
+    # This makes the model pay more attention to underrepresented classes
+    status_order = ['green', 'yellow', 'red']  # Matches labels 0, 1, 2
+    total_train = len(train_data)
+    class_weights = []
+
+    for status in status_order:
+        count = train_counts.get(status, 1)  # Avoid division by zero
+        weight = total_train / (len(status_order) * count)
+        class_weights.append(weight)
+
+    # Normalize so green (majority class) has weight 1.0
+    green_weight = class_weights[0]
+    class_weights = [w / green_weight for w in class_weights]
+
+    print("\nClass weights (to handle imbalance):")
+    for status, weight in zip(status_order, class_weights):
+        print(f"  {status:6s}: {weight:.2f}x")
+    print("  (Higher weight = model pays more attention to this class)")
+
+    # Convert to tensor for PyTorch
+    class_weight_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
 
     # Load model and processor
     print("\n[2/6] Loading pre-trained BLIP model...")
@@ -326,8 +351,8 @@ def train_model():
         num_training_steps=total_steps
     )
 
-    # Loss function for classification
-    classification_criterion = nn.CrossEntropyLoss(ignore_index=-1)
+    # Loss function for classification with class weights
+    classification_criterion = nn.CrossEntropyLoss(weight=class_weight_tensor, ignore_index=-1)
 
     # Setup AMP scaler for mixed precision training (GPU only)
     scaler = torch.amp.GradScaler('cuda') if use_amp else None
