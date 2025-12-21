@@ -53,70 +53,66 @@ try {
     exit 1
 }
 
-switch ($Command.ToLower()) {
-    "upload" {
-        Write-Host "Uploading artifacts to GCS..."
-        Write-Host ""
+$cmd = $Command.ToLower()
+if ($cmd -eq "upload") {
+    Write-Host "Uploading artifacts to GCS..."
+    Write-Host ""
 
-        Write-Host "[1/2] Uploading training data..."
-        $args1 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
-        & gsutil $args1
-        Write-Host "✓ Training data uploaded" -ForegroundColor Green
-        Write-Host ""
+    Write-Host "[1/2] Uploading training data..."
+    $trainingUploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
+    & gsutil $trainingUploadArgs
+    Write-Host "OK Training data uploaded" -ForegroundColor Green
+    Write-Host ""
 
-        Write-Host "[2/2] Uploading models..."
-        $args2 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/models", "$BUCKET/models")
-        & gsutil $args2
-        Write-Host "✓ Models uploaded" -ForegroundColor Green
-    }
+    Write-Host "[2/2] Uploading models..."
+    $modelsUploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/models", "$BUCKET/models")
+    & gsutil $modelsUploadArgs
+    Write-Host "OK Models uploaded" -ForegroundColor Green
+}
+elseif ($cmd -eq "download") {
+    Write-Host "Downloading artifacts from GCS..."
+    Write-Host ""
 
-    "download" {
-        Write-Host "Downloading artifacts from GCS..."
-        Write-Host ""
+    Write-Host "[1/2] Downloading training data (~270MB)..."
+    New-Item -ItemType Directory -Force -Path "artifacts/training_data" | Out-Null
+    $trainingDownloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
+    & gsutil $trainingDownloadArgs
+    Write-Host "OK Training data downloaded" -ForegroundColor Green
+    Write-Host ""
 
-        Write-Host "[1/2] Downloading training data (~270MB)..."
-        New-Item -ItemType Directory -Force -Path "artifacts/training_data" | Out-Null
-        $args1 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
-        & gsutil $args1
-        Write-Host "✓ Training data downloaded" -ForegroundColor Green
-        Write-Host ""
+    Write-Host "[2/2] Downloading models (~856MB)..."
+    New-Item -ItemType Directory -Force -Path "artifacts/models" | Out-Null
+    $modelsDownloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/models", "artifacts/models")
+    & gsutil $modelsDownloadArgs
+    Write-Host "OK Models downloaded" -ForegroundColor Green
+}
+elseif ($cmd -eq "both") {
+    Write-Host "Syncing artifacts bidirectionally..."
+    Write-Host ""
 
-        Write-Host "[2/2] Downloading models (~856MB)..."
-        New-Item -ItemType Directory -Force -Path "artifacts/models" | Out-Null
-        $args2 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/models", "artifacts/models")
-        & gsutil $args2
-        Write-Host "✓ Models downloaded" -ForegroundColor Green
-    }
+    Write-Host "[1/2] Syncing training data..."
+    $trainingUploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
+    & gsutil $trainingUploadArgs
+    $trainingDownloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
+    & gsutil $trainingDownloadArgs
+    Write-Host "OK Training data synced" -ForegroundColor Green
+    Write-Host ""
 
-    "both" {
-        Write-Host "Syncing artifacts bidirectionally..."
-        Write-Host ""
-
-        Write-Host "[1/2] Syncing training data..."
-        $args1 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
-        & gsutil $args1
-        $args2 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
-        & gsutil $args2
-        Write-Host "✓ Training data synced" -ForegroundColor Green
-        Write-Host ""
-
-        Write-Host "[2/2] Syncing models..."
-        $args3 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/models", "$BUCKET/models")
-        & gsutil $args3
-        $args4 = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/models", "artifacts/models")
-        & gsutil $args4
-        Write-Host "✓ Models synced" -ForegroundColor Green
-    }
-
-    default {
-        Write-Host "Error: Unknown command '$Command'" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "Usage:"
-        Write-Host "  .\scripts\sync-artifacts.ps1 upload    # Upload local changes to GCS"
-        Write-Host "  .\scripts\sync-artifacts.ps1 download  # Download changes from GCS"
-        Write-Host "  .\scripts\sync-artifacts.ps1 both      # Sync both directions"
-        exit 1
-    }
+    Write-Host "[2/2] Syncing models..."
+    $modelsUploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/models", "$BUCKET/models")
+    & gsutil $modelsUploadArgs
+    $modelsDownloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/models", "artifacts/models")
+    & gsutil $modelsDownloadArgs
+    Write-Host "OK Models synced" -ForegroundColor Green
+}
+else {
+    Write-Host "Error: Unknown command '$Command'" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Usage:"
+    Write-Host "  .\scripts\sync-artifacts.ps1 upload    # Upload local changes to GCS"
+    Write-Host "  .\scripts\sync-artifacts.ps1 download  # Download changes from GCS"
+    Write-Host "  .\scripts\sync-artifacts.ps1 both      # Sync both directions"
+    exit 1
 }
 
 Write-Host ""
