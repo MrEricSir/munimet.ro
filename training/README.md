@@ -35,19 +35,16 @@ For detailed setup instructions, see [SETUP.md](../SETUP.md).
 
 If you have access to the shared training dataset via Google Cloud Storage:
 
-1. Follow [SETUP.md](../SETUP.md) to install git-annex and dependencies
-2. See [GCS_SETUP.md](../GCS_SETUP.md) for Google Cloud Storage configuration
-3. See [artifacts/README.md](../artifacts/README.md) for detailed git-annex workflows
-
-Quick reference for downloading training data:
+1. Authenticate with Google Cloud (see [SETUP.md](../SETUP.md))
+2. Download training data using sync scripts:
 
 ```bash
-# Download training data (270MB)
-git annex get artifacts/training_data/
-
-# Unlock labels file for editing
-git annex unlock artifacts/training_data/labels.json
+# Download training data (~270MB)
+../scripts/sync-training-data.sh download    # macOS/Linux
+..\scripts\sync-training-data.ps1 download   # Windows
 ```
+
+The sync scripts use `gsutil rsync` to efficiently download only changed files.
 
 ### Collecting New Data
 
@@ -65,28 +62,17 @@ python download_muni_image.py
 
 **Recommendation**: Collect over multiple days to capture diverse status conditions (normal operation, delays, service interruptions).
 
-### Adding Downloaded Images to Git-Annex
+### Uploading New Data
 
-Downloaded images are regular files until committed. Git-annex is configured to **automatically annex large files** when you use `git add`:
+After collecting and labeling new images, you can upload them to Google Cloud Storage:
 
 ```bash
-# Add new images - they'll be automatically annexed
-git add artifacts/training_data/images/
-
-# Commit the symlinks (not the actual files!)
-git commit -m "Add new training images"
-
-# Verify files are symlinks
-ls -l artifacts/training_data/images/*.jpg | head -5
+# Upload training data to GCS
+../scripts/sync-training-data.sh upload    # macOS/Linux
+..\scripts\sync-training-data.ps1 upload   # Windows
 ```
 
-**How it works:**
-1. The `.gitattributes` file tells git to use the annex filter
-2. When you `git add` a large file, git-annex intercepts and creates a symlink
-3. The actual file content goes to `.git/annex/objects/`
-4. Only the symlink is committed to git
-
-**Safety:** A pre-commit hook prevents accidentally committing large files that weren't properly annexed.
+The sync scripts use `gsutil rsync` to efficiently upload only changed files.
 
 ## Image Labeling
 
@@ -126,9 +112,7 @@ The labeling tool provides two modes accessible via tabs:
 
 **Minimum Dataset**: 50-100 labeled images recommended for baseline accuracy.
 
-Labels are saved to `artifacts/training_data/labels.json`.
-
-For git-annex version control workflows (committing and uploading changes), see [artifacts/README.md](../artifacts/README.md).
+Labels are saved to `artifacts/training_data/labels.json`. To share your labeled data with collaborators, use the upload sync script (see [Uploading New Data](#uploading-new-data) above).
 
 ### Outliers Mode
 
@@ -334,7 +318,6 @@ After training:
 
 ## Related Documentation
 
-- **Data Management**: [artifacts/README.md](../artifacts/README.md) - Git-annex workflows
 - **API Deployment**: [deploy/README.md](../deploy/README.md) - Local and cloud deployment
 - **Environment Setup**: [SETUP.md](../SETUP.md) - Virtual environment configuration
 - **Configuration**: [CONFIGURATION.md](../CONFIGURATION.md) - System configuration values
