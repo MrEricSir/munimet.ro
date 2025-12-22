@@ -2,14 +2,16 @@
 # Sync training data with Google Cloud Storage
 #
 # Usage:
-#   ./scripts/sync-training-data.sh upload    # Upload local changes to GCS
-#   ./scripts/sync-training-data.sh download  # Download changes from GCS
-#   ./scripts/sync-training-data.sh both      # Sync both directions (default)
+#   ./scripts/sync-training-data.sh upload            # Upload local changes to GCS
+#   ./scripts/sync-training-data.sh download          # Download changes from GCS
+#   ./scripts/sync-training-data.sh both              # Sync both directions (default)
+#   ./scripts/sync-training-data.sh delete <path>     # Delete file/directory from GCS
 
 set -e
 
 BUCKET="gs://munimetro-annex"
 COMMAND="${1:-both}"
+DELETE_PATH="${2}"
 
 # Exclusions based on .gitignore (regex patterns for gsutil -x flag)
 EXCLUDE_PATTERNS=(
@@ -71,13 +73,29 @@ case "$COMMAND" in
         echo "✓ Training data synced"
         ;;
 
+    delete)
+        if [ -z "$DELETE_PATH" ]; then
+            echo "Error: delete command requires a path"
+            echo ""
+            echo "Usage: ./scripts/sync-training-data.sh delete <path>"
+            echo "Example: ./scripts/sync-training-data.sh delete training_data/2024-01/.DS_Store"
+            exit 1
+        fi
+        echo "Deleting $BUCKET/$DELETE_PATH from GCS..."
+        echo ""
+        gsutil -m rm -r "$BUCKET/$DELETE_PATH"
+        echo ""
+        echo "✓ Deleted $BUCKET/$DELETE_PATH"
+        ;;
+
     *)
         echo "Error: Unknown command '$COMMAND'"
         echo ""
         echo "Usage:"
-        echo "  ./scripts/sync-training-data.sh upload    # Upload local changes to GCS"
-        echo "  ./scripts/sync-training-data.sh download  # Download changes from GCS"
-        echo "  ./scripts/sync-training-data.sh both      # Sync both directions"
+        echo "  ./scripts/sync-training-data.sh upload            # Upload local changes to GCS"
+        echo "  ./scripts/sync-training-data.sh download          # Download changes from GCS"
+        echo "  ./scripts/sync-training-data.sh both              # Sync both directions"
+        echo "  ./scripts/sync-training-data.sh delete <path>     # Delete file/directory from GCS"
         exit 1
         ;;
 esac

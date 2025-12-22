@@ -2,14 +2,16 @@
 # Sync trained models with Google Cloud Storage
 #
 # Usage:
-#   ./scripts/sync-models.sh upload    # Upload local changes to GCS
-#   ./scripts/sync-models.sh download  # Download changes from GCS
-#   ./scripts/sync-models.sh both      # Sync both directions (default)
+#   ./scripts/sync-models.sh upload            # Upload local changes to GCS
+#   ./scripts/sync-models.sh download          # Download changes from GCS
+#   ./scripts/sync-models.sh both              # Sync both directions (default)
+#   ./scripts/sync-models.sh delete <path>     # Delete file/directory from GCS
 
 set -e
 
 BUCKET="gs://munimetro-annex"
 COMMAND="${1:-both}"
+DELETE_PATH="${2}"
 
 # Exclusions based on .gitignore (regex patterns for gsutil -x flag)
 EXCLUDE_PATTERNS=(
@@ -71,13 +73,29 @@ case "$COMMAND" in
         echo "✓ Models synced"
         ;;
 
+    delete)
+        if [ -z "$DELETE_PATH" ]; then
+            echo "Error: delete command requires a path"
+            echo ""
+            echo "Usage: ./scripts/sync-models.sh delete <path>"
+            echo "Example: ./scripts/sync-models.sh delete models/v1/.DS_Store"
+            exit 1
+        fi
+        echo "Deleting $BUCKET/$DELETE_PATH from GCS..."
+        echo ""
+        gsutil -m rm -r "$BUCKET/$DELETE_PATH"
+        echo ""
+        echo "✓ Deleted $BUCKET/$DELETE_PATH"
+        ;;
+
     *)
         echo "Error: Unknown command '$COMMAND'"
         echo ""
         echo "Usage:"
-        echo "  ./scripts/sync-models.sh upload    # Upload local changes to GCS"
-        echo "  ./scripts/sync-models.sh download  # Download changes from GCS"
-        echo "  ./scripts/sync-models.sh both      # Sync both directions"
+        echo "  ./scripts/sync-models.sh upload            # Upload local changes to GCS"
+        echo "  ./scripts/sync-models.sh download          # Download changes from GCS"
+        echo "  ./scripts/sync-models.sh both              # Sync both directions"
+        echo "  ./scripts/sync-models.sh delete <path>     # Delete file/directory from GCS"
         exit 1
         ;;
 esac

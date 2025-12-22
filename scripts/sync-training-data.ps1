@@ -1,13 +1,17 @@
 # Sync training data with Google Cloud Storage (Windows PowerShell version)
 #
 # Usage:
-#   .\scripts\sync-training-data.ps1 upload    # Upload local changes to GCS
-#   .\scripts\sync-training-data.ps1 download  # Download changes from GCS
-#   .\scripts\sync-training-data.ps1 both      # Sync both directions (default)
+#   .\scripts\sync-training-data.ps1 upload            # Upload local changes to GCS
+#   .\scripts\sync-training-data.ps1 download          # Download changes from GCS
+#   .\scripts\sync-training-data.ps1 both              # Sync both directions (default)
+#   .\scripts\sync-training-data.ps1 delete <path>     # Delete file/directory from GCS
 
 param(
     [Parameter(Position=0)]
-    [string]$Command = "both"
+    [string]$Command = "both",
+
+    [Parameter(Position=1)]
+    [string]$DeletePath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -81,13 +85,28 @@ elseif ($cmd -eq "both") {
     Write-Host ""
     Write-Host "OK Training data synced" -ForegroundColor Green
 }
+elseif ($cmd -eq "delete") {
+    if ([string]::IsNullOrWhiteSpace($DeletePath)) {
+        Write-Host "Error: delete command requires a path" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Usage: .\scripts\sync-training-data.ps1 delete <path>"
+        Write-Host "Example: .\scripts\sync-training-data.ps1 delete training_data/2024-01/.DS_Store"
+        exit 1
+    }
+    Write-Host "Deleting $BUCKET/$DeletePath from GCS..."
+    Write-Host ""
+    & gsutil -m rm -r "$BUCKET/$DeletePath"
+    Write-Host ""
+    Write-Host "OK Deleted $BUCKET/$DeletePath" -ForegroundColor Green
+}
 else {
     Write-Host "Error: Unknown command '$Command'" -ForegroundColor Red
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  .\scripts\sync-training-data.ps1 upload    # Upload local changes to GCS"
-    Write-Host "  .\scripts\sync-training-data.ps1 download  # Download changes from GCS"
-    Write-Host "  .\scripts\sync-training-data.ps1 both      # Sync both directions"
+    Write-Host "  .\scripts\sync-training-data.ps1 upload            # Upload local changes to GCS"
+    Write-Host "  .\scripts\sync-training-data.ps1 download          # Download changes from GCS"
+    Write-Host "  .\scripts\sync-training-data.ps1 both              # Sync both directions"
+    Write-Host "  .\scripts\sync-training-data.ps1 delete <path>     # Delete file/directory from GCS"
     exit 1
 }
 

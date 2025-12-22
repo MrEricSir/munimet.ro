@@ -12,29 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$BUCKET = "gs://munimetro-annex"
-
-# Exclusions based on .gitignore (regex patterns for gsutil -x flag)
-$EXCLUDE_PATTERNS = @(
-    ".*\.DS_Store$",        # macOS metadata
-    ".*__MACOSX.*",         # macOS archive metadata
-    ".*__pycache__.*",      # Python cache
-    ".*\.pyc$",             # Python bytecode
-    ".*\.pyo$",             # Python optimized bytecode
-    ".*\.pyd$",             # Python DLL
-    ".*\.log$",             # Log files
-    ".*\.ipynb_checkpoints.*",  # Jupyter checkpoints
-    ".*\.swp$",             # Vim swap files
-    ".*\.swo$",             # Vim swap files
-    ".*~$"                  # Backup files
-)
-
-# Build exclusion flags
-$EXCLUDE_FLAGS = @()
-foreach ($pattern in $EXCLUDE_PATTERNS) {
-    $EXCLUDE_FLAGS += "-x"
-    $EXCLUDE_FLAGS += $pattern
-}
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Write-Host "=========================================="
 Write-Host "Sync Artifacts with Google Cloud Storage"
@@ -54,56 +32,13 @@ try {
 }
 
 $cmd = $Command.ToLower()
-if ($cmd -eq "upload") {
-    Write-Host "Uploading artifacts to GCS..."
-    Write-Host ""
-
-    Write-Host "[1/2] Uploading training data..."
-    $trainingUploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
-    & gsutil $trainingUploadArgs
-    Write-Host "OK Training data uploaded" -ForegroundColor Green
-    Write-Host ""
-
-    Write-Host "[2/2] Uploading models..."
-    $modelsUploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/models", "$BUCKET/models")
-    & gsutil $modelsUploadArgs
-    Write-Host "OK Models uploaded" -ForegroundColor Green
-}
-elseif ($cmd -eq "download") {
-    Write-Host "Downloading artifacts from GCS..."
-    Write-Host ""
-
-    Write-Host "[1/2] Downloading training data (~270MB)..."
-    New-Item -ItemType Directory -Force -Path "artifacts/training_data" | Out-Null
-    $trainingDownloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
-    & gsutil $trainingDownloadArgs
-    Write-Host "OK Training data downloaded" -ForegroundColor Green
-    Write-Host ""
-
-    Write-Host "[2/2] Downloading models (~856MB)..."
-    New-Item -ItemType Directory -Force -Path "artifacts/models" | Out-Null
-    $modelsDownloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/models", "artifacts/models")
-    & gsutil $modelsDownloadArgs
-    Write-Host "OK Models downloaded" -ForegroundColor Green
-}
-elseif ($cmd -eq "both") {
-    Write-Host "Syncing artifacts bidirectionally..."
-    Write-Host ""
-
+if ($cmd -eq "upload" -or $cmd -eq "download" -or $cmd -eq "both") {
     Write-Host "[1/2] Syncing training data..."
-    $trainingUploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
-    & gsutil $trainingUploadArgs
-    $trainingDownloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
-    & gsutil $trainingDownloadArgs
-    Write-Host "OK Training data synced" -ForegroundColor Green
+    & "$SCRIPT_DIR\sync-training-data.ps1" $Command
     Write-Host ""
 
     Write-Host "[2/2] Syncing models..."
-    $modelsUploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/models", "$BUCKET/models")
-    & gsutil $modelsUploadArgs
-    $modelsDownloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/models", "artifacts/models")
-    & gsutil $modelsDownloadArgs
-    Write-Host "OK Models synced" -ForegroundColor Green
+    & "$SCRIPT_DIR\sync-models.ps1" $Command
 }
 else {
     Write-Host "Error: Unknown command '$Command'" -ForegroundColor Red

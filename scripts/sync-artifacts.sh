@@ -8,8 +8,8 @@
 
 set -e
 
-BUCKET="gs://munimetro-annex"
 COMMAND="${1:-both}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=========================================="
 echo "Sync Artifacts with Google Cloud Storage"
@@ -24,50 +24,13 @@ if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q
 fi
 
 case "$COMMAND" in
-    upload)
-        echo "Uploading artifacts to GCS..."
-        echo ""
-
-        echo "[1/2] Uploading training data..."
-        gsutil -m rsync -r artifacts/training_data "$BUCKET/training_data"
-        echo "✓ Training data uploaded"
-        echo ""
-
-        echo "[2/2] Uploading models..."
-        gsutil -m rsync -r artifacts/models "$BUCKET/models"
-        echo "✓ Models uploaded"
-        ;;
-
-    download)
-        echo "Downloading artifacts from GCS..."
-        echo ""
-
-        echo "[1/2] Downloading training data (~270MB)..."
-        mkdir -p artifacts/training_data
-        gsutil -m rsync -r "$BUCKET/training_data" artifacts/training_data
-        echo "✓ Training data downloaded"
-        echo ""
-
-        echo "[2/2] Downloading models (~856MB)..."
-        mkdir -p artifacts/models
-        gsutil -m rsync -r "$BUCKET/models" artifacts/models
-        echo "✓ Models downloaded"
-        ;;
-
-    both)
-        echo "Syncing artifacts bidirectionally..."
-        echo ""
-
+    upload|download|both)
         echo "[1/2] Syncing training data..."
-        gsutil -m rsync -r artifacts/training_data "$BUCKET/training_data"
-        gsutil -m rsync -r "$BUCKET/training_data" artifacts/training_data
-        echo "✓ Training data synced"
+        "$SCRIPT_DIR/sync-training-data.sh" "$COMMAND"
         echo ""
 
         echo "[2/2] Syncing models..."
-        gsutil -m rsync -r artifacts/models "$BUCKET/models"
-        gsutil -m rsync -r "$BUCKET/models" artifacts/models
-        echo "✓ Models synced"
+        "$SCRIPT_DIR/sync-models.sh" "$COMMAND"
         ;;
 
     *)
