@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.utils.data import Dataset, DataLoader
-from PIL import Image
+from PIL import Image, ImageEnhance
 from transformers import (
     BlipProcessor,
     BlipForConditionalGeneration,
@@ -26,6 +26,7 @@ from transformers import (
 )
 from tqdm import tqdm
 import numpy as np
+import random
 
 # Configuration
 LABELS_FILE = "../artifacts/training_data/labels.json"
@@ -77,9 +78,10 @@ def get_training_config():
 class MuniDataset(Dataset):
     """Dataset for Muni subway status images and labels."""
 
-    def __init__(self, data, processor):
+    def __init__(self, data, processor, augment_minority_classes=False):
         self.data = data
         self.processor = processor
+        self.augment_minority_classes = augment_minority_classes
 
         # Map status to numeric labels
         self.status_to_label = {
@@ -89,6 +91,25 @@ class MuniDataset(Dataset):
             '': -1  # No status
         }
         self.label_to_status = {v: k for k, v in self.status_to_label.items() if v >= 0}
+
+    def apply_augmentation(self, image):
+        """Apply random augmentations to help model learn minority class features."""
+        # Randomly apply brightness adjustment (±20%)
+        if random.random() > 0.5:
+            enhancer = ImageEnhance.Brightness(image)
+            image = enhancer.enhance(random.uniform(0.8, 1.2))
+
+        # Randomly apply contrast adjustment (±20%)
+        if random.random() > 0.5:
+            enhancer = ImageEnhance.Contrast(image)
+            image = enhancer.enhance(random.uniform(0.8, 1.2))
+
+        # Randomly apply color saturation adjustment (±15%)
+        if random.random() > 0.5:
+            enhancer = ImageEnhance.Color(image)
+            image = enhancer.enhance(random.uniform(0.85, 1.15))
+
+        return image
 
     def __len__(self):
         return len(self.data)
@@ -108,6 +129,10 @@ class MuniDataset(Dataset):
         description = item.get('description', '')
         status = item.get('status', '')
         status_label = self.status_to_label.get(status, -1)
+
+        # Apply augmentation to minority classes (yellow/red) during training
+        if self.augment_minority_classes and status in ['yellow', 'red']:
+            image = self.apply_augmentation(image)
 
         # Process image and text with BLIP processor
         encoding = self.processor(
@@ -291,9 +316,10 @@ def train_model():
         weight = total_train / (len(status_order) * count)
         class_weights.append(weight)
 
-    # Normalize so green (majority class) has weight 1.0
-    green_weight = class_weights[0]
-    class_weights = [w / green_weight for w in class_weights]
+    # Normalize so the smallest weight (most common class) has weight 1.0
+    # This makes the penalty for minority classes stronger
+    min_weight = min(class_weights)
+    class_weights = [w / min_weight for w in class_weights]
 
     print("\nClass weights (to handle imbalance):")
     for status, weight in zip(status_order, class_weights):
@@ -315,9 +341,10 @@ def train_model():
 
     # Create datasets
     print("\n[3/6] Preparing datasets...")
-    train_dataset = MuniDataset(train_data, processor)
-    val_dataset = MuniDataset(val_data, processor)
-    test_dataset = MuniDataset(test_data, processor)
+    train_dataset = MuniDataset(train_data, processor, augment_minority_classes=True)
+    val_dataset = MuniDataset(val_data, processor, augment_minority_classes=False)
+    test_dataset = MuniDataset(test_data, processor, augment_minority_classes=False)
+    print("Data augmentation enabled for minority classes (yellow/red) in training set")
 
     # Create data loaders with hardware-optimized settings
     train_loader = DataLoader(

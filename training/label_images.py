@@ -158,9 +158,14 @@ class ImageLabeler:
 
         # Filter based on mode
         if self.current_mode == "outliers":
-            # Only show images that are in the outlier report
-            self.image_files = [f for f in all_files if f in self.outlier_data]
-            print(f"Found {len(self.image_files)} outlier images")
+            # Only show images that are in the outlier report and NOT reviewed
+            self.image_files = [
+                f for f in all_files
+                if f in self.outlier_data and not self.labels.get(f, {}).get('reviewed', False)
+            ]
+            total_outliers = len([f for f in all_files if f in self.outlier_data])
+            reviewed_count = total_outliers - len(self.image_files)
+            print(f"Found {len(self.image_files)} unreviewed outlier images ({reviewed_count} already reviewed)")
         else:
             # Show all images
             self.image_files = all_files
@@ -419,10 +424,14 @@ class ImageLabeler:
                 # Check if fully labeled (has both description and status)
                 has_description = bool(description.strip())
                 has_status = bool(status)
+                is_reviewed = self.labels[image_path].get('reviewed', False)
 
                 if has_description and has_status:
+                    status_text = f"✓ Labeled (last updated: {self.labels[image_path].get('labeled_at', 'unknown')})"
+                    if is_reviewed:
+                        status_text += f" | ✓ Reviewed: {self.labels[image_path].get('reviewed_at', 'unknown')}"
                     self.status_label.config(
-                        text=f"✓ Labeled (last updated: {self.labels[image_path].get('labeled_at', 'unknown')})",
+                        text=status_text,
                         foreground="green"
                     )
                 elif has_description or has_status:
@@ -477,13 +486,26 @@ class ImageLabeler:
                 return False
 
         # Create or update label
-        self.labels[image_path] = {
+        label_data = {
             'image_path': image_path,
             'description': description,
             'status': status,
             'labeled_at': datetime.now().isoformat(),
             'image_size': os.path.getsize(image_path)
         }
+
+        # Mark as reviewed if we're in outliers mode
+        if self.current_mode == "outliers":
+            label_data['reviewed'] = True
+            label_data['reviewed_at'] = datetime.now().isoformat()
+
+        # Preserve existing reviewed status if not in outliers mode
+        if image_path in self.labels and 'reviewed' in self.labels[image_path]:
+            label_data['reviewed'] = self.labels[image_path]['reviewed']
+            if 'reviewed_at' in self.labels[image_path]:
+                label_data['reviewed_at'] = self.labels[image_path]['reviewed_at']
+
+        self.labels[image_path] = label_data
 
         return self.save_labels()
 
