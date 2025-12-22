@@ -144,11 +144,13 @@ class ImageLabeler:
             return
 
         # Get all jpg files (both .jpg and .JPG)
+        # Use a set to deduplicate on case-insensitive filesystems (Windows)
         image_dir = Path(IMAGE_FOLDER)
-        jpg_files = list(image_dir.glob("*.jpg"))
-        JPG_files = list(image_dir.glob("*.JPG"))
+        jpg_files = set(image_dir.glob("*.jpg"))
+        JPG_files = set(image_dir.glob("*.JPG"))
+        # Use forward slashes for cross-platform consistency with labels.json
         all_files = sorted([
-            str(f) for f in jpg_files + JPG_files
+            str(f).replace("\\", "/") for f in jpg_files | JPG_files
         ])
 
         # Store all images for mode switching
