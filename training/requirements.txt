@@ -17,6 +17,7 @@ torch>=2.0.0
 transformers>=4.30.0
 numpy>=1.24.0
 tqdm>=4.65.0
+scikit-learn>=1.3.0
 
 # Note: tkinter required for label_images.py GUI
 # macOS: brew install python-tk@3.13
