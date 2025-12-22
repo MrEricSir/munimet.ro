@@ -27,10 +27,16 @@ from transformers import (
 from tqdm import tqdm
 import numpy as np
 import random
+from sklearn.metrics import precision_recall_fscore_support, classification_report
+import subprocess
+import shutil
+from datetime import datetime
 
 # Configuration
 LABELS_FILE = "../artifacts/training_data/labels.json"
 MODEL_OUTPUT_DIR = "../artifacts/models/v1"
+SNAPSHOTS_DIR = "../artifacts/models/snapshots"
+TRAINING_HISTORY_FILE = "../artifacts/models/training_history.json"
 EPOCHS = 10
 LEARNING_RATE = 5e-5
 TRAIN_SPLIT = 0.7   # 70% train
@@ -177,6 +183,116 @@ def load_training_data():
         print("Continue labeling images before training for best results.")
 
     return filtered_data
+
+
+def get_git_info():
+    """Get current git commit hash and branch for reproducibility."""
+    try:
+        commit_hash = subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'],
+            stderr=subprocess.DEVNULL,
+            cwd=os.path.dirname(__file__)
+        ).decode('utf-8').strip()
+
+        branch = subprocess.check_output(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            stderr=subprocess.DEVNULL,
+            cwd=os.path.dirname(__file__)
+        ).decode('utf-8').strip()
+
+        # Check if there are uncommitted changes
+        status = subprocess.check_output(
+            ['git', 'status', '--porcelain'],
+            stderr=subprocess.DEVNULL,
+            cwd=os.path.dirname(__file__)
+        ).decode('utf-8').strip()
+
+        has_changes = bool(status)
+
+        return {
+            'commit_hash': commit_hash,
+            'branch': branch,
+            'has_uncommitted_changes': has_changes
+        }
+    except Exception as e:
+        print(f"Could not get git info: {e}")
+        return {
+            'commit_hash': 'unknown',
+            'branch': 'unknown',
+            'has_uncommitted_changes': False
+        }
+
+
+def save_training_history(run_data):
+    """Append training run data to history file."""
+    history = {'training_runs': []}
+
+    # Load existing history if it exists
+    if os.path.exists(TRAINING_HISTORY_FILE):
+        try:
+            with open(TRAINING_HISTORY_FILE, 'r') as f:
+                history = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load existing history: {e}")
+
+    # Append new run
+    history['training_runs'].append(run_data)
+
+    # Save updated history
+    os.makedirs(os.path.dirname(TRAINING_HISTORY_FILE), exist_ok=True)
+    with open(TRAINING_HISTORY_FILE, 'w') as f:
+        json.dump(history, f, indent=2)
+
+    print(f"Training history saved to {TRAINING_HISTORY_FILE}")
+
+
+def create_snapshot(run_id, model, processor, train_dataset, run_data):
+    """Create a versioned snapshot of the model and training data."""
+    snapshot_dir = os.path.join(SNAPSHOTS_DIR, run_id)
+    os.makedirs(snapshot_dir, exist_ok=True)
+
+    print(f"\nCreating snapshot: {snapshot_dir}")
+
+    # Save model files
+    model_dir = os.path.join(snapshot_dir, 'model')
+    os.makedirs(model_dir, exist_ok=True)
+    model.base_model.save_pretrained(model_dir)
+    processor.save_pretrained(model_dir)
+    torch.save(
+        model.status_classifier.state_dict(),
+        os.path.join(model_dir, 'status_classifier.pt')
+    )
+
+    # Save config
+    with open(os.path.join(model_dir, 'config.json'), 'w') as f:
+        json.dump({
+            'status_to_label': train_dataset.status_to_label,
+            'label_to_status': train_dataset.label_to_status
+        }, f, indent=2)
+
+    # Save training data snapshot (copy of labels.json)
+    shutil.copy(LABELS_FILE, os.path.join(snapshot_dir, 'training_labels.json'))
+
+    # Save run metrics and metadata
+    with open(os.path.join(snapshot_dir, 'run_metadata.json'), 'w') as f:
+        json.dump(run_data, f, indent=2)
+
+    # Save environment info
+    with open(os.path.join(snapshot_dir, 'environment.txt'), 'w') as f:
+        f.write(f"Python version: {subprocess.check_output(['python', '--version']).decode().strip()}\n")
+        f.write(f"PyTorch version: {torch.__version__}\n")
+        f.write(f"CUDA available: {torch.cuda.is_available()}\n")
+        if torch.cuda.is_available():
+            f.write(f"CUDA version: {torch.version.cuda}\n")
+        f.write("\nPip freeze:\n")
+        try:
+            freeze = subprocess.check_output(['pip', 'freeze']).decode()
+            f.write(freeze)
+        except:
+            f.write("Could not get pip freeze output\n")
+
+    print(f"✓ Snapshot saved to {snapshot_dir}")
+    return snapshot_dir
 
 
 def split_data(data, train_ratio=0.7, val_ratio=0.15):
@@ -540,6 +656,10 @@ def train_model():
 
     print("\n[5/6] Evaluating on test set (holdout)...")
 
+    # Generate run ID for this training session
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    print(f"Run ID: {run_id}")
+
     # Load best model for testing
     model.eval()
     test_loss = 0
@@ -548,8 +668,10 @@ def train_model():
     correct_status = 0
     total_status = 0
 
-    # Track predictions for outlier detection
+    # Track predictions for outlier detection and metrics
     test_results = []
+    all_predictions = []
+    all_true_labels = []
 
     with torch.no_grad():
         pbar = tqdm(test_loader, desc="Testing")
@@ -604,6 +726,11 @@ def train_model():
                     pred_label = predictions[i].item()
                     confidence = probabilities[i, pred_label].item()
 
+                    # Collect for per-class metrics (skip unlabeled)
+                    if true_label >= 0:
+                        all_true_labels.append(true_label)
+                        all_predictions.append(pred_label)
+
                     test_results.append({
                         'image_path': test_data[sample_idx]['image_path'],
                         'true_status': test_dataset.label_to_status.get(true_label, 'unknown'),
@@ -622,9 +749,34 @@ def train_model():
     avg_test_loss = test_loss / len(test_loader)
     test_accuracy = correct_status / total_status if total_status > 0 else 0
 
+    # Calculate per-class metrics
+    print("\nCalculating per-class metrics...")
+    precision, recall, f1, support = precision_recall_fscore_support(
+        all_true_labels,
+        all_predictions,
+        labels=[0, 1, 2],  # green, yellow, red
+        zero_division=0
+    )
+
+    per_class_metrics = {}
+    status_names = ['green', 'yellow', 'red']
+    for i, status in enumerate(status_names):
+        per_class_metrics[status] = {
+            'precision': float(precision[i]),
+            'recall': float(recall[i]),
+            'f1': float(f1[i]),
+            'support': int(support[i])
+        }
+
     print(f"\nTest Set Results:")
     print(f"  Test Loss: {avg_test_loss:.4f}")
     print(f"  Test Status Accuracy: {test_accuracy:.2%}")
+    print()
+    print("Per-class metrics:")
+    for status, metrics in per_class_metrics.items():
+        print(f"  {status.upper():6s}: Precision={metrics['precision']:.3f}, "
+              f"Recall={metrics['recall']:.3f}, F1={metrics['f1']:.3f}, "
+              f"Support={metrics['support']}")
     print()
 
     # Generate outlier report
@@ -712,10 +864,72 @@ def train_model():
     print("=" * 80)
     print()
 
+    # Prepare run data for history and snapshot
+    git_info = get_git_info()
+
+    run_data = {
+        'run_id': run_id,
+        'timestamp': datetime.now().isoformat(),
+        'git_info': git_info,
+        'dataset': {
+            'total_samples': len(all_data),
+            'train_samples': len(train_data),
+            'val_samples': len(val_data),
+            'test_samples': len(test_data),
+            'class_distribution': train_counts
+        },
+        'hyperparameters': {
+            'epochs': EPOCHS,
+            'learning_rate': LEARNING_RATE,
+            'batch_size': batch_size,
+            'train_split': TRAIN_SPLIT,
+            'val_split': VAL_SPLIT,
+            'test_split': TEST_SPLIT,
+            'max_length': MAX_LENGTH,
+            'class_weights': [float(w) for w in class_weights],
+            'augment_minority_classes': True
+        },
+        'training_config': {
+            'device': str(device),
+            'use_amp': use_amp,
+            'num_workers': config['num_workers'],
+            'pin_memory': config['pin_memory']
+        },
+        'final_metrics': {
+            'best_val_loss': float(best_val_loss),
+            'test_loss': float(avg_test_loss),
+            'test_accuracy': float(test_accuracy)
+        },
+        'per_class_metrics': per_class_metrics,
+        'outliers': {
+            'total_test_samples': len(test_results),
+            'misclassified': len(incorrect),
+            'low_confidence_count': len(low_confidence),
+            'high_confidence_errors_count': len(high_conf_wrong)
+        },
+        'model_path': MODEL_OUTPUT_DIR,
+        'snapshot_path': None  # Will be updated after creating snapshot
+    }
+
+    # Save training history
+    print("\nSaving training history...")
+    save_training_history(run_data)
+
+    # Create snapshot
+    print("\nCreating reproducible snapshot...")
+    snapshot_path = create_snapshot(run_id, model, processor, train_dataset, run_data)
+
+    # Update run_data with snapshot path and re-save
+    run_data['snapshot_path'] = snapshot_path
+    save_training_history(run_data)
+
     print("\nTraining complete!")
     print(f"Model saved to: {MODEL_OUTPUT_DIR}")
+    print(f"Snapshot saved to: {snapshot_path}")
     print(f"Best validation loss: {best_val_loss:.4f}")
     print(f"Final test accuracy: {test_accuracy:.2%}")
+    print(f"\nRun ID: {run_id}")
+    print("Use view_training_history.py to compare with previous runs")
 
 
 if __name__ == "__main__":
