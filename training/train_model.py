@@ -27,7 +27,7 @@ from transformers import (
 from tqdm import tqdm
 import numpy as np
 import random
-from sklearn.metrics import precision_recall_fscore_support, classification_report
+from scikit-learn.metrics import precision_recall_fscore_support, classification_report
 import subprocess
 import shutil
 from datetime import datetime
