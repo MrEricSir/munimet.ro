@@ -4,6 +4,10 @@
 #   .\scripts\sync-artifacts.ps1 upload    # Upload local changes to GCS
 #   .\scripts\sync-artifacts.ps1 download  # Download changes from GCS
 #   .\scripts\sync-artifacts.ps1 both      # Sync both directions
+#
+# To delete files from GCS, use the individual scripts:
+#   .\scripts\sync-models.ps1 delete <path>
+#   .\scripts\sync-training-data.ps1 delete <path>
 
 param(
     [Parameter(Position=0)]
@@ -47,6 +51,10 @@ else {
     Write-Host "  .\scripts\sync-artifacts.ps1 upload    # Upload local changes to GCS"
     Write-Host "  .\scripts\sync-artifacts.ps1 download  # Download changes from GCS"
     Write-Host "  .\scripts\sync-artifacts.ps1 both      # Sync both directions"
+    Write-Host ""
+    Write-Host "To delete files from GCS, use the individual scripts:"
+    Write-Host "  .\scripts\sync-models.ps1 delete <path>"
+    Write-Host "  .\scripts\sync-training-data.ps1 delete <path>"
     exit 1
 }
 

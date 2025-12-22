@@ -5,6 +5,10 @@
 #   ./scripts/sync-artifacts.sh upload    # Upload local changes to GCS
 #   ./scripts/sync-artifacts.sh download  # Download changes from GCS
 #   ./scripts/sync-artifacts.sh both      # Sync both directions
+#
+# To delete files from GCS, use the individual scripts:
+#   ./scripts/sync-models.sh delete <path>
+#   ./scripts/sync-training-data.sh delete <path>
 
 set -e
 
@@ -40,6 +44,10 @@ case "$COMMAND" in
         echo "  ./scripts/sync-artifacts.sh upload    # Upload local changes to GCS"
         echo "  ./scripts/sync-artifacts.sh download  # Download changes from GCS"
         echo "  ./scripts/sync-artifacts.sh both      # Sync both directions"
+        echo ""
+        echo "To delete files from GCS, use the individual scripts:"
+        echo "  ./scripts/sync-models.sh delete <path>"
+        echo "  ./scripts/sync-training-data.sh delete <path>"
         exit 1
         ;;
 esac
