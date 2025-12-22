@@ -88,21 +88,77 @@
       "image_path": "../artifacts/training_data/images/IMG_9859.JPG",
       "description": "Normal",
       "status": "green",
-      "labeled_at": "2025-12-20T19:18:15.178778",
-      "image_size": 102502
+      "labeled_at": "2025-12-21T16:12:27.354049",
+      "image_size": 205
+    },
+    {
+      "image_path": "../artifacts/training_data/images/Mimic1_A7SE582P normal.jpg",
+      "description": "Normal",
+      "status": "green",
+      "labeled_at": "2025-12-21T16:12:35.052040",
+      "image_size": 107343
+    },
+    {
+      "image_path": "../artifacts/training_data/images/Mimic1_A7SE582P outage 2.jpg",
+      "description": "Delays in Eastbound and Westbound directions",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:12:44.102616",
+      "image_size": 106800
+    },
+    {
+      "image_path": "../artifacts/training_data/images/Mimic1_A7SE582P outage 3.jpg",
+      "description": "Delays in Eastbound and Westbound directions",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:13:22.569402",
+      "image_size": 108033
+    },
+    {
+      "image_path": "../artifacts/training_data/images/Mimic1_A7SE582P outage 4.jpg",
+      "description": "Delays in Eastbound and Westbound directions",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:13:27.388672",
+      "image_size": 107566
+    },
+    {
+      "image_path": "../artifacts/training_data/images/Mimic1_A7SE582P outage 5.jpg",
+      "description": "Delays in Eastbound and Westbound directions",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:13:31.103185",
+      "image_size": 105901
+    },
+    {
+      "image_path": "../artifacts/training_data/images/Mimic1_A7SE582P outage 6.jpg",
+      "description": "Delays in Eastbound and Westbound directions",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:13:35.353105",
+      "image_size": 103933
+    },
+    {
+      "image_path": "../artifacts/training_data/images/Mimic1_A7SE582P outage.jpg",
+      "description": "Delays in Eastbound and Westbound directions",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:13:38.885552",
+      "image_size": 105475
+    },
+    {
+      "image_path": "../artifacts/training_data/images/Mimic1_A7SE582P.jpg",
+      "description": "Eastbound delay from Church to Embarcadero",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:14:22.584368",
+      "image_size": 117517
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_134756.jpg",
       "description": "Normal",
       "status": "green",
-      "labeled_at": "2025-12-06T17:32:26.566878",
+      "labeled_at": "2025-12-21T16:14:34.550672",
       "image_size": 112829
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_134913.jpg",
       "description": "Normal",
       "status": "green",
-      "labeled_at": "2025-12-06T17:19:28.656686",
+      "labeled_at": "2025-12-21T16:14:41.384228",
       "image_size": 116992
     },
     {
@@ -303,7 +359,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_141453.jpg",
-      "description": "Delay in both directions between Civic Center and Embarcadero",
+      "description": "Delays in Eastbound and Westbound directions between Civic Center and Embarcadero",
       "status": "yellow",
       "labeled_at": "2025-12-13T18:14:46.918187",
       "image_size": 117631
@@ -548,7 +604,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_143938.jpg",
-      "description": "Delay in both directions between Civic Center and Embarcadero",
+      "description": "Delays in Eastbound and Westbound directions between Civic Center and Embarcadero",
       "status": "yellow",
       "labeled_at": "2025-12-06T17:23:11.048271",
       "image_size": 115374
@@ -912,7 +968,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_151425.jpg",
-      "description": "Delay in both directions between Van Ness and Embarcadero",
+      "description": "Delays in Eastbound and Westbound directions between Van Ness and Embarcadero",
       "status": "yellow",
       "labeled_at": "2025-12-06T17:39:19.759805",
       "image_size": 110838
@@ -1913,7 +1969,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_164959.jpg",
-      "description": "Delay in both directions at Van Ness",
+      "description": "Delays in Eastbound and Westbound directions at Van Ness",
       "status": "yellow",
       "labeled_at": "2025-12-13T21:14:46.503088",
       "image_size": 112016
@@ -2578,7 +2634,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251206_175409.jpg",
-      "description": "Delay in both directions at Van Ness",
+      "description": "Delays in Eastbound and Westbound directions at Van Ness",
       "status": "yellow",
       "labeled_at": "2025-12-06T18:22:13.332813",
       "image_size": 111151
@@ -6603,7 +6659,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251207_001936.jpg",
-      "description": "Eastbound delay at West Portal and Church and delay in both directions between Civic Center and Montgomery",
+      "description": "Eastbound delay at West Portal and Church and delays Eastbound and Westbound directions between Civic Center and Montgomery",
       "status": "yellow",
       "labeled_at": "2025-12-13T22:53:37.359510",
       "image_size": 96031
@@ -9585,7 +9641,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251207_093630.jpg",
-      "description": "Delay in both directions between Civic Center and Embarcadero",
+      "description": "Delays in Eastbound and Westbound directions between Civic Center and Embarcadero",
       "status": "yellow",
       "labeled_at": "2025-12-07T09:44:25.453993",
       "image_size": 114304
@@ -12266,7 +12322,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251207_145605.jpg",
-      "description": "Delay in both directions at Van Ness",
+      "description": "Delays in Eastbound and Westbound directionsat Van Ness",
       "status": "yellow",
       "labeled_at": "2025-12-07T16:35:35.893658",
       "image_size": 115096
@@ -14163,7 +14219,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251207_182623.jpg",
-      "description": "Delay in both directions from Civic Center to Embarcadero",
+      "description": "Delays in Eastbound and Westbound directions from Civic Center to Embarcadero",
       "status": "yellow",
       "labeled_at": "2025-12-14T00:54:15.830903",
       "image_size": 114786
@@ -14884,7 +14940,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251207_191806.jpg",
-      "description": "Delay in both directions at Van Ness",
+      "description": "Delays in Eastbound and Westbound directions at Van Ness",
       "status": "yellow",
       "labeled_at": "2025-12-07T19:43:02.162617",
       "image_size": 109982
@@ -16606,7 +16662,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251208_000528.jpg",
-      "description": "Delay in both directions from Civic Center to Embarcadero",
+      "description": "Delays in Eastbound and Westbound directions from Civic Center to Embarcadero",
       "status": "yellow",
       "labeled_at": "2025-12-14T01:06:09.077169",
       "image_size": 105337
@@ -17866,7 +17922,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251208_175900.jpg",
-      "description": "Delay in both directions at Van Ness",
+      "description": "Delays in Eastbound and Westbound directions at Van Ness",
       "status": "yellow",
       "labeled_at": "2025-12-08T18:15:32.900109",
       "image_size": 116390
@@ -19343,7 +19399,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_053632_synth_5.jpg",
-      "description": "Delay in both directions between Yerba Buena and Union Square",
+      "description": "Delays in Eastbound and Westbound directions between Yerba Buena and Union Square",
       "status": "yellow",
       "labeled_at": "2025-12-10T13:01:57.010534",
       "image_size": 89971
@@ -19385,14 +19441,14 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_054132_synth_1.jpg",
-      "description": "Delay in both directions between West Portal and Forest Hill",
+      "description": "Delays in Eastbound and Westbound directions between West Portal and Forest Hill",
       "status": "yellow",
       "labeled_at": "2025-12-10T13:04:04.408554",
       "image_size": 95371
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_054132_synth_2.jpg",
-      "description": "Delay in both directions between West Portal and Forest Hill and in both directions between Yerba Buena and Chinatown",
+      "description": "Delays in Eastbound and Westbound directions between West Portal and Forest Hill and in delays in Eastbound and Westbound directions between Yerba Buena and Chinatown",
       "status": "red",
       "labeled_at": "2025-12-10T13:05:54.475667",
       "image_size": 98883
@@ -19686,14 +19742,14 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_135434_synth_1.jpg",
-      "description": "Delay in both directions at Forest Hill",
+      "description": "Delays in Eastbound and Westbound directions at Forest Hill",
       "status": "yellow",
       "labeled_at": "2025-12-10T15:03:47.308035",
       "image_size": 120258
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_135434_synth_2.jpg",
-      "description": "Delay in both directions at Forest Hill and Southbound at Yerba Buena",
+      "description": "Delays in Eastbound and Westbound directions at Forest Hill and Southbound at Yerba Buena",
       "status": "yellow",
       "labeled_at": "2025-12-10T15:04:26.957801",
       "image_size": 120422
@@ -19763,7 +19819,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251210_141942_synth_2.jpg",
-      "description": "Delays in both directions between Forest Hill and Embarcadero",
+      "description": "Delays in Eastbound and Westbound directions between Forest Hill and Embarcadero",
       "status": "red",
       "labeled_at": "2025-12-10T15:07:45.525214",
       "image_size": 129059
@@ -21177,7 +21233,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251211_053955_synth_1.jpg",
-      "description": "Delays in both directions between Yerba Buena and Chinatown",
+      "description": "Delays in Northbound and Southbound directions between Yerba Buena and Chinatown",
       "status": "yellow",
       "labeled_at": "2025-12-11T15:58:22.233566",
       "image_size": 92305
@@ -21240,7 +21296,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251211_060456.jpg",
-      "description": "Delay in both directions between Yerba Buena and Chinatown",
+      "description": "Delay in Northbound and Southbound directions between Yerba Buena and Chinatown",
       "status": "yellow",
       "labeled_at": "2025-12-11T15:58:06.594483",
       "image_size": 103782
@@ -21268,7 +21324,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251211_060956_synth_3.jpg",
-      "description": "Delay in both directions between Yerba Buena and Union Square",
+      "description": "Delay in Northbound and Southbound directions between Yerba Buena and Union Square",
       "status": "yellow",
       "labeled_at": "2025-12-11T16:00:06.977542",
       "image_size": 95187
@@ -22472,7 +22528,7 @@
     },
     {
       "image_path": "../artifacts/training_data/images/muni_snapshot_20251214_120728.jpg",
-      "description": "Delay in both directions at Chinatown",
+      "description": "Delay in Northbound and Southbound directions at Chinatown",
       "status": "yellow",
       "labeled_at": "2025-12-14T13:03:01.511283",
       "image_size": 110555
@@ -24863,8 +24919,22 @@
       "status": "red",
       "labeled_at": "2025-12-20T01:31:03.000578",
       "image_size": 92655
+    },
+    {
+      "image_path": "../artifacts/training_data/images/muni_snapshot_20251221_160519.jpg",
+      "description": "Delays in Eastbound and Westbound directions",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:07:08.488622",
+      "image_size": 105280
+    },
+    {
+      "image_path": "../artifacts/training_data/images/muni_snapshot_20251221_161027.jpg",
+      "description": "Delays in Eastbound and Westbound directions",
+      "status": "yellow",
+      "labeled_at": "2025-12-21T16:14:51.617267",
+      "image_size": 104407
     }
   ],
-  "total_images": 3552,
-  "last_updated": "2025-12-20T20:01:56.376757"
+  "total_images": 3562,
+  "last_updated": "2025-12-21T16:14:51.617489"
 }
