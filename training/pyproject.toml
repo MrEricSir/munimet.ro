@@ -13,11 +13,13 @@ ignore_undeclared = [
     "lib",     # Local shared library (../lib/muni_lib.py)
     "google",  # google-cloud-storage only needed for API deployment
     "PIL",     # Import name for pillow package
+    "scikit-learn", # Package name for sklearn
 ]
 
 # Ignore dependencies that are used but not imported
 ignore_unused = [
     "pillow",  # Imported as PIL
+    "sklearn", # Imported as scikit-learn
 ]
 
 # Custom mapping file for import name to package name mappings
