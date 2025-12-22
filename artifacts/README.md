@@ -125,14 +125,18 @@ cd ..
 
 ### Updating Training Labels
 
-The `labels.json` file is a regular file that can be edited directly:
+The `labels.json` file is managed via GCS along with the training images:
 
 ```bash
-# 1. Run labeling tool
+# 1. Download current labels and images
+./scripts/sync-training-data.sh download    # macOS/Linux
+.\scripts\sync-training-data.ps1 download   # Windows
+
+# 2. Run labeling tool
 cd training
 python label_images.py  # Modifies artifacts/training_data/labels.json
 
-# 2. Upload changes to cloud
+# 3. Upload changes to cloud
 cd ..
 ./scripts/sync-training-data.sh upload    # macOS/Linux
 .\scripts\sync-training-data.ps1 upload   # Windows
