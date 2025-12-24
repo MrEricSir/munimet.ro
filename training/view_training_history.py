@@ -142,6 +142,26 @@ def print_detailed_run(run, run_number):
               f"{class_metrics['support']:>8}")
     print()
 
+    # Confusion Matrix
+    if 'confusion_matrix' in run:
+        cm_data = run['confusion_matrix']
+        cm = cm_data['matrix']
+        analysis = cm_data['analysis']
+
+        print("Confusion Matrix:")
+        print("  (Rows = True labels, Columns = Predictions)")
+        print()
+        print(f"              {'Pred GREEN':<12} {'Pred YELLOW':<13} {'Pred RED':<10}")
+        print(f"  True GREEN  {cm[0][0]:>10}   {cm[0][1]:>11}   {cm[0][2]:>8}")
+        print(f"  True YELLOW {cm[1][0]:>10}   {cm[1][1]:>11}   {cm[1][2]:>8}")
+        print(f"  True RED    {cm[2][0]:>10}   {cm[2][1]:>11}   {cm[2][2]:>8}")
+        print()
+        print("  Key Confusions:")
+        print(f"    Yellow → Green: {analysis['yellow_to_green']} ({analysis['yellow_to_green_percent']:.1f}% of yellows)")
+        print(f"    Yellow → Red: {analysis['yellow_to_red']} ({analysis['yellow_to_red_percent']:.1f}% of yellows)")
+        print(f"    Green → Yellow: {analysis['green_to_yellow']} ({analysis['green_to_yellow_percent']:.1f}% of greens)")
+        print()
+
     # Outliers
     outliers = run['outliers']
     print("Outlier Analysis:")
@@ -210,6 +230,23 @@ def compare_runs(runs):
                 change = " (→ no change)"
         print(f"  Run {i+1}: {count}{change}")
     print()
+
+    # Yellow→Green confusion trend (if available)
+    if all('confusion_matrix' in r for r in runs):
+        yellow_to_green = [r['confusion_matrix']['analysis']['yellow_to_green'] for r in runs]
+        print("Yellow → Green Confusion Trend (critical metric):")
+        for i, count in enumerate(yellow_to_green):
+            change = ""
+            if i > 0:
+                diff = count - yellow_to_green[i-1]
+                if diff > 0:
+                    change = f" (↑ +{diff} worse)"
+                elif diff < 0:
+                    change = f" (↓ {diff} better)"
+                else:
+                    change = " (→ no change)"
+            print(f"  Run {i+1}: {count}{change}")
+        print()
 
 
 def main():

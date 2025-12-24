@@ -345,10 +345,31 @@ def predict_muni_status(image_path, model=None, processor=None, label_to_status=
         )
         description = processor.decode(generated_ids[0], skip_special_tokens=True)
 
-        # Classify status
+        # Classify status with threshold adjustment
         status_logits = model(pixel_values)
         status_probs = torch.softmax(status_logits, dim=1)
-        predicted_label = torch.argmax(status_probs, dim=1).item()
+
+        # Extract probabilities
+        green_prob = status_probs[0, 0].item()
+        yellow_prob = status_probs[0, 1].item()
+        red_prob = status_probs[0, 2].item()
+
+        # Apply decision thresholds to bias toward yellow detection
+        # This helps catch yellow warnings that might otherwise be missed
+        YELLOW_THRESHOLD = 0.08  # If yellow probability > 8%, consider it
+        GREEN_CONFIDENCE_THRESHOLD = 0.88  # Green must be very confident
+
+        # Decision logic with yellow bias
+        if red_prob > max(green_prob, yellow_prob):
+            # Red is clearly highest
+            predicted_label = 2
+        elif yellow_prob > YELLOW_THRESHOLD and green_prob < GREEN_CONFIDENCE_THRESHOLD:
+            # Yellow signal detected and green is not highly confident
+            predicted_label = 1
+        else:
+            # Default to argmax for clear cases
+            predicted_label = torch.argmax(status_probs, dim=1).item()
+
         confidence = status_probs[0, predicted_label].item()
 
     predicted_status = label_to_status.get(predicted_label, 'unknown')

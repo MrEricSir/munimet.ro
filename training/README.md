@@ -195,6 +195,217 @@ Trained model components in `artifacts/models/v1/`:
 - Configuration files (JSON)
 - Tokenizer files
 
+### Training History & Metrics Tracking
+
+Every training run is automatically tracked with comprehensive metrics for performance monitoring and reproducibility.
+
+**Automatic Tracking:**
+- Training run ID (timestamp-based)
+- Git commit hash and branch
+- Dataset statistics and class distribution
+- Hyperparameters and training configuration
+- Test accuracy, loss, and per-class metrics
+- Confusion matrix analysis
+- Outlier counts
+
+**Saved Locations:**
+
+1. **Training History** (`artifacts/models/training_history.json`)
+   - Append-only log of all training runs
+   - Compare performance across runs
+   - Track accuracy trends over time
+
+2. **Snapshots** (`artifacts/models/snapshots/{run_id}/`)
+   - Complete reproducible snapshot per run
+   - Includes model, training data, metrics, environment
+   - Can recreate exact training conditions
+
+**View Training History:**
+
+```bash
+python view_training_history.py
+```
+
+**Sample Output:**
+
+```
+TRAINING HISTORY SUMMARY
+================================================================
+#   Run ID            Date                 Test Acc  Yellow F1  Outliers
+----------------------------------------------------------------
+⭐1   20251223_224331   2025-12-23 22:43:31   94.24%    0.659      31
+  2   20251224_153012   2025-12-24 15:30:12   95.87%    0.782      18
+----------------------------------------------------------------
+
+PERFORMANCE TRENDS
+Yellow Detection F1 Trend (minority class):
+  Run 1: 0.659
+  Run 2: 0.782 (↑ +0.123)
+
+Yellow → Green Confusion Trend (critical metric):
+  Run 1: 24 (44.4% of yellows)
+  Run 2: 12 (22.2% of yellows) (↓ -12 better)
+```
+
+### Confusion Matrix Analysis
+
+Training automatically generates a confusion matrix showing which classes are confused with each other.
+
+**Location:**
+- Console output during training
+- `training_history.json` (in `confusion_matrix` field)
+- `snapshots/{run_id}/run_metadata.json`
+- `view_training_history.py` (detailed run view)
+
+**Sample Output:**
+
+```
+Confusion Matrix:
+  (Rows = True labels, Columns = Predictions)
+
+              Pred GREEN   Pred YELLOW   Pred RED
+  True GREEN         392             4          2
+  True YELLOW         24            30          0
+  True RED             1             0         85
+
+Key Confusion Analysis:
+  Yellow → Green misclassifications: 24 (44.4% of yellows)
+  Yellow → Red misclassifications: 0 (0.0% of yellows)
+  Green → Yellow false positives: 4 (1.0% of greens)
+```
+
+**Interpreting Results:**
+
+- **Diagonal values** (392, 30, 85): Correct predictions
+- **Off-diagonal values**: Confusions between classes
+- **Yellow → Green**: Most critical metric - indicates missed warnings
+- **Green → Yellow**: False alarms (less critical but affects user trust)
+
+Use this to identify which classes need:
+- More training examples
+- Better labeling consistency
+- Adjusted class weights
+
+### Hard Negative Mining
+
+The training script applies **hard negative mining** to address class imbalance, with special focus on the yellow class (often confused with green).
+
+**How it works:**
+
+```python
+# Automatic class weights based on frequency
+green: 1.0x   (most common - baseline)
+yellow: 11.3x (rare + additional 1.5x boost)
+red: 4.6x     (uncommon)
+```
+
+**Why yellow gets extra boost:**
+- Yellow warnings are often subtle (minor delays)
+- Most frequently confused with green
+- Missing a yellow is worse than a false positive
+- Only 7-10% of dataset (class imbalance)
+
+**Tuning the boost:**
+
+Edit `train_model.py` line 442:
+
+```python
+YELLOW_BOOST_FACTOR = 1.5  # Increase to 2.0 for more yellow focus
+```
+
+Higher values = model focuses more on yellow detection (may increase false positives).
+
+### Decision Threshold Adjustment
+
+**Production inference** uses smart thresholds instead of simple argmax to bias toward yellow detection.
+
+**Location:** `lib/muni_lib.py` (predict_muni_status function)
+
+**Logic:**
+
+```python
+YELLOW_THRESHOLD = 0.08           # Consider yellow if prob > 8%
+GREEN_CONFIDENCE_THRESHOLD = 0.88 # Green must be 88%+ confident
+
+if yellow_prob > 0.08 and green_prob < 0.88:
+    predict yellow  # Catch marginal yellows
+```
+
+**Example:**
+
+| Probabilities | Without Threshold | With Threshold |
+|--------------|-------------------|----------------|
+| G=87%, Y=10%, R=3% | Green (wrong) | Yellow (correct) ✅ |
+| G=92%, Y=5%, R=3% | Green | Green (correct) ✅ |
+| G=45%, Y=9%, R=46% | Red | Red (correct) ✅ |
+
+**Tuning thresholds:**
+
+Edit `muni_lib.py` lines 359-360:
+
+```python
+YELLOW_THRESHOLD = 0.08  # Lower = fewer yellow predictions
+GREEN_CONFIDENCE_THRESHOLD = 0.88  # Higher = more yellow predictions
+```
+
+Adjust based on:
+- Too many missed yellows → Increase GREEN_CONFIDENCE_THRESHOLD to 0.90
+- Too many false yellow alarms → Lower YELLOW_THRESHOLD to 0.06
+
+### Reproducible Snapshots
+
+Each training run creates a complete snapshot for reproducibility.
+
+**Snapshot Contents:**
+
+```
+artifacts/models/snapshots/20251223_224331/
+├── model/                      # Complete trained model
+│   ├── pytorch_model.bin
+│   ├── config.json
+│   └── status_classifier.pt
+├── training_labels.json        # Exact training data used
+├── run_metadata.json          # All metrics and settings
+└── environment.txt            # Python/PyTorch versions, dependencies
+```
+
+**Use Cases:**
+
+1. **Reproduce training:** Know exact code version (git commit), data, and hyperparameters
+2. **Rollback:** Deploy previous best-performing model if new one regresses
+3. **A/B testing:** Compare models trained with different settings
+4. **Debugging:** Investigate why a specific run performed differently
+
+**Load a snapshot model:**
+
+```python
+from transformers import BlipForConditionalGeneration
+
+snapshot_dir = "artifacts/models/snapshots/20251223_224331/model"
+model = BlipForConditionalGeneration.from_pretrained(snapshot_dir)
+```
+
+### Reviewed Outliers Tracking
+
+Outliers in the labeling tool are automatically marked as "reviewed" to avoid duplicate work.
+
+**Behavior:**
+
+1. When viewing outliers in "Outliers" mode
+2. Saving an image sets `"reviewed": true` in labels.json
+3. On next labeling session, reviewed outliers are hidden
+4. Console shows: `"Found 8 unreviewed outlier images (4 already reviewed)"`
+
+**Status bar shows review status:**
+```
+✓ Labeled (last updated: 2025-12-23T14:30:00) | ✓ Reviewed: 2025-12-23T15:45:00
+```
+
+**Benefits:**
+- No duplicate outlier reviews
+- Track which problematic images you've already examined
+- Focus on new outliers from latest training run
+
 ## Shared Library Reference
 
 Core functionality in `lib/muni_lib.py`:

@@ -27,7 +27,7 @@ from transformers import (
 from tqdm import tqdm
 import numpy as np
 import random
-from sklearn.metrics import precision_recall_fscore_support, classification_report
+from sklearn.metrics import precision_recall_fscore_support, classification_report, confusion_matrix
 import subprocess
 import shutil
 from datetime import datetime
@@ -437,10 +437,16 @@ def train_model():
     min_weight = min(class_weights)
     class_weights = [w / min_weight for w in class_weights]
 
+    # Hard negative mining: Boost yellow weight even more
+    # Yellow is the hardest class (often confused with green)
+    YELLOW_BOOST_FACTOR = 1.5  # Additional 50% boost for yellow
+    class_weights[1] *= YELLOW_BOOST_FACTOR  # yellow is index 1
+
     print("\nClass weights (to handle imbalance):")
     for status, weight in zip(status_order, class_weights):
         print(f"  {status:6s}: {weight:.2f}x")
     print("  (Higher weight = model pays more attention to this class)")
+    print(f"  Note: Yellow has additional {YELLOW_BOOST_FACTOR}x hard negative mining boost")
 
     # Convert to tensor for PyTorch
     class_weight_tensor = torch.tensor(class_weights, dtype=torch.float32).to(device)
@@ -779,6 +785,27 @@ def train_model():
               f"Support={metrics['support']}")
     print()
 
+    # Calculate and display confusion matrix
+    cm = confusion_matrix(all_true_labels, all_predictions, labels=[0, 1, 2])
+    print("Confusion Matrix:")
+    print("  (Rows = True labels, Columns = Predictions)")
+    print()
+    print(f"              {'Pred GREEN':<12} {'Pred YELLOW':<13} {'Pred RED':<10}")
+    print(f"  True GREEN  {cm[0][0]:>10}   {cm[0][1]:>11}   {cm[0][2]:>8}")
+    print(f"  True YELLOW {cm[1][0]:>10}   {cm[1][1]:>11}   {cm[1][2]:>8}")
+    print(f"  True RED    {cm[2][0]:>10}   {cm[2][1]:>11}   {cm[2][2]:>8}")
+    print()
+
+    # Analyze key confusions
+    yellow_to_green = cm[1][0]
+    yellow_to_red = cm[1][2]
+    green_to_yellow = cm[0][1]
+    print("Key Confusion Analysis:")
+    print(f"  Yellow → Green misclassifications: {yellow_to_green} ({yellow_to_green/cm[1].sum()*100:.1f}% of yellows)")
+    print(f"  Yellow → Red misclassifications: {yellow_to_red} ({yellow_to_red/cm[1].sum()*100:.1f}% of yellows)")
+    print(f"  Green → Yellow false positives: {green_to_yellow} ({green_to_yellow/cm[0].sum()*100:.1f}% of greens)")
+    print()
+
     # Generate outlier report
     print("\n[6/6] Generating outlier analysis...")
     print()
@@ -901,6 +928,18 @@ def train_model():
             'test_accuracy': float(test_accuracy)
         },
         'per_class_metrics': per_class_metrics,
+        'confusion_matrix': {
+            'matrix': cm.tolist(),  # Convert numpy array to list for JSON
+            'labels': ['green', 'yellow', 'red'],
+            'analysis': {
+                'yellow_to_green': int(yellow_to_green),
+                'yellow_to_red': int(yellow_to_red),
+                'green_to_yellow': int(green_to_yellow),
+                'yellow_to_green_percent': float(yellow_to_green/cm[1].sum()*100) if cm[1].sum() > 0 else 0.0,
+                'yellow_to_red_percent': float(yellow_to_red/cm[1].sum()*100) if cm[1].sum() > 0 else 0.0,
+                'green_to_yellow_percent': float(green_to_yellow/cm[0].sum()*100) if cm[0].sum() > 0 else 0.0
+            }
+        },
         'outliers': {
             'total_test_samples': len(test_results),
             'misclassified': len(incorrect),
