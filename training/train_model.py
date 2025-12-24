@@ -14,6 +14,7 @@ GPU training uses mixed precision (AMP) for faster training.
 
 import json
 import os
+import sys
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
@@ -58,15 +59,23 @@ def get_training_config():
         # GPU detected - enable optimizations
         config['use_amp'] = True
         config['batch_size'] = 8  # Larger batch size for GPU
-        config['num_workers'] = 4  # Parallel data loading
         config['pin_memory'] = True  # Faster CPU->GPU transfer
+
+        # Windows has slow multiprocessing (spawn vs fork), so keep num_workers=0
+        if sys.platform == 'win32':
+            config['num_workers'] = 0
+        else:
+            config['num_workers'] = 4  # Parallel data loading on Linux/Mac
 
         # Get GPU info
         gpu_name = torch.cuda.get_device_name(0)
         gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
 
         print(f"GPU detected: {gpu_name} ({gpu_mem:.1f} GB)")
-        print("Enabling GPU optimizations: AMP, larger batch, parallel loading")
+        if sys.platform == 'win32':
+            print("Enabling GPU optimizations: AMP, larger batch size")
+        else:
+            print("Enabling GPU optimizations: AMP, larger batch, parallel loading")
 
         # Adjust batch size based on GPU memory
         if gpu_mem < 8:
