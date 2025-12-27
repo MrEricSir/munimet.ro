@@ -266,7 +266,7 @@ def load_muni_model(model_dir=MODEL_DIR):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Load processor and base model
-    processor = BlipProcessor.from_pretrained(model_dir, use_fast=True)
+    processor = BlipProcessor.from_pretrained(model_dir, use_fast=False)
     base_model = BlipForConditionalGeneration.from_pretrained(model_dir)
 
     # Load classification head

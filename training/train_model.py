@@ -304,6 +304,60 @@ def create_snapshot(run_id, model, processor, train_dataset, run_data):
     return snapshot_dir
 
 
+def undersample_majority_class(data, target_ratio=4.0):
+    """Undersample green (majority class) to achieve better class balance.
+
+    Args:
+        data: List of training samples
+        target_ratio: Desired green:yellow ratio (default 4.0 = 1:4 ratio)
+
+    Returns:
+        Balanced dataset with reduced greens
+    """
+    # Separate by status
+    status_groups = {}
+    for item in data:
+        status = item.get('status', '')
+        if status not in status_groups:
+            status_groups[status] = []
+        status_groups[status].append(item)
+
+    green_count = len(status_groups.get('green', []))
+    yellow_count = len(status_groups.get('yellow', []))
+    red_count = len(status_groups.get('red', []))
+
+    print(f"\n📊 Class Balancing (Undersampling):")
+    print(f"  Original counts: Green={green_count}, Yellow={yellow_count}, Red={red_count}")
+
+    # Skip if no yellows or already balanced
+    if yellow_count == 0:
+        print("  ⚠️ No yellow samples - skipping undersampling")
+        return data
+
+    current_ratio = green_count / yellow_count if yellow_count > 0 else 0
+    if current_ratio <= target_ratio:
+        print(f"  ✅ Already balanced (ratio 1:{current_ratio:.1f} ≤ target 1:{target_ratio:.1f})")
+        return data
+
+    # Calculate how many greens to keep
+    target_green_count = int(yellow_count * target_ratio)
+
+    # Randomly sample greens
+    np.random.shuffle(status_groups['green'])
+    sampled_greens = status_groups['green'][:target_green_count]
+
+    # Combine with all yellows and reds
+    balanced_data = sampled_greens + status_groups.get('yellow', []) + status_groups.get('red', [])
+    np.random.shuffle(balanced_data)
+
+    new_ratio = target_green_count / yellow_count
+    print(f"  ✅ Undersampled greens: {green_count} → {target_green_count}")
+    print(f"  ✅ New ratio: 1:{current_ratio:.1f} → 1:{new_ratio:.1f}")
+    print(f"  📉 Total samples: {len(data)} → {len(balanced_data)}")
+
+    return balanced_data
+
+
 def split_data(data, train_ratio=0.7, val_ratio=0.15):
     """Split data into train, validation, and test sets with stratification.
 
@@ -409,6 +463,11 @@ def train_model():
     if len(all_data) == 0:
         print("ERROR: No training data found. Please label some images first.")
         return
+
+    # Apply class balancing through undersampling (optional - set ratio to high value to disable)
+    # TARGET_RATIO: Desired green:yellow ratio (4.0 = 1:4, 6.0 = 1:6, 100.0 = disable)
+    TARGET_RATIO = 4.0
+    all_data = undersample_majority_class(all_data, target_ratio=TARGET_RATIO)
 
     train_data, val_data, test_data = split_data(all_data, TRAIN_SPLIT, VAL_SPLIT)
     print(f"Training samples: {len(train_data)}")

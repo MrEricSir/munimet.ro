@@ -138,6 +138,56 @@ class ImageLabeler:
 
         return has_description and has_status
 
+    def update_stats_display(self):
+        """Update the dataset statistics display."""
+        # Count status labels
+        status_counts = {'green': 0, 'yellow': 0, 'red': 0}
+        total_labeled = 0
+
+        for label_data in self.labels.values():
+            status = label_data.get('status', '')
+            if status in status_counts:
+                status_counts[status] += 1
+                total_labeled += 1
+
+        # Calculate total images
+        total_images = len(self.all_image_files)
+
+        # Calculate percentages and ratios
+        green_count = status_counts['green']
+        yellow_count = status_counts['yellow']
+        red_count = status_counts['red']
+
+        green_pct = (green_count / total_labeled * 100) if total_labeled > 0 else 0
+        yellow_pct = (yellow_count / total_labeled * 100) if total_labeled > 0 else 0
+        red_pct = (red_count / total_labeled * 100) if total_labeled > 0 else 0
+
+        # Calculate yellow:green ratio
+        yellow_green_ratio = f"1:{green_count/yellow_count:.1f}" if yellow_count > 0 else "N/A"
+
+        # Target ratio indicator
+        if yellow_count > 0:
+            ratio_val = green_count / yellow_count
+            if ratio_val <= 4.0:
+                ratio_status = "✅ GOOD"
+            elif ratio_val <= 6.0:
+                ratio_status = "⚠️ OK"
+            else:
+                ratio_status = "❌ NEED MORE YELLOWS"
+        else:
+            ratio_status = "❌ NO YELLOWS"
+
+        # Build stats text
+        stats_text = (
+            f"🟢 Green: {green_count} ({green_pct:.1f}%)  |  "
+            f"🟡 Yellow: {yellow_count} ({yellow_pct:.1f}%)  |  "
+            f"🔴 Red: {red_count} ({red_pct:.1f}%)  |  "
+            f"Total Labeled: {total_labeled}/{total_images}  |  "
+            f"Yellow:Green Ratio: {yellow_green_ratio} {ratio_status}"
+        )
+
+        self.stats_label.config(text=stats_text)
+
     def load_image_files(self):
         """Load image files based on current mode."""
         if not os.path.exists(IMAGE_FOLDER):
@@ -211,13 +261,24 @@ class ImageLabeler:
         self.progress_label = ttk.Label(main_frame, text="", font=('Arial', 12, 'bold'))
         self.progress_label.grid(row=1, column=0, pady=5, sticky=tk.W)
 
+        # Status distribution counter
+        self.stats_frame = ttk.LabelFrame(main_frame, text='Dataset Statistics', labelanchor='w', padding="10")
+        self.stats_frame.grid(row=2, column=0, pady=5, sticky=tk.W)
+
+        self.stats_label = ttk.Label(
+            self.stats_frame,
+            text="",
+            font=('Arial', 10)
+        )
+        self.stats_label.pack(fill=tk.X, expand=True)
+
         # Image display
         self.image_label = ttk.Label(main_frame)
-        self.image_label.grid(row=2, column=0, pady=10)
+        self.image_label.grid(row=3, column=0, pady=10)
 
         # Outlier explanation (only visible in outliers mode)
         self.outlier_frame = ttk.LabelFrame(main_frame, text='Outlier Details', labelanchor='w', padding="5")
-        self.outlier_frame.grid(row=3, column=0, pady=5)
+        self.outlier_frame.grid(row=4, column=0, pady=5)
         self.outlier_frame.grid_remove()  # Hidden by default
 
         self.outlier_explanation = ttk.Label(
@@ -392,6 +453,9 @@ class ImageLabeler:
         self.progress_label.config(
             text=f"Image {self.current_index + 1} of {len(self.image_files)} | {unlabeled_count} unlabeled"
         )
+
+        # Update dataset statistics
+        self.update_stats_display()
 
         # Load and display image
         try:

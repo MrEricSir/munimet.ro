@@ -286,6 +286,53 @@ Use this to identify which classes need:
 - Better labeling consistency
 - Adjusted class weights
 
+### Class Balancing Through Undersampling
+
+**NEW:** The training script now automatically balances your dataset by undersampling the majority class (green).
+
+**How it works:**
+
+Instead of requiring you to collect equal amounts of each color, you can:
+1. Collect images naturally as they occur (greens will be most common)
+2. Label everything you collect
+3. Training automatically uses fewer greens to balance with yellows
+
+**Configuration:**
+
+Edit `train_model.py` line 469:
+
+```python
+TARGET_RATIO = 4.0  # Green:Yellow ratio (4.0 = 1:4 ideal)
+```
+
+**Examples:**
+
+| Setting | Result | Use When |
+|---------|--------|----------|
+| `TARGET_RATIO = 4.0` | 1:4 ratio (recommended) | You have 7x+ more greens than yellows |
+| `TARGET_RATIO = 6.0` | 1:6 ratio (relaxed) | You have moderate imbalance |
+| `TARGET_RATIO = 100.0` | No undersampling | Dataset already balanced |
+
+**Sample output:**
+
+```
+📊 Class Balancing (Undersampling):
+  Original counts: Green=1,878, Yellow=248, Red=408
+  ✅ Undersampled greens: 1,878 → 992
+  ✅ New ratio: 1:7.6 → 1:4.0
+  📉 Total samples: 2,534 → 1,648
+```
+
+**Benefits:**
+- ✅ No need to wait for more yellow images
+- ✅ Collect naturally without bias
+- ✅ Immediate training improvements
+- ✅ Full dataset saved for future use
+
+**Trade-offs:**
+- ⚠️ Smaller effective training set
+- ⚠️ May need +2-3 more epochs to compensate
+
 ### Hard Negative Mining
 
 The training script applies **hard negative mining** to address class imbalance, with special focus on the yellow class (often confused with green).
