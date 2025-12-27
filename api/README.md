@@ -49,14 +49,14 @@ python check_status.py
 python check_status.py --continuous --interval 60
 
 # Run API server (standalone mode, ~11s per request)
-gunicorn api.api:app --bind 0.0.0.0:8000 --timeout 120
+gunicorn api:app --bind 0.0.0.0:8000 --timeout 120
 
 # Recommended: Cache writer + lightweight API
 # Terminal 1: Start cache writer
 python check_status.py --continuous --write-cache --interval 60
 
 # Terminal 2: Start lightweight API (cache-only mode)
-ENABLE_FALLBACK=false gunicorn api.api:app --bind 0.0.0.0:8000 --timeout 120
+ENABLE_FALLBACK=false gunicorn api:app --bind 0.0.0.0:8000 --timeout 120
 ```
 
 ## API Endpoints
