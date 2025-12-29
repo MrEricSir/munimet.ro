@@ -18,7 +18,7 @@ import sys
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from PIL import Image, ImageEnhance
 from transformers import (
     BlipProcessor,
@@ -536,11 +536,44 @@ def train_model():
     test_dataset = MuniDataset(test_data, processor, augment_minority_classes=False)
     print("Data augmentation enabled for minority classes (yellow/red) in training set")
 
+    # Create sample weights for hard example mining
+    # Combine class balancing with reviewed-sample boost
+    print("\nHard Example Mining (Reviewed Samples):")
+    REVIEWED_BOOST = 2.0  # 2x weight for samples marked as reviewed
+
+    sample_weights = []
+    reviewed_count = 0
+    for item in train_data:
+        status = item.get('status', '')
+        status_idx = train_dataset.status_to_label.get(status, 0)
+
+        # Base weight from class balancing
+        base_weight = class_weights[status_idx]
+
+        # Additional boost for reviewed samples (hard examples from previous runs)
+        reviewed_boost = REVIEWED_BOOST if item.get('reviewed', False) else 1.0
+        if item.get('reviewed', False):
+            reviewed_count += 1
+
+        # Combined weight
+        sample_weights.append(base_weight * reviewed_boost)
+
+    print(f"  Training samples with 'reviewed' flag: {reviewed_count}/{len(train_data)} ({reviewed_count/len(train_data)*100:.1f}%)")
+    print(f"  Reviewed samples get {REVIEWED_BOOST}x additional weight")
+    print(f"  Effect: Model will see reviewed (hard) examples ~2x more often per epoch")
+
+    # Create weighted sampler for training
+    sampler = WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=len(sample_weights),
+        replacement=True  # Allow same sample to appear multiple times
+    )
+
     # Create data loaders with hardware-optimized settings
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        sampler=sampler,  # Use weighted sampler instead of shuffle
         num_workers=config['num_workers'],
         pin_memory=config['pin_memory']
     )
