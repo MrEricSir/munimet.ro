@@ -193,6 +193,49 @@ At 100K API requests/day:
 - **Training Accuracy**: >95% on held-out test set
 - **Inference Time**: ~2-3 seconds (CPU)
 
+### Prediction Thresholds
+
+The model uses confidence thresholds to reduce false positives in production. These can be tuned based on observed performance.
+
+**Location**: `lib/muni_lib.py` (lines 359-360)
+
+```python
+RED_THRESHOLD = 0.50     # Red needs 50% confidence
+YELLOW_THRESHOLD = 0.70  # Yellow needs 70% confidence
+```
+
+**How it works**:
+1. If `red_probability > RED_THRESHOLD` → Predict RED
+2. Else if `yellow_probability > YELLOW_THRESHOLD` → Predict YELLOW
+3. Otherwise → Predict GREEN (default)
+
+**Tuning guidelines**:
+
+| Problem | Solution | Example |
+|---------|----------|---------|
+| Too many false yellow alarms | **Increase** `YELLOW_THRESHOLD` | `0.70` → `0.75` or `0.80` |
+| Missing real yellow warnings | **Decrease** `YELLOW_THRESHOLD` | `0.70` → `0.65` or `0.60` |
+| Too many false red alarms | **Increase** `RED_THRESHOLD` | `0.50` → `0.60` or `0.70` |
+| Missing real red alerts | **Decrease** `RED_THRESHOLD` | `0.50` → `0.40` or `0.35` |
+
+**Common scenarios**:
+
+- **Production default** (balanced): `RED=0.50`, `YELLOW=0.70`
+- **High precision** (fewer false alarms): `RED=0.60`, `YELLOW=0.80`
+- **High recall** (catch all issues): `RED=0.40`, `YELLOW=0.60`
+- **Conservative** (only obvious issues): `RED=0.70`, `YELLOW=0.85`
+
+**Testing threshold changes**:
+1. Edit `lib/muni_lib.py` lines 359-360
+2. Test locally: `python -m api.check_status_job`
+3. Deploy: `./deploy/cloud/deploy-services.sh`
+4. Monitor for 24-48 hours to evaluate performance
+
+**Trade-offs**:
+- Higher threshold = Fewer false alarms, but may miss edge cases
+- Lower threshold = Catch more issues, but more false alarms
+- Production traffic is ~95% green, so even 5% false positive rate = many false alarms
+
 ## Notes
 
 - All timestamps use UTC

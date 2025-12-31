@@ -58,7 +58,7 @@ echo "[2/4] Building Docker image..."
 gcloud builds submit \
     --tag "$API_IMAGE" \
     --project "$PROJECT_ID" \
-    --timeout=20m \
+    --timeout=30m \
     .
 
 BUILD_STATUS=$?
