@@ -354,21 +354,23 @@ def predict_muni_status(image_path, model=None, processor=None, label_to_status=
         yellow_prob = status_probs[0, 1].item()
         red_prob = status_probs[0, 2].item()
 
-        # Apply decision thresholds to bias toward yellow detection
-        # This helps catch yellow warnings that might otherwise be missed
-        YELLOW_THRESHOLD = 0.08  # If yellow probability > 8%, consider it
-        GREEN_CONFIDENCE_THRESHOLD = 0.88  # Green must be very confident
+        # Apply decision thresholds to reduce false positives
+        # Require high confidence for yellow predictions to avoid false alarms
+        RED_THRESHOLD = 0.50     # Red needs 50% confidence (serious issues are usually clear)
+        YELLOW_THRESHOLD = 0.70  # Yellow needs 70% confidence (avoid false alarms)
+        # Green is default if neither red nor yellow meet their thresholds
 
-        # Decision logic with yellow bias
-        if red_prob > max(green_prob, yellow_prob):
-            # Red is clearly highest
+        # Decision logic prioritizing precision over recall
+        if red_prob > RED_THRESHOLD:
+            # Red is confident - critical issue detected
             predicted_label = 2
-        elif yellow_prob > YELLOW_THRESHOLD and green_prob < GREEN_CONFIDENCE_THRESHOLD:
-            # Yellow signal detected and green is not highly confident
+        elif yellow_prob > YELLOW_THRESHOLD:
+            # Yellow is confident - warning condition detected
             predicted_label = 1
         else:
-            # Default to argmax for clear cases
-            predicted_label = torch.argmax(status_probs, dim=1).item()
+            # Default to green (normal operation)
+            # This includes cases where yellow is highest but below threshold
+            predicted_label = 0
 
         confidence = status_probs[0, predicted_label].item()
 
