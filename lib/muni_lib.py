@@ -363,7 +363,7 @@ def predict_muni_status(image_path, model=None, processor=None, label_to_status=
         # - Production is ~95% green, so even small false positive rates = many false alarms
         #
         RED_THRESHOLD = 0.50     # Red needs 50% confidence (serious issues are usually clear)
-        YELLOW_THRESHOLD = 0.70  # Yellow needs 85% confidence (avoid false alarms)
+        YELLOW_THRESHOLD = 0.75  # Yellow needs 75% confidence (safe default for Dec 25 model)
         # Green is default if neither red nor yellow meet their thresholds
 
         # Decision logic prioritizing precision over recall
