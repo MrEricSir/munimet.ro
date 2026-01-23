@@ -67,10 +67,10 @@ To enable Bluesky status posting, configure credentials:
 
 ```bash
 # Local development - saves to .env file
-python3 scripts/setup-credentials.py
+python3 scripts/setup/setup-credentials.py
 
 # Cloud deployment - saves to Google Cloud Secret Manager
-python3 scripts/setup-credentials.py --cloud
+python3 scripts/setup/setup-credentials.py --cloud
 ```
 
 The setup script will prompt for:

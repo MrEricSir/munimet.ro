@@ -7,8 +7,8 @@ Supports two storage backends:
 - Google Cloud: Saves to Secret Manager for production deployment
 
 Usage:
-    python scripts/setup-credentials.py           # Local (.env file)
-    python scripts/setup-credentials.py --cloud   # Google Cloud Secret Manager
+    python scripts/setup/setup-credentials.py           # Local (.env file)
+    python scripts/setup/setup-credentials.py --cloud   # Google Cloud Secret Manager
 """
 
 import argparse
@@ -17,9 +17,9 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
-# Get project root
+# Get project root (scripts/setup/ -> scripts/ -> project root)
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 
 # GCP configuration
