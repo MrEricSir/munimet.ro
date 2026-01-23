@@ -25,10 +25,10 @@ ENV_FILE = PROJECT_ROOT / ".env"
 # GCP configuration
 GCP_PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'munimetro')
 
-# Credentials to collect (name, prompt, is_secret)
+# Credentials to collect (name, prompt, is_secret, default)
 CREDENTIALS = [
-    ("BLUESKY_HANDLE", "Bluesky handle (e.g., munimetro.bsky.social)", False),
-    ("BLUESKY_APP_PASSWORD", "Bluesky app password", True),
+    ("BLUESKY_HANDLE", "Bluesky handle", False, "munimetro.bsky.social"),
+    ("BLUESKY_APP_PASSWORD", "Bluesky app password", True, None),
 ]
 
 
@@ -113,12 +113,15 @@ def prompt_for_credentials(existing=None):
         existing = {}
 
     values = {}
-    for key, prompt, is_secret in CREDENTIALS:
+    for key, prompt, is_secret, default in CREDENTIALS:
         existing_value = existing.get(key)
 
+        # Determine what to show in brackets
         if existing_value:
             masked = existing_value[:3] + "***" if len(existing_value) > 3 else "***"
             display_prompt = f"{prompt} [{masked}]: "
+        elif default:
+            display_prompt = f"{prompt} [{default}]: "
         else:
             display_prompt = f"{prompt}: "
 
@@ -127,11 +130,13 @@ def prompt_for_credentials(existing=None):
         else:
             new_value = input(display_prompt)
 
-        # Use new value if provided, otherwise keep existing
+        # Use new value if provided, otherwise keep existing, otherwise use default
         if new_value:
             values[key] = new_value
         elif existing_value:
             values[key] = existing_value
+        elif default:
+            values[key] = default
         else:
             print(f"  Warning: {key} not set")
 
@@ -169,6 +174,44 @@ def setup_local():
     print()
 
 
+def check_gcp_auth():
+    """Check GCP authentication and API access. Returns error message or None if OK."""
+    try:
+        from google.cloud import secretmanager
+        from google.auth import exceptions as auth_exceptions
+        from google.api_core import exceptions as api_exceptions
+    except ImportError:
+        return ("google-cloud-secret-manager not installed.\n"
+                "Run: pip install google-cloud-secret-manager")
+
+    # Test authentication by creating a client
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+    except auth_exceptions.DefaultCredentialsError:
+        return ("Google Cloud credentials not found.\n"
+                "Run: gcloud auth application-default login")
+
+    # Test API access by listing secrets (even if none exist)
+    try:
+        parent = f"projects/{GCP_PROJECT_ID}"
+        # Just try to list - will fail fast if API disabled or no permission
+        list(client.list_secrets(request={"parent": parent, "page_size": 1}))
+    except api_exceptions.PermissionDenied as e:
+        if "SERVICE_DISABLED" in str(e) or "has not been used" in str(e):
+            return ("Secret Manager API is not enabled.\n"
+                    f"Run: gcloud services enable secretmanager.googleapis.com --project={GCP_PROJECT_ID}")
+        else:
+            return (f"Permission denied accessing Secret Manager.\n"
+                    f"Ensure you have 'Secret Manager Admin' role on project {GCP_PROJECT_ID}.")
+    except api_exceptions.NotFound:
+        return (f"Project '{GCP_PROJECT_ID}' not found.\n"
+                "Set GCP_PROJECT_ID environment variable or check project name.")
+    except Exception as e:
+        return f"Unexpected error accessing Secret Manager: {e}"
+
+    return None  # All checks passed
+
+
 def setup_cloud():
     """Setup credentials in Google Cloud Secret Manager."""
     print("=" * 50)
@@ -179,18 +222,20 @@ def setup_cloud():
     print("This will save credentials to Google Cloud Secret Manager.")
     print()
 
-    # Check for google-cloud-secret-manager
-    try:
-        from google.cloud import secretmanager
-    except ImportError:
-        print("Error: google-cloud-secret-manager not installed.")
-        print("Run: pip install google-cloud-secret-manager")
+    # Verify GCP access before prompting for credentials
+    print("Checking Google Cloud access...")
+    error = check_gcp_auth()
+    if error:
+        print()
+        print(f"Error: {error}")
         sys.exit(1)
+    print("  OK")
+    print()
 
     # Load existing values from Secret Manager
     existing = {}
     print("Checking for existing secrets...")
-    for key, _, _ in CREDENTIALS:
+    for key, _, _, _ in CREDENTIALS:
         value = get_secret_from_gcp(key)
         if value:
             existing[key] = value
@@ -210,9 +255,13 @@ def setup_cloud():
     # Save to Secret Manager
     print()
     print("Saving to Secret Manager...")
-    for key, value in values.items():
-        save_secret_to_gcp(key, value)
-        print(f"  Saved: {key}")
+    try:
+        for key, value in values.items():
+            save_secret_to_gcp(key, value)
+            print(f"  Saved: {key}")
+    except Exception as e:
+        print(f"\nError saving secret: {e}")
+        sys.exit(1)
 
     print()
     print(f"Saved {len(values)} credential(s) to Secret Manager.")
