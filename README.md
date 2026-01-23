@@ -61,6 +61,24 @@ cd deploy/cloud
 
 See [deploy/README.md](deploy/README.md) for detailed deployment instructions.
 
+### Credentials Setup (Optional)
+
+To enable Bluesky status posting, configure credentials:
+
+```bash
+# Local development - saves to .env file
+python3 scripts/setup-credentials.py
+
+# Cloud deployment - saves to Google Cloud Secret Manager
+python3 scripts/setup-credentials.py --cloud
+```
+
+The setup script will prompt for:
+- **Bluesky handle** - Your account (e.g., `munimetro.bsky.social`)
+- **Bluesky app password** - Generate at [bsky.app/settings/app-passwords](https://bsky.app/settings/app-passwords)
+
+Credentials are optional - the app works without them, but won't post status updates to Bluesky.
+
 ## Accessing Training Data
 
 The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are stored in Google Cloud Storage and synced via rsync scripts.

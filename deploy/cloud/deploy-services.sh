@@ -106,6 +106,14 @@ echo ""
 # Deploy status checker job
 echo ""
 echo "  Deploying status checker job..."
+
+# Build secrets flag if secrets exist in Secret Manager
+SECRETS_FLAG=""
+if gcloud secrets describe BLUESKY_HANDLE --project="$PROJECT_ID" &>/dev/null; then
+    SECRETS_FLAG="--set-secrets=BLUESKY_HANDLE=BLUESKY_HANDLE:latest,BLUESKY_APP_PASSWORD=BLUESKY_APP_PASSWORD:latest"
+    echo "  (with Bluesky credentials from Secret Manager)"
+fi
+
 gcloud run jobs deploy "$CHECKER_JOB" \
     --image "$API_IMAGE" \
     --region "$REGION" \
@@ -116,6 +124,7 @@ gcloud run jobs deploy "$CHECKER_JOB" \
     --task-timeout 120s \
     --max-retries 3 \
     --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME}" \
+    $SECRETS_FLAG \
     --command="python" \
     --args="-m,api.check_status_job"
 

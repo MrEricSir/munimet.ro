@@ -41,7 +41,8 @@ gcloud services enable \
     cloudscheduler.googleapis.com \
     storage.googleapis.com \
     artifactregistry.googleapis.com \
-    monitoring.googleapis.com
+    monitoring.googleapis.com \
+    secretmanager.googleapis.com
 echo "✓ APIs enabled"
 echo ""
 
@@ -83,6 +84,16 @@ gsutil iam ch \
     "serviceAccount:${SERVICE_ACCOUNT_EMAIL}:roles/storage.objectAdmin" \
     "gs://$BUCKET_NAME"
 echo "✓ Service account has objectAdmin access to gs://$BUCKET_NAME"
+echo ""
+
+# Grant service account access to Secret Manager (for Bluesky credentials)
+echo "[5b/9] Granting service account access to Secret Manager..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
+    --role="roles/secretmanager.secretAccessor" \
+    --condition=None \
+    --quiet
+echo "✓ Service account can access secrets"
 echo ""
 
 # Create App Engine app (required for Cloud Scheduler)

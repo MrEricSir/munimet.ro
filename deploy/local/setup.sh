@@ -61,6 +61,20 @@ echo "=========================================="
 echo "✓ Local development setup complete!"
 echo "=========================================="
 echo ""
+
+# Check if credentials are configured
+if [ ! -f ".env" ]; then
+    echo "Optional: Configure credentials for Bluesky posting"
+    read -p "Setup credentials now? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        python3 scripts/setup-credentials.py
+    else
+        echo "  Skipped. Run later with: python3 scripts/setup-credentials.py"
+    fi
+    echo ""
+fi
+
 echo "Next steps:"
 echo "  1. Start services:  ./deploy/local/start.sh"
 echo "  2. Verify status:   ./deploy/local/verify.sh"

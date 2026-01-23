@@ -22,7 +22,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, predict_muni_status, read_cache, write_cache
+from lib.muni_lib import download_muni_image, predict_muni_status, read_cache, write_cache, post_to_bluesky
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
@@ -107,10 +107,12 @@ def check_status(should_write_cache=False, model=None, processor=None, label_to_
 
         # Read existing cache to get previous status
         statuses = []
+        previous_status = None
         cache_data = read_cache()
         if cache_data:
             # Get the current status from previous cache (becomes previous)
             if 'statuses' in cache_data and len(cache_data['statuses']) > 0:
+                previous_status = cache_data['statuses'][0]['status']
                 statuses.append(cache_data['statuses'][0])
 
         # Add new status at the front
@@ -137,6 +139,16 @@ def check_status(should_write_cache=False, model=None, processor=None, label_to_
                 print(f"  Current: {statuses[0]['status']}, Previous: {statuses[1]['status']}, Best: {best_status['status']}")
         else:
             print(f"\n❌ Cache write failed")
+
+        # Post to Bluesky if status changed
+        current_status = prediction['status']
+        if previous_status is not None and current_status != previous_status:
+            print(f"\n📢 Status changed: {previous_status} → {current_status}")
+            bluesky_result = post_to_bluesky(current_status, previous_status)
+            if bluesky_result['success']:
+                print(f"✓ Posted to Bluesky: {bluesky_result['uri']}")
+            else:
+                print(f"⚠ Bluesky post failed: {bluesky_result['error']}")
 
     return True
 

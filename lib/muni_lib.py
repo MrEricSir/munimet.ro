@@ -16,6 +16,16 @@ from urllib.parse import urljoin
 from pathlib import Path
 from PIL import Image
 
+# Load .env file for local development (not on Cloud Run)
+if not os.getenv('CLOUD_RUN'):
+    try:
+        from dotenv import load_dotenv
+        _env_path = Path(__file__).resolve().parent.parent / '.env'
+        if _env_path.exists():
+            load_dotenv(_env_path)
+    except ImportError:
+        pass  # python-dotenv not installed, skip
+
 # Lazy imports for ML dependencies (only needed for prediction)
 # These are imported inside functions to avoid cross-environment dependencies
 
@@ -133,6 +143,62 @@ def write_cache(data):
     except Exception as e:
         print(f"Error writing cache: {e}")
         return False
+
+
+# Status messages matching the frontend (api/html/index.html)
+STATUS_MESSAGES = {
+    'green': '🟢 All aboard: Muni is on track',
+    'yellow': "🟡 Uh oh: Muni's not feeling well",
+    'red': '🔴 Muni is taking a nap',
+}
+
+
+def post_to_bluesky(status, previous_status=None):
+    """
+    Post a status update to Bluesky.
+
+    Requires environment variables:
+    - BLUESKY_HANDLE: The account handle (e.g., 'munimetro.bsky.social')
+    - BLUESKY_APP_PASSWORD: An app password for the account
+
+    Args:
+        status: Current status ('green', 'yellow', 'red')
+        previous_status: Previous status for context (optional)
+
+    Returns:
+        dict: {'success': bool, 'uri': str or None, 'error': str or None}
+    """
+    handle = os.getenv('BLUESKY_HANDLE')
+    app_password = os.getenv('BLUESKY_APP_PASSWORD')
+
+    if not handle or not app_password:
+        return {
+            'success': False,
+            'uri': None,
+            'error': 'BLUESKY_HANDLE and BLUESKY_APP_PASSWORD environment variables required'
+        }
+
+    message = STATUS_MESSAGES.get(status, f'Status: {status}')
+
+    try:
+        from atproto import Client
+
+        client = Client()
+        client.login(handle, app_password)
+
+        post = client.send_post(text=message)
+
+        return {
+            'success': True,
+            'uri': post.uri,
+            'error': None
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'uri': None,
+            'error': str(e)
+        }
 
 
 def _get_classifier_class():
