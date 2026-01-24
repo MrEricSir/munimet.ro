@@ -384,6 +384,11 @@ def _get_model_dir():
         print(f"Model downloaded to {target_dir}")
         return target_dir
     else:
+        if os.getenv('CLOUD_RUN'):
+            raise RuntimeError(
+                f"Failed to download model version '{model_version}' from GCS. "
+                f"Check that the model exists and the service account has access to gs://{GCS_MODELS_BUCKET}/{GCS_MODELS_PATH}/{model_version}/"
+            )
         print(f"Failed to download model, falling back to local")
         return MODEL_DIR
 
@@ -449,7 +454,7 @@ def load_muni_model(model_dir=None):
     return model, processor, label_to_status, device
 
 
-def predict_muni_status(image_path, model=None, processor=None, label_to_status=None, device=None, model_dir=MODEL_DIR):
+def predict_muni_status(image_path, model=None, processor=None, label_to_status=None, device=None, model_dir=None):
     """
     Predict subway status from an image.
 
@@ -459,7 +464,7 @@ def predict_muni_status(image_path, model=None, processor=None, label_to_status=
         processor: Pre-loaded processor (optional, will load if not provided)
         label_to_status: Label mapping dict (optional, will load if not provided)
         device: Torch device (optional, will determine if not provided)
-        model_dir: Model directory (used if model not provided)
+        model_dir: Model directory (optional, auto-detected via _get_model_dir if not provided)
 
     Returns:
         dict: {
