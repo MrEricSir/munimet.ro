@@ -466,7 +466,8 @@ def train_model():
 
     # Apply class balancing through undersampling (optional - set ratio to high value to disable)
     # TARGET_RATIO: Desired green:yellow ratio (4.0 = 1:4, 6.0 = 1:6, 100.0 = disable)
-    TARGET_RATIO = 4.0
+    # NOTE: 4.0 caused high false positive rates. 8.0 is closer to production reality (~19:1)
+    TARGET_RATIO = 8.0
     all_data = undersample_majority_class(all_data, target_ratio=TARGET_RATIO)
 
     train_data, val_data, test_data = split_data(all_data, TRAIN_SPLIT, VAL_SPLIT)
