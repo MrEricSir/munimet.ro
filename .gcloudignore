@@ -1,9 +1,8 @@
 # This file specifies files that are *not* uploaded to Google Cloud
 # when using gcloud builds submit
 
-# Git files (but we need .git/annex for model files during unlock)
+# Git files
 .git/
-!.git/annex/
 
 # Python cache
 __pycache__/
@@ -35,6 +34,9 @@ Thumbs.db
 training/venv/
 training/training_log.txt
 training/*.ipynb_checkpoints/
+
+# ML artifacts (models downloaded from GCS at runtime, training data not needed)
+artifacts/
 
 # Test artifacts
 tests/

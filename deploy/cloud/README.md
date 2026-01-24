@@ -66,21 +66,22 @@ This script:
 ### 2. Deploy Services
 
 ```bash
-# List available model versions
-python3 scripts/manage-models.py list
-
-# Deploy with a specific model version
-export MODEL_VERSION=20251223_224331
 ./deploy/cloud/deploy-services.sh
 ```
 
 This script:
-- Verifies the specified model exists in GCS
+- Auto-detects the currently deployed model version (or prompts on first deploy)
 - Builds container image using Cloud Build (lightweight, no model baked in)
-- Deploys API service and checker job with `MODEL_VERSION` env var
+- Deploys API service and checker job
 - Services download the model from GCS at startup
 
-**Note**: `MODEL_VERSION` is required. The model is downloaded from GCS at runtime, keeping the container image small (~500MB vs ~10GB).
+**First deploy only**: Set `MODEL_VERSION` since there's no existing deployment:
+```bash
+export MODEL_VERSION=20251223_224331
+./deploy/cloud/deploy-services.sh
+```
+
+**Subsequent deploys**: The script automatically uses the currently deployed model version.
 
 ### 3. Setup Scheduler
 

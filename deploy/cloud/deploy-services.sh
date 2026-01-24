@@ -33,18 +33,32 @@ echo ""
 # Navigate to project root
 cd "$(dirname "$0")/../.."
 
-# Verify MODEL_VERSION is set
-echo "[1/4] Verifying model version..."
+# Determine MODEL_VERSION
+echo "[1/4] Checking model version..."
+
 if [ -z "$MODEL_VERSION" ]; then
-    echo "  ERROR: MODEL_VERSION not set"
-    echo ""
-    echo "  Available models (run: python3 scripts/manage-models.py list):"
-    gsutil ls gs://munimetro-annex/models/snapshots/ 2>/dev/null | sed 's|.*/||' | grep -v '^$' | sort -r | head -5 | while read v; do echo "    $v"; done
-    echo ""
-    echo "  Set MODEL_VERSION and retry:"
-    echo "    export MODEL_VERSION=20251223_224331"
-    echo "    ./deploy/cloud/deploy-services.sh"
-    exit 1
+    # Try to get currently deployed version
+    CURRENT=$(gcloud run jobs describe "$CHECKER_JOB" --region="$REGION" --project="$PROJECT_ID" --format="value(spec.template.spec.containers[0].env)" 2>/dev/null | tr ';' '\n' | grep MODEL_VERSION | sed 's/.*value=//')
+
+    if [ -n "$CURRENT" ]; then
+        MODEL_VERSION="$CURRENT"
+        echo "  Using currently deployed model: $MODEL_VERSION"
+    else
+        # First deploy - show available models and exit
+        echo "  No model currently deployed. Available versions:"
+        echo ""
+        gsutil ls gs://munimetro-annex/models/snapshots/ 2>/dev/null | sed 's|.*/||' | grep -v '^$' | sort -r | head -5 | while read v; do echo "    $v"; done
+        echo ""
+        echo "  Set MODEL_VERSION for first deploy:"
+        echo "    export MODEL_VERSION=20251223_224331"
+        echo "    ./deploy/cloud/deploy-services.sh"
+        echo ""
+        echo "  Or use manage-models.py to see metrics:"
+        echo "    python3 scripts/manage-models.py list"
+        exit 1
+    fi
+else
+    echo "  Using specified model: $MODEL_VERSION"
 fi
 
 # Verify model exists in GCS
@@ -54,7 +68,7 @@ if ! gsutil ls "$MODEL_PATH" &>/dev/null; then
     echo "  Run: python3 scripts/manage-models.py list"
     exit 1
 fi
-echo "  ✓ Model version: $MODEL_VERSION"
+echo "  ✓ Model verified in GCS"
 echo ""
 
 # Build and push Docker image

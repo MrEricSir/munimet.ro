@@ -581,12 +581,8 @@ After training:
 2. **List models**: `python3 scripts/manage-models.py list` to see your new snapshot
 3. **Deploy to production**:
    ```bash
-   # Option A: Switch model without rebuilding (fast)
+   # Switch to new model (no rebuild needed)
    python3 scripts/manage-models.py switch <new_version>
-
-   # Option B: Full deploy with new code
-   export MODEL_VERSION=<new_version>
-   ./deploy/cloud/deploy-services.sh
    ```
 4. **Test locally**: Run API server (see [deploy/README.md](../deploy/README.md))
 
