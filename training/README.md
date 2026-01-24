@@ -188,12 +188,18 @@ TRAIN_SPLIT = 0.7    # Train/validation/test split ratio
 
 ### Model Artifacts
 
-Trained model components in `artifacts/models/v1/`:
+Each training run uploads a versioned snapshot to GCS:
 
-- `model.safetensors` (854MB) - Vision transformer weights
-- `status_classifier.pt` (775KB) - Classification head
-- Configuration files (JSON)
-- Tokenizer files
+```
+gs://munimetro-annex/models/snapshots/<timestamp>/
+├── model/
+│   ├── model.safetensors (854MB) - Vision transformer weights
+│   ├── status_classifier.pt (775KB) - Classification head
+│   └── [config files]
+└── run_metadata.json - Training metrics and configuration
+```
+
+Use `python3 scripts/manage-models.py list` to see available versions.
 
 ### Training History & Metrics Tracking
 
@@ -401,14 +407,14 @@ Adjust based on:
 
 ### Reproducible Snapshots
 
-Each training run creates a complete snapshot for reproducibility.
+Each training run uploads a complete snapshot to GCS for reproducibility.
 
-**Snapshot Contents:**
+**Snapshot Location:**
 
 ```
-artifacts/models/snapshots/20251223_224331/
+gs://munimetro-annex/models/snapshots/20251223_224331/
 ├── model/                      # Complete trained model
-│   ├── pytorch_model.bin
+│   ├── model.safetensors
 │   ├── config.json
 │   └── status_classifier.pt
 ├── training_labels.json        # Exact training data used
@@ -423,13 +429,14 @@ artifacts/models/snapshots/20251223_224331/
 3. **A/B testing:** Compare models trained with different settings
 4. **Debugging:** Investigate why a specific run performed differently
 
-**Load a snapshot model:**
+**Switch to a different model:**
 
-```python
-from transformers import BlipForConditionalGeneration
+```bash
+# List available models with metrics
+python3 scripts/manage-models.py list
 
-snapshot_dir = "artifacts/models/snapshots/20251223_224331/model"
-model = BlipForConditionalGeneration.from_pretrained(snapshot_dir)
+# Switch production to a different version (no rebuild needed)
+python3 scripts/manage-models.py switch 20251223_224331
 ```
 
 ### Reviewed Outliers Tracking
@@ -570,9 +577,18 @@ This creates `artifacts/models/v1/outlier_report.json` containing:
 
 After training:
 
-1. **Test locally**: Run API server (see [deploy/README.md](../deploy/README.md))
-2. **Validate predictions**: Use `api/predict_status.py` for manual testing
-3. **Deploy**: Push model to production (see [deploy/cloud/README.md](../deploy/cloud/README.md))
+1. **Review metrics**: Check the training output for accuracy and per-class metrics
+2. **List models**: `python3 scripts/manage-models.py list` to see your new snapshot
+3. **Deploy to production**:
+   ```bash
+   # Option A: Switch model without rebuilding (fast)
+   python3 scripts/manage-models.py switch <new_version>
+
+   # Option B: Full deploy with new code
+   export MODEL_VERSION=<new_version>
+   ./deploy/cloud/deploy-services.sh
+   ```
+4. **Test locally**: Run API server (see [deploy/README.md](../deploy/README.md))
 
 ## Related Documentation
 

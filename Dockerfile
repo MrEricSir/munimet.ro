@@ -46,8 +46,8 @@ COPY --chown=muni:muni lib/ ./lib/
 # Copy API application files to api/ subdirectory to preserve path structure
 COPY --chown=muni:muni api/ ./api/
 
-# Copy ML model files (regular files synced from GCS)
-COPY --chown=muni:muni artifacts/models/v1/ ./artifacts/models/v1/
+# NOTE: ML model is NOT baked into image - it's downloaded from GCS at runtime
+# Set MODEL_VERSION env var when deploying to specify which model to use
 
 # Create directories for runtime data with proper permissions
 RUN mkdir -p /app/artifacts/runtime/downloads /app/artifacts/runtime/cache && \

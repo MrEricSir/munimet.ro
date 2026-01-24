@@ -8,6 +8,7 @@ set -e  # Exit on error
 PROJECT_ID="${GCP_PROJECT_ID:-munimetro}"
 REGION="${GCP_REGION:-us-west1}"
 BUCKET_NAME="${GCS_BUCKET:-munimetro-cache}"
+MODEL_VERSION="${MODEL_VERSION:-}"  # Required: model version to deploy (e.g., 20251223_224331)
 SERVICE_ACCOUNT_NAME="munimetro-api"
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
@@ -32,25 +33,28 @@ echo ""
 # Navigate to project root
 cd "$(dirname "$0")/../.."
 
-# Verify model files are present
-echo "[1/4] Verifying model files..."
-MODEL_DIR="artifacts/models/v1"
-MODEL_FILE="$MODEL_DIR/model.safetensors"
-
-if [ ! -f "$MODEL_FILE" ]; then
-    echo "  ERROR: Model file not found: $MODEL_FILE"
-    echo "  Run: ./scripts/sync-models.sh download"
+# Verify MODEL_VERSION is set
+echo "[1/4] Verifying model version..."
+if [ -z "$MODEL_VERSION" ]; then
+    echo "  ERROR: MODEL_VERSION not set"
+    echo ""
+    echo "  Available models (run: python3 scripts/manage-models.py list):"
+    gsutil ls gs://munimetro-annex/models/snapshots/ 2>/dev/null | sed 's|.*/||' | grep -v '^$' | sort -r | head -5 | while read v; do echo "    $v"; done
+    echo ""
+    echo "  Set MODEL_VERSION and retry:"
+    echo "    export MODEL_VERSION=20251223_224331"
+    echo "    ./deploy/cloud/deploy-services.sh"
     exit 1
 fi
 
-# Verify the file is the actual model (should be ~856MB)
-ACTUAL_SIZE=$(wc -c < "$MODEL_FILE" 2>/dev/null || echo "0")
-if [ "$ACTUAL_SIZE" -lt 100000000 ]; then
-    echo "  ERROR: Model file is too small ($ACTUAL_SIZE bytes)"
-    echo "  Expected ~856MB. Run: ./scripts/sync-models.sh download"
+# Verify model exists in GCS
+MODEL_PATH="gs://munimetro-annex/models/snapshots/${MODEL_VERSION}/model/status_classifier.pt"
+if ! gsutil ls "$MODEL_PATH" &>/dev/null; then
+    echo "  ERROR: Model version '$MODEL_VERSION' not found in GCS"
+    echo "  Run: python3 scripts/manage-models.py list"
     exit 1
 fi
-echo "  ✓ Model file size: $(numfmt --to=iec --suffix=B $ACTUAL_SIZE 2>/dev/null || echo "$ACTUAL_SIZE bytes")"
+echo "  ✓ Model version: $MODEL_VERSION"
 echo ""
 
 # Build and push Docker image
@@ -90,7 +94,7 @@ gcloud run deploy "$API_SERVICE" \
     --max-instances 10 \
     --min-instances 0 \
     --port 8000 \
-    --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME},ENABLE_FALLBACK=false" \
+    --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME},ENABLE_FALLBACK=false,MODEL_VERSION=${MODEL_VERSION}" \
     --command="gunicorn" \
     --args="api.api:app,--bind,0.0.0.0:8000,--workers,1,--timeout,60,--graceful-timeout,30,--log-level,info"
 
@@ -123,7 +127,7 @@ gcloud run jobs deploy "$CHECKER_JOB" \
     --cpu 1 \
     --task-timeout 120s \
     --max-retries 3 \
-    --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME}" \
+    --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME},MODEL_VERSION=${MODEL_VERSION}" \
     $SECRETS_FLAG \
     --command="python" \
     --args="-m,api.check_status_job"
@@ -156,6 +160,7 @@ echo "2. Setup scheduler: ./deploy/cloud/setup-scheduler.sh"
 echo "3. Test job manually: gcloud run jobs execute $CHECKER_JOB --region=$REGION"
 echo ""
 echo "Environment info:"
+echo "  Model: $MODEL_VERSION (from GCS)"
 echo "  Cache: gs://$BUCKET_NAME/latest_status.json"
 echo "  Service Account: $SERVICE_ACCOUNT_EMAIL"
 echo ""

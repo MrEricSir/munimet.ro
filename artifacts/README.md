@@ -1,20 +1,16 @@
 # Generated Artifacts
 
-This directory contains training data, models, and runtime files for the Muni Metro status classifier.
+This directory contains training data and runtime files for the Muni Metro status classifier.
 
 ## Directory Structure
 
 ```
 artifacts/
-├── training_data/      # ML training dataset (~270MB)
-│   ├── images/         # 2,666 labeled Muni subway status snapshots
+├── training_data/      # ML training dataset (~270MB) - synced from GCS
+│   ├── images/         # Labeled Muni subway status snapshots
 │   └── labels.json     # Image labels with status and descriptions
-├── models/             # Trained ML models (~856MB)
-│   └── v1/             # Model version 1 (BLIP-based classifier)
-│       ├── model.safetensors      # Vision transformer weights (854MB)
-│       ├── status_classifier.pt   # Classification head (775KB)
-│       ├── outlier_report.json    # Model evaluation outliers
-│       └── [config files]         # Model configuration
+├── models/             # Local model cache (gitignored)
+│   └── v1/             # Downloaded from GCS when needed
 └── runtime/            # Transient runtime data (gitignored)
     ├── cache/          # API response cache
     └── downloads/      # Recent snapshot downloads
@@ -22,16 +18,20 @@ artifacts/
 
 ## Storage Management
 
-Training data and models are stored in Google Cloud Storage and synced using rsync scripts. The actual files are **not** stored in git to keep the repository lightweight.
+Training data and models are stored in Google Cloud Storage. The actual files are **not** stored in git to keep the repository lightweight.
+
+**Models** are versioned snapshots stored in GCS at `gs://munimetro-annex/models/snapshots/<version>/`. Production services download the model at runtime based on the `MODEL_VERSION` environment variable.
 
 ### Storage Allocation
 
 ```
-~270MB  artifacts/training_data/     # Training images and labels
-~856MB  artifacts/models/v1/         # BLIP model + classifier
+~270MB  training_data/              # Training images and labels
+~856MB  models/snapshots/<version>/ # Each model snapshot
 ```
 
-**Total**: ~1.1GB stored in Google Cloud Storage bucket `munimetro-annex` (within 5GB free tier).
+Models are stored as versioned snapshots (e.g., `20251223_224331`). Multiple versions can coexist for easy rollback.
+
+**Location**: Google Cloud Storage bucket `munimetro-annex` (within 5GB free tier).
 
 For configuration details, see [CONFIGURATION.md](../CONFIGURATION.md).
 
@@ -110,17 +110,22 @@ cd ..
 .\scripts\sync-training-data.ps1 upload   # Windows
 ```
 
-### Training and Uploading Models
+### Training and Deploying Models
 
 ```bash
-# 1. Train model
+# 1. Train model (creates timestamped snapshot in GCS)
 cd training
-python train_model.py  # Saves to artifacts/models/v1/
+python train_model.py  # Uploads snapshot to gs://munimetro-annex/models/snapshots/
 
-# 2. Upload to cloud storage
-cd ..
-./scripts/sync-models.sh upload    # macOS/Linux
-.\scripts\sync-models.ps1 upload   # Windows
+# 2. List available models
+python3 scripts/manage-models.py list
+
+# 3. Deploy with the new model
+export MODEL_VERSION=20251223_224331  # Use desired version
+./deploy/cloud/deploy-services.sh
+
+# Or switch model without full redeploy
+python3 scripts/manage-models.py switch 20251223_224331
 ```
 
 ### Updating Training Labels

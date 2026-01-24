@@ -66,15 +66,21 @@ This script:
 ### 2. Deploy Services
 
 ```bash
+# List available model versions
+python3 scripts/manage-models.py list
+
+# Deploy with a specific model version
+export MODEL_VERSION=20251223_224331
 ./deploy/cloud/deploy-services.sh
 ```
 
 This script:
-- Builds container image using Cloud Build
-- Deploys API service (public Cloud Run Service, serves frontend + API)
-- Deploys checker job (Cloud Run Job, updates status when triggered)
+- Verifies the specified model exists in GCS
+- Builds container image using Cloud Build (lightweight, no model baked in)
+- Deploys API service and checker job with `MODEL_VERSION` env var
+- Services download the model from GCS at startup
 
-First deployment takes approximately 10-15 minutes (downloading ML model layers).
+**Note**: `MODEL_VERSION` is required. The model is downloaded from GCS at runtime, keeping the container image small (~500MB vs ~10GB).
 
 ### 3. Setup Scheduler
 
@@ -337,6 +343,53 @@ gcloud run services update-traffic API_SERVICE_NAME \
     --region REGION \
     --to-revisions REVISION_NAME=100
 ```
+
+## Model Management
+
+Models are stored in GCS at `gs://munimetro-annex/models/snapshots/<version>/`. Services download the model at startup based on the `MODEL_VERSION` environment variable.
+
+### Commands
+
+```bash
+# List all available model versions with metrics
+python3 scripts/manage-models.py list
+
+# Show currently deployed model
+python3 scripts/manage-models.py current
+
+# View detailed metrics for a specific model
+python3 scripts/manage-models.py info 20251223_224331
+
+# Switch to a different model (updates env var, no rebuild needed)
+python3 scripts/manage-models.py switch 20251223_224331
+```
+
+### Example output
+
+```
+$ python3 scripts/manage-models.py list
+Available model snapshots:
+======================================================================
+  20251230_142847  acc:95.9%  red-R:96.6%  yel-P:81.7%
+  20251227_151141  acc:95.1%  red-R:97.7%  yel-P:88.9%
+  20251225_021726  acc:95.2%  red-R:94.3%  yel-P:87.2%
+  20251223_224331  acc:94.2%  red-R:98.8%  yel-P:81.1% <-- DEPLOYED
+
+Use 'switch <version>' to deploy a different model.
+```
+
+### Key metrics
+
+- **acc**: Overall test accuracy
+- **red-R**: Red recall - ability to detect red (system down) states
+- **yel-P**: Yellow precision - avoids false yellow alarms
+
+For overnight issues (system shutdown), prioritize high red recall.
+
+### Switching vs Redeploying
+
+- **`manage-models.py switch`**: Updates the `MODEL_VERSION` env var on running services. Fast (~30s), no rebuild. Model downloads on next cold start.
+- **`deploy-services.sh`**: Full redeploy with new code. Use when code changes, not just model changes.
 
 ## Monitoring
 

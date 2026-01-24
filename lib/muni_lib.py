@@ -43,6 +43,10 @@ EXPECTED_WIDTH = 1860
 EXPECTED_HEIGHT = 800
 MODEL_DIR = str(PROJECT_ROOT / "artifacts" / "models" / "v1")
 
+# GCS model storage
+GCS_MODELS_BUCKET = os.getenv('GCS_MODELS_BUCKET', 'munimetro-annex')
+GCS_MODELS_PATH = 'models/snapshots'
+
 
 def get_cache_path():
     """
@@ -302,12 +306,97 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
         }
 
 
-def load_muni_model(model_dir=MODEL_DIR):
+def _download_model_from_gcs(version, target_dir):
+    """
+    Download a model version from GCS to a local directory.
+
+    Args:
+        version: Model version (e.g., '20251223_224331')
+        target_dir: Local directory to download to
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    from google.cloud import storage
+
+    bucket_name = GCS_MODELS_BUCKET
+    source_prefix = f"{GCS_MODELS_PATH}/{version}/model/"
+
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+
+        # List all blobs in the model directory
+        blobs = list(bucket.list_blobs(prefix=source_prefix))
+
+        if not blobs:
+            print(f"No model files found at gs://{bucket_name}/{source_prefix}")
+            return False
+
+        # Create target directory
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Download each file
+        for blob in blobs:
+            # Get relative path (filename only)
+            filename = blob.name.replace(source_prefix, '')
+            if not filename:  # Skip directory markers
+                continue
+
+            local_path = os.path.join(target_dir, filename)
+            print(f"  Downloading {filename}...")
+            blob.download_to_filename(local_path)
+
+        return True
+
+    except Exception as e:
+        print(f"Error downloading model from GCS: {e}")
+        return False
+
+
+def _get_model_dir():
+    """
+    Get the model directory, downloading from GCS if MODEL_VERSION is set.
+
+    Returns:
+        str: Path to model directory
+    """
+    model_version = os.getenv('MODEL_VERSION')
+
+    if not model_version:
+        # No version specified, use local model
+        return MODEL_DIR
+
+    # On Cloud Run, download to /tmp for writable storage
+    if os.getenv('CLOUD_RUN'):
+        target_dir = f"/tmp/models/{model_version}"
+    else:
+        target_dir = str(PROJECT_ROOT / "artifacts" / "models" / f"v1_gcs_{model_version}")
+
+    # Check if already downloaded
+    classifier_path = os.path.join(target_dir, 'status_classifier.pt')
+    if os.path.exists(classifier_path):
+        return target_dir
+
+    # Download from GCS
+    print(f"Downloading model version {model_version} from GCS...")
+    if _download_model_from_gcs(model_version, target_dir):
+        print(f"Model downloaded to {target_dir}")
+        return target_dir
+    else:
+        print(f"Failed to download model, falling back to local")
+        return MODEL_DIR
+
+
+def load_muni_model(model_dir=None):
     """
     Load the trained Muni status prediction model.
 
+    If MODEL_VERSION environment variable is set, downloads that version from GCS.
+    Otherwise, uses the local model directory.
+
     Args:
-        model_dir: Directory containing the trained model
+        model_dir: Directory containing the trained model (optional, auto-detected if not provided)
 
     Returns:
         tuple: (model, processor, label_to_status, device)
@@ -318,6 +407,10 @@ def load_muni_model(model_dir=MODEL_DIR):
     # Lazy import of ML dependencies
     import torch
     from transformers import BlipProcessor, BlipForConditionalGeneration
+
+    # Determine model directory
+    if model_dir is None:
+        model_dir = _get_model_dir()
 
     if not os.path.exists(model_dir):
         raise FileNotFoundError(
