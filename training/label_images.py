@@ -379,9 +379,19 @@ class ImageLabeler:
         self.save_all_button = ttk.Button(special_frame, text="💾 Save All", command=self.save_labels)
         self.save_all_button.grid(row=0, column=0, padx=20)
 
+        # False positive checkbox - marks images that were incorrectly predicted in production
+        self.false_positive_var = tk.BooleanVar(value=False)
+        self.false_positive_check = ttk.Checkbutton(
+            special_frame,
+            text="⚠️ Was False Positive",
+            variable=self.false_positive_var,
+            command=self.on_false_positive_toggle
+        )
+        self.false_positive_check.grid(row=1, column=0, padx=20, pady=2)
+
         # Delete image
         self.delete_button = ttk.Button(special_frame, text="🗑️ Delete Image", command=self.delete_current_image)
-        self.delete_button.grid(row=1, column=0, padx=20, pady=5)
+        self.delete_button.grid(row=2, column=0, padx=20, pady=5)
 
         # Status bar
         self.status_label = ttk.Label(main_frame, text="", foreground="gray")
@@ -441,6 +451,15 @@ class ImageLabeler:
                 self.description_text.delete(0, tk.END)
                 self.description_text.insert(0, "Offline")
 
+    def on_false_positive_toggle(self):
+        """Called when false positive checkbox is toggled."""
+        # Just update the UI feedback - actual save happens in save_current_label
+        if self.false_positive_var.get():
+            self.status_label.config(
+                text="⚠️ Marked as false positive - will be used for validation",
+                foreground="orange"
+            )
+
     def display_image(self):
         """Display the current image and its label if exists."""
         if not self.image_files or self.current_index >= len(self.image_files):
@@ -485,6 +504,10 @@ class ImageLabeler:
                 self.description_text.insert(0, description)
                 self.current_status.set(status)
 
+                # Load false_positive flag
+                is_false_positive = self.labels[image_path].get('false_positive', False)
+                self.false_positive_var.set(is_false_positive)
+
                 # Check if fully labeled (has both description and status)
                 has_description = bool(description.strip())
                 has_status = bool(status)
@@ -493,7 +516,9 @@ class ImageLabeler:
                 if has_description and has_status:
                     status_text = f"✓ Labeled (last updated: {self.labels[image_path].get('labeled_at', 'unknown')})"
                     if is_reviewed:
-                        status_text += f" | ✓ Reviewed: {self.labels[image_path].get('reviewed_at', 'unknown')}"
+                        status_text += f" | ✓ Reviewed"
+                    if is_false_positive:
+                        status_text += f" | ⚠️ False Positive"
                     self.status_label.config(
                         text=status_text,
                         foreground="green"
@@ -508,6 +533,7 @@ class ImageLabeler:
             else:
                 self.description_text.delete(0, tk.END)
                 self.current_status.set("")
+                self.false_positive_var.set(False)
                 self.status_label.config(text="⚠ Not yet labeled", foreground="orange")
 
             # Update button states
@@ -568,6 +594,21 @@ class ImageLabeler:
             label_data['reviewed'] = self.labels[image_path]['reviewed']
             if 'reviewed_at' in self.labels[image_path]:
                 label_data['reviewed_at'] = self.labels[image_path]['reviewed_at']
+
+        # Save false_positive flag (for production validation tracking)
+        if self.false_positive_var.get():
+            label_data['false_positive'] = True
+            label_data['false_positive_at'] = datetime.now().isoformat()
+        elif image_path in self.labels and self.labels[image_path].get('false_positive'):
+            # Preserve existing false_positive flag if checkbox is unchecked but was previously set
+            # (only clear it if user explicitly unchecks it while editing)
+            if not self.false_positive_var.get():
+                # User explicitly unchecked - don't preserve
+                pass
+            else:
+                label_data['false_positive'] = self.labels[image_path]['false_positive']
+                if 'false_positive_at' in self.labels[image_path]:
+                    label_data['false_positive_at'] = self.labels[image_path]['false_positive_at']
 
         self.labels[image_path] = label_data
 

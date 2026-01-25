@@ -33,22 +33,30 @@ Before deploying any new model to production, validate it against these criteria
 - ❌ Yellow precision < 85% (too many false positives)
 - ❌ Green→Yellow error rate > 1% (false alarm problem)
 
-### 3. Production Simulation Test
+### 3. Production Validation (Automated)
 
-Before deploying, simulate production with a production-realistic validation set:
+The training script now automatically validates against images flagged as production false positives.
 
-```python
-# Add to train_model.py - production validation
-# Use ORIGINAL unbalanced distribution (not undersampled)
-prod_validation_data = load_training_data()  # Don't undersample!
+**How it works:**
+1. When labeling, check "Was False Positive" for any images that were incorrectly predicted in production
+2. These images are automatically placed in the test set (never used for training)
+3. Training outputs a dedicated "PRODUCTION VALIDATION" section with metrics
 
-# Test model on realistic distribution
-prod_results = evaluate_on_production_distribution(model, prod_validation_data)
-
-# Require:
-# - False positive rate < 2% on greens
-# - Yellow precision > 80% in production distribution
+**Check the FP-val metric:**
+```bash
+python scripts/manage-models.py list
 ```
+
+Output shows `FP-val` (accuracy on false-positive-flagged images):
+```
+  20260124_103045  acc:95.2%  yel-P:82.3%  FP-val:92% <-- DEPLOYED
+  20251230_142847  acc:95.9%  yel-P:81.7%  FP-val:75%
+```
+
+**Requirements:**
+- FP-val should improve (or stay same) compared to current deployed model
+- If FP-val drops significantly, the new model may reintroduce old problems
+- Target: FP-val > 90% before deploying
 
 ### 4. Manual Spot Check
 
@@ -177,7 +185,7 @@ Track these metrics over time:
 
 **Should I deploy this model?**
 
-1. Is yellow precision > 85%? 
+1. Is yellow precision > 85%?
    - No → Don't deploy, retrain with less aggressive undersampling
    - Yes → Continue
 
@@ -185,11 +193,16 @@ Track these metrics over time:
    - No → Don't deploy, increase YELLOW_THRESHOLD or retrain
    - Yes → Continue
 
-3. Did you test on 10+ recent images manually?
+3. Is FP-val (production validation accuracy) >= previous model?
+   - No → Don't deploy, new model may reintroduce old problems
+   - Yes → Continue
+   - N/A (no flagged images) → Skip this check
+
+4. Did you test on 10+ recent images manually?
    - No → Do manual testing first
    - Yes → Safe to deploy with monitoring
 
-4. Do you have a rollback plan?
+5. Do you have a rollback plan?
    - No → Snapshot current model first
    - Yes → Deploy!
 
@@ -212,6 +225,16 @@ Based on Dec 30 failure:
 2. **Start with YELLOW_THRESHOLD = 0.75** (not 0.70)
 3. **Target yellow precision > 87%** (match or beat Dec 25)
 4. **Accept 60-70% recall** (don't push for 95%+)
-5. **Validate on production-like distribution before deploying**
+5. **Flag false positives in labeler** for automatic validation tracking
 
 Remember: In production, **precision matters more than recall** for yellow status. Users tolerate missing 1-2 out of 10 yellows, but hate constant false alarms.
+
+## Recommended Workflow for Fixing False Positives
+
+When you encounter false positives in production:
+
+1. **Collect problematic images** - Keep the download script running to capture images
+2. **Label and flag** - In `label_images.py`, label with correct status AND check "Was False Positive"
+3. **Retrain** - Run `train_model.py`, check the PRODUCTION VALIDATION section
+4. **Compare** - Run `manage-models.py list`, compare FP-val between old and new model
+5. **Deploy only if improved** - FP-val should increase (or stay same) before deploying

@@ -460,6 +460,66 @@ Outliers in the labeling tool are automatically marked as "reviewed" to avoid du
 - Track which problematic images you've already examined
 - Focus on new outliers from latest training run
 
+### Production Validation (False Positive Tracking)
+
+When images are incorrectly predicted in production (e.g., a green image predicted as yellow), you can flag them for targeted validation.
+
+**Workflow:**
+
+1. **Flag problematic images in labeler:**
+   - Open `label_images.py`
+   - Navigate to the image that was a false positive
+   - Check the **"Was False Positive"** checkbox in the Special section
+   - Save with `Ctrl+Enter`
+
+2. **Training automatically validates against flagged images:**
+   - Images with `false_positive: true` are always placed in the test set (never used for training)
+   - Training output shows dedicated "PRODUCTION VALIDATION" section
+   - Metrics track accuracy specifically on previously problematic images
+
+**Sample training output:**
+```
+📋 Production Validation Set:
+  12 images marked as 'false_positive' will be in test set
+  Distribution: {'green': 10, 'yellow': 2}
+
+...
+
+================================================================================
+PRODUCTION VALIDATION (images marked as 'false_positive')
+================================================================================
+  Total: 12 images
+  Accuracy: 91.7% (11/12)
+
+  By true label:
+    GREEN : 90.0% (9/10)
+    YELLOW: 100.0% (2/2)
+
+  ❌ Still failing on 1 previously problematic images:
+    muni_snapshot_20260124_032145.jpg: predicted yellow, should be green
+```
+
+3. **Compare models using FP-val metric:**
+   ```bash
+   python scripts/manage-models.py list
+   ```
+
+   Output now includes `FP-val` column:
+   ```
+     20260124_103045  acc:95.2%  red-R:97.1%  yel-P:82.3%  FP-val:92% <-- DEPLOYED
+     20251230_142847  acc:95.9%  red-R:96.6%  yel-P:81.7%
+   ```
+
+4. **Deploy only if FP-val improves:**
+   - Higher FP-val = better handling of previously problematic images
+   - If FP-val drops, the new model may reintroduce old problems
+
+**Benefits:**
+- Targeted validation on real production failures
+- Automatic tracking through the normal labeling workflow
+- Clear metrics to compare model improvements on problem cases
+- No separate validation scripts needed
+
 ## Shared Library Reference
 
 Core functionality in `lib/muni_lib.py`:

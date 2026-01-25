@@ -73,7 +73,15 @@ def list_models():
                 accuracy = meta.get('final_metrics', {}).get('test_accuracy', 0) * 100
                 red_recall = meta.get('per_class_metrics', {}).get('red', {}).get('recall', 0) * 100
                 yellow_prec = meta.get('per_class_metrics', {}).get('yellow', {}).get('precision', 0) * 100
-                print(f"  {snapshot}  acc:{accuracy:.1f}%  red-R:{red_recall:.1f}%  yel-P:{yellow_prec:.1f}%{marker}")
+
+                # Production validation metrics (false positive flagged images)
+                prod_val = meta.get('production_validation')
+                prod_str = ""
+                if prod_val and prod_val.get('total', 0) > 0:
+                    prod_acc = prod_val.get('accuracy', 0) * 100
+                    prod_str = f"  FP-val:{prod_acc:.0f}%"
+
+                print(f"  {snapshot}  acc:{accuracy:.1f}%  red-R:{red_recall:.1f}%  yel-P:{yellow_prec:.1f}%{prod_str}{marker}")
             except json.JSONDecodeError:
                 print(f"  {snapshot}  (no metrics){marker}")
         else:
@@ -86,19 +94,23 @@ def list_models():
 def get_current_model():
     """Get currently deployed model version."""
     # Check the checker job (it's the one that does predictions)
-    cmd = f'gcloud run jobs describe {CHECKER_JOB} --region={GCP_REGION} --project={GCP_PROJECT_ID} --format="value(spec.template.spec.containers[0].env)" 2>/dev/null'
+    # Note: Cloud Run Jobs have an extra 'template' level in the spec path
+    cmd = f'gcloud run jobs describe {CHECKER_JOB} --region={GCP_REGION} --project={GCP_PROJECT_ID} --format="value(spec.template.spec.template.spec.containers[0].env)" 2>/dev/null'
     stdout, stderr, rc = run_cmd(cmd)
 
-    if rc != 0:
+    if rc != 0 or not stdout:
         return None
 
     # Parse environment variables
-    # Format is like: name=MODEL_VERSION,value=20251223_224331;name=OTHER,...
+    # Format is like: {'name': 'MODEL_VERSION', 'value': '20251223_224331'};{'name': 'OTHER', ...}
     for part in stdout.split(';'):
-        if 'MODEL_VERSION' in part:
-            for subpart in part.split(','):
-                if subpart.startswith('value='):
-                    return subpart.replace('value=', '')
+        if 'MODEL_VERSION' in part and "'value'" in part:
+            # Extract value using string parsing (avoid eval for safety)
+            # Look for 'value': 'XXXXX' pattern
+            import re
+            match = re.search(r"'value':\s*'([^']+)'", part)
+            if match:
+                return match.group(1)
 
     return "(baked into image)"
 
@@ -154,6 +166,18 @@ def show_info(version):
         r = m.get('recall', 0) * 100
         f1 = m.get('f1', 0) * 100
         print(f"  {cls:6s}: P={p:.1f}%  R={r:.1f}%  F1={f1:.1f}%")
+
+    # Production validation (false positive flagged images)
+    prod_val = meta.get('production_validation')
+    if prod_val and prod_val.get('total', 0) > 0:
+        print()
+        print(f"Production validation ({prod_val['total']} false-positive flagged images):")
+        print(f"  Accuracy: {prod_val['accuracy']*100:.1f}% ({prod_val['correct']}/{prod_val['total']})")
+        failures = prod_val.get('failures', [])
+        if failures:
+            print(f"  Still failing: {len(failures)} images")
+        else:
+            print(f"  All previously problematic images now correct!")
 
 
 def switch_model(version):

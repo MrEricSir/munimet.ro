@@ -361,6 +361,9 @@ def undersample_majority_class(data, target_ratio=4.0):
 def split_data(data, train_ratio=0.7, val_ratio=0.15):
     """Split data into train, validation, and test sets with stratification.
 
+    Images marked as 'false_positive' are always placed in the test set
+    to ensure they are used for validation, not training.
+
     Args:
         data: List of labeled samples
         train_ratio: Proportion for training (default 0.7)
@@ -369,9 +372,22 @@ def split_data(data, train_ratio=0.7, val_ratio=0.15):
     Returns:
         train_data, val_data, test_data (remaining samples go to test)
     """
-    # Stratify by status to ensure balanced representation
+    # Separate false_positive images - they always go to test set
+    false_positive_data = [item for item in data if item.get('false_positive', False)]
+    regular_data = [item for item in data if not item.get('false_positive', False)]
+
+    if false_positive_data:
+        print(f"\n📋 Production Validation Set:")
+        print(f"  {len(false_positive_data)} images marked as 'false_positive' will be in test set")
+        fp_statuses = {}
+        for item in false_positive_data:
+            s = item.get('status', 'unknown')
+            fp_statuses[s] = fp_statuses.get(s, 0) + 1
+        print(f"  Distribution: {fp_statuses}")
+
+    # Stratify remaining data by status
     status_groups = {}
-    for item in data:
+    for item in regular_data:
         status = item.get('status', '')
         if status not in status_groups:
             status_groups[status] = []
@@ -391,6 +407,9 @@ def split_data(data, train_ratio=0.7, val_ratio=0.15):
         train_data.extend(items[:train_end])
         val_data.extend(items[train_end:val_end])
         test_data.extend(items[val_end:])
+
+    # Add false_positive images to test set
+    test_data.extend(false_positive_data)
 
     # Shuffle the combined splits
     np.random.shuffle(train_data)
@@ -908,6 +927,69 @@ def train_model():
     print(f"  Green → Yellow false positives: {green_to_yellow} ({green_to_yellow/cm[0].sum()*100:.1f}% of greens)")
     print()
 
+    # Production validation: metrics on false_positive flagged images
+    fp_results = [r for r in test_results if any(
+        item.get('false_positive', False) and item['image_path'] == r['image_path']
+        for item in test_data
+    )]
+
+    production_validation_metrics = None
+    if fp_results:
+        print("=" * 80)
+        print("PRODUCTION VALIDATION (images marked as 'false_positive')")
+        print("=" * 80)
+        print(f"  Total: {len(fp_results)} images")
+
+        fp_correct = sum(1 for r in fp_results if r['correct'])
+        fp_accuracy = fp_correct / len(fp_results) if fp_results else 0
+        print(f"  Accuracy: {fp_accuracy:.1%} ({fp_correct}/{len(fp_results)})")
+
+        # Count by true label
+        fp_by_true = {}
+        fp_correct_by_true = {}
+        for r in fp_results:
+            true_status = r['true_status']
+            fp_by_true[true_status] = fp_by_true.get(true_status, 0) + 1
+            if r['correct']:
+                fp_correct_by_true[true_status] = fp_correct_by_true.get(true_status, 0) + 1
+
+        print("\n  By true label:")
+        for status in ['green', 'yellow', 'red']:
+            if status in fp_by_true:
+                correct = fp_correct_by_true.get(status, 0)
+                total = fp_by_true[status]
+                acc = correct / total if total > 0 else 0
+                print(f"    {status.upper():6s}: {acc:.1%} ({correct}/{total})")
+
+        # Show specific failures on false_positive images
+        fp_wrong = [r for r in fp_results if not r['correct']]
+        if fp_wrong:
+            print(f"\n  ❌ Still failing on {len(fp_wrong)} previously problematic images:")
+            for r in fp_wrong[:5]:
+                print(f"    {os.path.basename(r['image_path'])}: predicted {r['predicted_status']}, should be {r['true_status']}")
+            if len(fp_wrong) > 5:
+                print(f"    ... and {len(fp_wrong) - 5} more")
+        else:
+            print(f"\n  ✅ All previously problematic images now classified correctly!")
+
+        print()
+
+        production_validation_metrics = {
+            'total': len(fp_results),
+            'correct': fp_correct,
+            'accuracy': fp_accuracy,
+            'by_true_label': {
+                status: {
+                    'total': fp_by_true.get(status, 0),
+                    'correct': fp_correct_by_true.get(status, 0)
+                } for status in ['green', 'yellow', 'red']
+            },
+            'failures': [
+                {'image': os.path.basename(r['image_path']), 'predicted': r['predicted_status'], 'true': r['true_status']}
+                for r in fp_wrong
+            ]
+        }
+
     # Generate outlier report
     print("\n[6/6] Generating outlier analysis...")
     print()
@@ -1048,6 +1130,7 @@ def train_model():
             'low_confidence_count': len(low_confidence),
             'high_confidence_errors_count': len(high_conf_wrong)
         },
+        'production_validation': production_validation_metrics,  # Metrics on false_positive flagged images
         'model_path': MODEL_OUTPUT_DIR,
         'snapshot_path': None  # Will be updated after creating snapshot
     }
