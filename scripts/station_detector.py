@@ -68,28 +68,30 @@ HSV_RANGES = {
     # Station platform icons
     # Normal state: dark blue rectangles
     'platform_blue': {
-        'lower': np.array([100, 150, 80]),
+        'lower': np.array([100, 100, 60]),
         'upper': np.array([130, 255, 255]),
     },
-    # Train holding: yellow rectangles
+    # Train holding: yellow/orange rectangles with X
+    # Bright yellow platforms have high saturation (S=70-255)
+    # Lower saturation values match text labels and should be excluded
     'platform_yellow': {
-        'lower': np.array([20, 150, 180]),
-        'upper': np.array([40, 255, 255]),
+        'lower': np.array([18, 70, 150]),
+        'upper': np.array([45, 255, 255]),
     },
 
     # Track lines
     # Normal operation: cyan/turquoise
     'track_cyan': {
-        'lower': np.array([80, 150, 200]),
+        'lower': np.array([80, 100, 180]),
         'upper': np.array([100, 255, 255]),
     },
     # Outage: red (wraps around 0)
     'track_red_low': {
-        'lower': np.array([0, 100, 150]),
-        'upper': np.array([10, 255, 255]),
+        'lower': np.array([0, 80, 120]),
+        'upper': np.array([12, 255, 255]),
     },
     'track_red_high': {
-        'lower': np.array([170, 100, 150]),
+        'lower': np.array([168, 80, 120]),
         'upper': np.array([180, 255, 255]),
     },
 }

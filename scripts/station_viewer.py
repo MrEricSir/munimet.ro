@@ -27,6 +27,7 @@ try:
         UPPER_TRACK_Y_PCT, LOWER_TRACK_Y_PCT, TRACK_HEIGHT_PCT,
         UPPER_LABEL_Y_PCT, LOWER_LABEL_Y_PCT,
         REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
+        HSV_RANGES,
     )
 except ModuleNotFoundError:
     from detect_stations import STATION_ORDER, INTERNAL_STATIONS
@@ -35,6 +36,7 @@ except ModuleNotFoundError:
         UPPER_TRACK_Y_PCT, LOWER_TRACK_Y_PCT, TRACK_HEIGHT_PCT,
         UPPER_LABEL_Y_PCT, LOWER_LABEL_Y_PCT,
         REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
+        HSV_RANGES,
     )
 
 app = Flask(__name__)
@@ -60,6 +62,91 @@ def load_image_files():
     return image_files
 
 
+def detect_segment_color(hsv, bounds):
+    """Detect if a track segment is cyan (normal) or red (off)."""
+    x_min, x_max = bounds['x_min'], bounds['x_max']
+    y_min, y_max = bounds['y_min'], bounds['y_max']
+
+    h, w = hsv.shape[:2]
+    x_min = max(0, x_min)
+    y_min = max(0, y_min)
+    x_max = min(w, x_max)
+    y_max = min(h, y_max)
+
+    if x_max <= x_min or y_max <= y_min:
+        return 'unknown', 0.0
+
+    roi = hsv[y_min:y_max, x_min:x_max]
+
+    # Detect red (wraps around hue 0/180)
+    red_mask_low = cv2.inRange(roi,
+        HSV_RANGES['track_red_low']['lower'],
+        HSV_RANGES['track_red_low']['upper'])
+    red_mask_high = cv2.inRange(roi,
+        HSV_RANGES['track_red_high']['lower'],
+        HSV_RANGES['track_red_high']['upper'])
+    red_mask = red_mask_low | red_mask_high
+    red_ratio = np.count_nonzero(red_mask) / max(roi.size, 1)
+
+    # Detect cyan
+    cyan_mask = cv2.inRange(roi,
+        HSV_RANGES['track_cyan']['lower'],
+        HSV_RANGES['track_cyan']['upper'])
+    cyan_ratio = np.count_nonzero(cyan_mask) / max(roi.size, 1)
+
+    if red_ratio > 0.05:
+        return 'red', red_ratio
+    elif cyan_ratio > 0.05:
+        return 'cyan', cyan_ratio
+    else:
+        return 'unknown', 0.0
+
+
+def detect_platform_color(hsv, x, y, size=25, height=25):
+    """Detect if a platform area is blue (normal) or yellow (hold).
+
+    Uses a detection region (50x25 pixels) centered on platform rectangles.
+    """
+    h_img, w_img = hsv.shape[:2]
+
+    # Detection region: 50x25 pixels centered on (x, y)
+    x_min = max(0, x - size)
+    x_max = min(w_img, x + size)
+    y_min = max(0, y - height // 2)
+    y_max = min(h_img, y + height // 2)
+
+    if x_max <= x_min or y_max <= y_min:
+        return 'unknown', 0.0
+
+    roi = hsv[y_min:y_max, x_min:x_max]
+
+    # Detect yellow (holding) using the range from HSV_RANGES
+    yellow_mask = cv2.inRange(roi,
+        HSV_RANGES['platform_yellow']['lower'],
+        HSV_RANGES['platform_yellow']['upper'])
+    yellow_pixels = np.count_nonzero(yellow_mask)
+
+    # Detect blue (normal)
+    blue_mask = cv2.inRange(roi,
+        HSV_RANGES['platform_blue']['lower'],
+        HSV_RANGES['platform_blue']['upper'])
+    blue_pixels = np.count_nonzero(blue_mask)
+
+    # Compare which color is dominant
+    # Yellow wins if it's close to or greater than blue (within 20%)
+    # This accounts for X marks reducing visible yellow area
+    min_threshold = 20
+
+    if yellow_pixels >= blue_pixels * 0.8 and yellow_pixels >= min_threshold:
+        return 'yellow', yellow_pixels
+    elif blue_pixels >= min_threshold:
+        return 'blue', blue_pixels
+    elif yellow_pixels >= min_threshold:
+        return 'yellow', yellow_pixels
+    else:
+        return 'unknown', 0
+
+
 def get_detection_data(image_path):
     """Get station detection data for an image."""
     img = cv2.imread(str(image_path))
@@ -67,12 +154,30 @@ def get_detection_data(image_path):
         return None
 
     h, w = img.shape[:2]
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
     # Get hardcoded positions scaled to this image
     positions = detector.get_hardcoded_positions(w, h, STATION_ORDER)
 
-    # Build station markers
+    # Platform Y positions vary by station location
+    # Western stations (WE-CH): upper at Y=380, lower at Y=500 in 800px image
+    # Central stations (VN-EM): upper at Y=425, lower at Y=450 in 800px image
+    WESTERN_STATIONS = {'WE', 'FH', 'CA', 'CH'}
+
+    def get_platform_y(code):
+        """Get platform Y positions for a station."""
+        if code in WESTERN_STATIONS:
+            upper_y = int(h * 0.475)   # ~380 in 800px
+            lower_y = int(h * 0.625)   # ~500 in 800px
+        else:
+            upper_y = int(h * 0.53)    # ~424 in 800px (platform rect)
+            lower_y = int(h * 0.5625)  # ~450 in 800px
+        return upper_y, lower_y
+
+    # Build station markers with color detection
     stations = []
+    delays_platforms = []
+
     for code, name in STATION_ORDER:
         if code in INTERNAL_STATIONS:
             continue
@@ -82,23 +187,63 @@ def get_detection_data(image_path):
         upper_y = int(h * UPPER_LABEL_Y_PCT)
         lower_y = int(h * LOWER_LABEL_Y_PCT)
 
-        stations.append({
+        # Get station-specific platform Y positions
+        upper_platform_y, lower_platform_y = get_platform_y(code)
+
+        # Detect platform colors
+        upper_color, upper_conf = detect_platform_color(hsv, x, upper_platform_y)
+        lower_color, lower_conf = detect_platform_color(hsv, x, lower_platform_y)
+
+        station_info = {
             'code': code,
             'name': name,
             'x': x,
             'upper_y': upper_y,
             'lower_y': lower_y,
-        })
+            'upper_color': upper_color,
+            'lower_color': lower_color,
+        }
+        stations.append(station_info)
 
-    # Build track segments
+        # Track delays (yellow = hold)
+        # Special case: CT upper (CTL) is normally in hold mode for train turnaround
+        # so we don't report it as a delay
+        # Direction terminology: CT, US, YB are Northbound/Southbound; others are Westbound/Eastbound
+        NORTH_SOUTH_STATIONS = {'CT', 'US', 'YB'}
+
+        if upper_color == 'yellow':
+            # Skip CT upper platform - it's normally in hold mode for turnaround
+            if code != 'CT':
+                direction = 'Northbound' if code in NORTH_SOUTH_STATIONS else 'Westbound'
+                delays_platforms.append({
+                    'station': code,
+                    'name': name,
+                    'track': 'upper',
+                    'direction': direction
+                })
+        if lower_color == 'yellow':
+            direction = 'Southbound' if code in NORTH_SOUTH_STATIONS else 'Eastbound'
+            delays_platforms.append({
+                'station': code,
+                'name': name,
+                'track': 'lower',
+                'direction': direction
+            })
+
+    # Build track segments with color detection
     segments = []
+    delays_segments = []
     track_y_upper = int(h * UPPER_TRACK_Y_PCT)
     track_y_lower = int(h * LOWER_TRACK_Y_PCT)
     track_height = int(h * TRACK_HEIGHT_PCT)
 
     for seg_key, seg_data in positions['track_segments'].items():
         bounds = seg_data['bounds']
-        segments.append({
+
+        # Detect segment color
+        color, confidence = detect_segment_color(hsv, bounds)
+
+        segment_info = {
             'key': seg_key,
             'from_code': seg_data['from_code'],
             'to_code': seg_data['to_code'],
@@ -107,13 +252,26 @@ def get_detection_data(image_path):
             'x_max': bounds['x_max'],
             'y_min': bounds['y_min'],
             'y_max': bounds['y_max'],
-        })
+            'color': color,
+        }
+        segments.append(segment_info)
+
+        # Track delays (red = off)
+        if color == 'red':
+            delays_segments.append({
+                'from': seg_data['from_code'],
+                'to': seg_data['to_code'],
+                'direction': seg_data['direction'],
+                'key': seg_key
+            })
 
     return {
         'width': w,
         'height': h,
         'stations': stations,
         'segments': segments,
+        'delays_platforms': delays_platforms,
+        'delays_segments': delays_segments,
         'track_y_upper': track_y_upper,
         'track_y_lower': track_y_lower,
         'track_height': track_height,
@@ -198,21 +356,17 @@ HTML_TEMPLATE = '''
             cursor: pointer;
         }
         .station-marker:hover circle {
-            fill: #00ff00;
+            stroke-width: 3;
         }
 
         /* Segment regions */
         .segment-region {
             pointer-events: all;
             cursor: pointer;
-            fill: rgba(200, 200, 200, 0.3);
-            stroke: rgba(200, 200, 200, 0.8);
             stroke-width: 1;
         }
         .segment-region:hover {
-            fill: rgba(100, 200, 255, 0.4);
-            stroke: #00ffff;
-            stroke-width: 2;
+            stroke-width: 3;
         }
 
         .info-panel {
@@ -220,6 +374,8 @@ HTML_TEMPLATE = '''
             background: #2a2a4a;
             border-radius: 8px;
             padding: 15px;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
         }
 
         .info-panel h2 {
@@ -235,10 +391,31 @@ HTML_TEMPLATE = '''
             border-radius: 4px;
         }
 
-        .info-section h3 {
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-header h3 {
             font-size: 0.9em;
             color: #8af;
-            margin-bottom: 8px;
+            margin: 0;
+        }
+
+        .section-toggle {
+            color: #8af;
+            font-size: 0.8em;
+        }
+
+        .section-content {
+            margin-top: 8px;
+        }
+
+        .section-content.collapsed {
+            display: none;
         }
 
         .station-list, .segment-list {
@@ -265,6 +442,29 @@ HTML_TEMPLATE = '''
             min-height: 60px;
         }
 
+        .delay-item {
+            padding: 6px 10px;
+            margin: 4px 0;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .delay-red {
+            background: #8b2020;
+            border-left: 4px solid #ff4444;
+        }
+
+        .delay-yellow {
+            background: #6b6b20;
+            border-left: 4px solid #ffcc00;
+        }
+
+        .no-delays {
+            color: #8a8;
+            font-style: italic;
+            padding: 8px;
+        }
+
         .filename {
             color: #aaa;
             font-size: 0.9em;
@@ -278,6 +478,7 @@ HTML_TEMPLATE = '''
             align-items: center;
             gap: 8px;
             cursor: pointer;
+            margin-bottom: 5px;
         }
     </style>
 </head>
@@ -307,31 +508,61 @@ HTML_TEMPLATE = '''
             <h2>Detection Info</h2>
 
             <div class="info-section">
+                <h3>Delays Detected</h3>
+                <div id="delaysInfo">
+                    {% if detection.delays_segments or detection.delays_platforms %}
+                        {% for d in detection.delays_segments %}
+                        <div class="delay-item delay-red" onclick="showSegment('{{ d.key }}')">
+                            Track Off: {{ d.from }} &rarr; {{ d.to }} ({{ d.direction }})
+                        </div>
+                        {% endfor %}
+                        {% for d in detection.delays_platforms %}
+                        <div class="delay-item delay-yellow" onclick="showStation('{{ d.station }}')">
+                            Hold: {{ d.name }} ({{ d.direction }})
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-delays">No delays detected</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="info-section">
                 <h3>Click Info</h3>
                 <div class="click-info" id="clickInfo">
-                    Click on stations (green dots) or track segments (gray rectangles) to see details.
+                    Click on stations or track segments to see details.
                 </div>
             </div>
 
             <div class="info-section">
-                <h3>Stations ({{ detection.stations|length }})</h3>
-                <div class="station-list">
-                    {% for s in detection.stations %}
-                    <div class="station-item" onclick="showStation('{{ s.code }}')">
-                        {{ s.code }} - {{ s.name }} (x={{ s.x }})
+                <div class="section-header" onclick="toggleSection('stations')">
+                    <h3>Stations ({{ detection.stations|length }})</h3>
+                    <span class="section-toggle" id="stations-toggle">[+]</span>
+                </div>
+                <div class="section-content collapsed" id="stations-content">
+                    <div class="station-list">
+                        {% for s in detection.stations %}
+                        <div class="station-item" onclick="showStation('{{ s.code }}')">
+                            {{ s.code }} - {{ s.name }}
+                        </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
 
             <div class="info-section">
-                <h3>Track Segments ({{ detection.segments|length }})</h3>
-                <div class="segment-list">
-                    {% for seg in detection.segments %}
-                    <div class="segment-item" onclick="showSegment('{{ seg.key }}')">
-                        {{ seg.from_code }}&rarr;{{ seg.to_code }} ({{ seg.direction[:2] }})
+                <div class="section-header" onclick="toggleSection('segments')">
+                    <h3>Track Segments ({{ detection.segments|length }})</h3>
+                    <span class="section-toggle" id="segments-toggle">[+]</span>
+                </div>
+                <div class="section-content collapsed" id="segments-content">
+                    <div class="segment-list">
+                        {% for seg in detection.segments %}
+                        <div class="segment-item" onclick="showSegment('{{ seg.key }}')">
+                            {{ seg.from_code }}&rarr;{{ seg.to_code }} ({{ seg.direction[:2] }})
+                        </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
 
@@ -374,9 +605,21 @@ HTML_TEMPLATE = '''
             // Draw segments first (behind stations)
             if (showSegments) {
                 detection.segments.forEach(seg => {
+                    let fillColor, strokeColor;
+                    if (seg.color === 'red') {
+                        fillColor = 'rgba(255, 50, 50, 0.4)';
+                        strokeColor = '#ff4444';
+                    } else if (seg.color === 'cyan') {
+                        fillColor = 'rgba(50, 200, 200, 0.2)';
+                        strokeColor = '#00cccc';
+                    } else {
+                        fillColor = 'rgba(150, 150, 150, 0.2)';
+                        strokeColor = '#888888';
+                    }
                     svg += `<rect class="segment-region"
                         x="${seg.x_min}" y="${seg.y_min}"
                         width="${seg.x_max - seg.x_min}" height="${seg.y_max - seg.y_min}"
+                        fill="${fillColor}" stroke="${strokeColor}"
                         onclick="showSegment('${seg.key}')"
                         data-key="${seg.key}"/>`;
                 });
@@ -385,15 +628,20 @@ HTML_TEMPLATE = '''
             // Draw station markers
             if (showStations) {
                 detection.stations.forEach(s => {
-                    // Upper station marker
+                    // Upper station marker - color based on platform state
+                    let upperFill = s.upper_color === 'yellow' ? '#ffcc00' : '#00cc00';
+                    let upperStroke = s.upper_color === 'yellow' ? '#ff8800' : '#ffffff';
                     svg += `<g class="station-marker" onclick="showStation('${s.code}')">
-                        <circle cx="${s.x}" cy="${s.upper_y}" r="6" fill="#00cc00" stroke="#fff" stroke-width="1"/>
-                        <text x="${s.x}" y="${s.upper_y - 10}" text-anchor="middle" fill="#0f0" font-size="10">${s.code}</text>
+                        <circle cx="${s.x}" cy="${s.upper_y}" r="6" fill="${upperFill}" stroke="${upperStroke}" stroke-width="1"/>
+                        <text x="${s.x}" y="${s.upper_y - 10}" text-anchor="middle" fill="${upperFill}" font-size="10">${s.code}</text>
                     </g>`;
+
                     // Lower station marker
+                    let lowerFill = s.lower_color === 'yellow' ? '#ffcc00' : '#00aa00';
+                    let lowerStroke = s.lower_color === 'yellow' ? '#ff8800' : '#ffffff';
                     svg += `<g class="station-marker" onclick="showStation('${s.code}')">
-                        <circle cx="${s.x}" cy="${s.lower_y}" r="6" fill="#00aa00" stroke="#fff" stroke-width="1"/>
-                        <text x="${s.x}" y="${s.lower_y + 16}" text-anchor="middle" fill="#0a0" font-size="10">${s.code}</text>
+                        <circle cx="${s.x}" cy="${s.lower_y}" r="6" fill="${lowerFill}" stroke="${lowerStroke}" stroke-width="1"/>
+                        <text x="${s.x}" y="${s.lower_y + 16}" text-anchor="middle" fill="${lowerFill}" font-size="10">${s.code}</text>
                     </g>`;
                 });
             }
@@ -405,12 +653,15 @@ HTML_TEMPLATE = '''
         function showStation(code) {
             const s = detection.stations.find(st => st.code === code);
             if (s) {
+                let statusUpper = s.upper_color === 'yellow' ? '<span style="color:#ffcc00">HOLD</span>' :
+                                  s.upper_color === 'blue' ? '<span style="color:#00cc00">Normal</span>' : 'Unknown';
+                let statusLower = s.lower_color === 'yellow' ? '<span style="color:#ffcc00">HOLD</span>' :
+                                  s.lower_color === 'blue' ? '<span style="color:#00cc00">Normal</span>' : 'Unknown';
                 document.getElementById('clickInfo').innerHTML = `
                     <strong>Station: ${s.name}</strong><br>
                     Code: ${s.code}<br>
-                    X position: ${s.x}px<br>
-                    Upper Y: ${s.upper_y}px<br>
-                    Lower Y: ${s.lower_y}px
+                    Upper platform: ${statusUpper}<br>
+                    Lower platform: ${statusLower}
                 `;
             }
         }
@@ -418,13 +669,25 @@ HTML_TEMPLATE = '''
         function showSegment(key) {
             const seg = detection.segments.find(s => s.key === key);
             if (seg) {
+                let status = seg.color === 'red' ? '<span style="color:#ff4444">OFF</span>' :
+                            seg.color === 'cyan' ? '<span style="color:#00cccc">Normal</span>' : 'Unknown';
                 document.getElementById('clickInfo').innerHTML = `
                     <strong>Segment: ${seg.from_code} &rarr; ${seg.to_code}</strong><br>
                     Direction: ${seg.direction}<br>
-                    X: ${seg.x_min} - ${seg.x_max}px<br>
-                    Y: ${seg.y_min} - ${seg.y_max}px<br>
-                    Width: ${seg.x_max - seg.x_min}px
+                    Status: ${status}
                 `;
+            }
+        }
+
+        function toggleSection(section) {
+            const content = document.getElementById(section + '-content');
+            const toggle = document.getElementById(section + '-toggle');
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                toggle.textContent = '[-]';
+            } else {
+                content.classList.add('collapsed');
+                toggle.textContent = '[+]';
             }
         }
 
