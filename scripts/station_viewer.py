@@ -29,7 +29,7 @@ try:
         REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
         HSV_RANGES,
     )
-    from scripts.train_detector import TrainDetector, TESSERACT_AVAILABLE
+    from scripts.train_detector_v2 import TrainDetectorV2, TESSERACT_AVAILABLE
 except ModuleNotFoundError:
     from detect_stations import STATION_ORDER, INTERNAL_STATIONS
     from station_detector import (
@@ -39,14 +39,14 @@ except ModuleNotFoundError:
         REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
         HSV_RANGES,
     )
-    from train_detector import TrainDetector, TESSERACT_AVAILABLE
+    from train_detector_v2 import TrainDetectorV2, TESSERACT_AVAILABLE
 
 app = Flask(__name__)
 
 # Configuration
 IMAGE_FOLDER = Path(__file__).parent.parent / "artifacts" / "training_data" / "images"
 detector = StationDetector()
-train_detector = TrainDetector() if TESSERACT_AVAILABLE else None
+train_detector = TrainDetectorV2() if TESSERACT_AVAILABLE else None
 
 # Global state
 current_image_index = 0
@@ -268,10 +268,19 @@ def get_detection_data(image_path):
                 'key': seg_key
             })
 
-    # Detect trains using OCR
+    # Detect trains using hybrid symbol + OCR approach
     trains = []
     if train_detector is not None:
-        trains = train_detector.detect_trains(img, hsv)
+        raw_trains = train_detector.detect_trains(img)
+        # Convert numpy int64 to Python int for JSON serialization
+        for t in raw_trains:
+            trains.append({
+                'id': t['id'],
+                'x': int(t['x']),
+                'y': int(t['y']),
+                'track': t['track'],
+                'confidence': t.get('confidence', 'high')
+            })
 
     return {
         'width': w,
@@ -550,9 +559,19 @@ HTML_TEMPLATE = '''
                 <div id="trainsInfo">
                     {% if detection.trains %}
                         {% for t in detection.trains %}
-                        <div class="delay-item" style="background: #2a4a2a; border-left: 4px solid #44ff44; cursor: pointer;" onclick="showTrain('{{ t.id }}', {{ t.x }}, {{ t.y }}, '{{ t.track }}')">
+                        {% if t.confidence == 'high' %}
+                        <div class="delay-item" style="background: #2a4a2a; border-left: 4px solid #44ff44; cursor: pointer;" onclick="showTrain('{{ t.id }}', {{ t.x }}, {{ t.y }}, '{{ t.track }}', '{{ t.confidence }}')">
                             {{ t.id }} ({{ t.track }})
                         </div>
+                        {% elif t.confidence == 'medium' %}
+                        <div class="delay-item" style="background: #4a4a2a; border-left: 4px solid #ffcc44; cursor: pointer;" onclick="showTrain('{{ t.id }}', {{ t.x }}, {{ t.y }}, '{{ t.track }}', '{{ t.confidence }}')">
+                            {{ t.id }} ({{ t.track }}) <span style="color:#ffcc44;font-size:0.8em">[recovered]</span>
+                        </div>
+                        {% else %}
+                        <div class="delay-item" style="background: #3a3a3a; border-left: 4px solid #ff8844; cursor: pointer;" onclick="showTrain('{{ t.id }}', {{ t.x }}, {{ t.y }}, '{{ t.track }}', '{{ t.confidence }}')">
+                            {{ t.id }} ({{ t.track }}) <span style="color:#ff8844;font-size:0.8em">[unread]</span>
+                        </div>
+                        {% endif %}
                         {% endfor %}
                     {% else %}
                         <div class="no-delays">No trains detected</div>
@@ -687,12 +706,26 @@ HTML_TEMPLATE = '''
             // Draw train identifiers
             if (showTrains && detection.trains) {
                 detection.trains.forEach(t => {
-                    svg += `<g class="train-marker" onclick="showTrain('${t.id}', ${t.x}, ${t.y}, '${t.track}')" style="cursor: pointer;">
-                        <rect x="${t.x - 20}" y="${t.y - 8}" width="40" height="16" rx="3"
-                              fill="rgba(0, 100, 0, 0.8)" stroke="#44ff44" stroke-width="1"/>
+                    // Color based on confidence level
+                    let fillColor, strokeColor;
+                    if (t.confidence === 'high') {
+                        fillColor = 'rgba(0, 100, 0, 0.8)';
+                        strokeColor = '#44ff44';
+                    } else if (t.confidence === 'medium') {
+                        fillColor = 'rgba(100, 100, 0, 0.8)';
+                        strokeColor = '#ffcc44';
+                    } else {
+                        fillColor = 'rgba(100, 50, 0, 0.8)';
+                        strokeColor = '#ff8844';
+                    }
+                    // Truncate long IDs (like UNKNOWN@1234)
+                    const displayId = t.id.length > 8 ? t.id.substring(0, 8) : t.id;
+                    svg += `<g class="train-marker" onclick="showTrain('${t.id}', ${t.x}, ${t.y}, '${t.track}', '${t.confidence}')" style="cursor: pointer;">
+                        <rect x="${t.x - 25}" y="${t.y - 8}" width="50" height="16" rx="3"
+                              fill="${fillColor}" stroke="${strokeColor}" stroke-width="1"/>
                         <text x="${t.x}" y="${t.y + 4}"
-                              text-anchor="middle" fill="#ffffff" font-size="10"
-                              font-weight="bold">${t.id}</text>
+                              text-anchor="middle" fill="#ffffff" font-size="9"
+                              font-weight="bold">${displayId}</text>
                     </g>`;
                 });
             }
@@ -730,19 +763,31 @@ HTML_TEMPLATE = '''
             }
         }
 
-        function showTrain(id, x, y, track) {
+        function showTrain(id, x, y, track, confidence) {
             // Parse train ID: route letter + 4-digit number + suffix
-            const route = id.charAt(0);
-            const number = id.substring(1, 5);
-            const suffix = id.substring(5);
-            document.getElementById('clickInfo').innerHTML = `
-                <strong>Train: ${id}</strong><br>
-                Route: ${route}<br>
-                Number: ${number}<br>
-                Suffix: ${suffix}<br>
-                Track: ${track}<br>
-                Position: (${x}, ${y})
-            `;
+            let content = `<strong>Train: ${id}</strong><br>`;
+
+            if (id.startsWith('UNKNOWN@')) {
+                content += `Status: <span style="color:#ff8844">Symbol detected, ID unreadable</span><br>`;
+            } else {
+                const route = id.charAt(0);
+                const number = id.substring(1, 5);
+                const suffix = id.substring(5);
+                content += `Route: ${route}<br>`;
+                content += `Number: ${number}<br>`;
+                content += `Suffix: ${suffix}<br>`;
+            }
+
+            const confColor = confidence === 'high' ? '#44ff44' :
+                             confidence === 'medium' ? '#ffcc44' : '#ff8844';
+            const confLabel = confidence === 'high' ? 'High (OCR confirmed)' :
+                             confidence === 'medium' ? 'Medium (recovered)' : 'Low (symbol only)';
+
+            content += `Track: ${track}<br>`;
+            content += `Confidence: <span style="color:${confColor}">${confLabel}</span><br>`;
+            content += `Position: (${x}, ${y})`;
+
+            document.getElementById('clickInfo').innerHTML = content;
         }
 
         function toggleSection(section) {
