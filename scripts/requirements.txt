@@ -12,3 +12,7 @@ numpy>=1.24.0
 
 # Flask for web-based visualization
 flask>=3.0.0
+
+# Tesseract OCR for train ID detection
+# Note: Requires Tesseract installed on system (brew install tesseract on macOS)
+pytesseract>=0.3.10

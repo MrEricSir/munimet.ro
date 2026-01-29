@@ -29,6 +29,7 @@ try:
         REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
         HSV_RANGES,
     )
+    from scripts.train_detector import TrainDetector, TESSERACT_AVAILABLE
 except ModuleNotFoundError:
     from detect_stations import STATION_ORDER, INTERNAL_STATIONS
     from station_detector import (
@@ -38,12 +39,14 @@ except ModuleNotFoundError:
         REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
         HSV_RANGES,
     )
+    from train_detector import TrainDetector, TESSERACT_AVAILABLE
 
 app = Flask(__name__)
 
 # Configuration
 IMAGE_FOLDER = Path(__file__).parent.parent / "artifacts" / "training_data" / "images"
 detector = StationDetector()
+train_detector = TrainDetector() if TESSERACT_AVAILABLE else None
 
 # Global state
 current_image_index = 0
@@ -265,6 +268,11 @@ def get_detection_data(image_path):
                 'key': seg_key
             })
 
+    # Detect trains using OCR
+    trains = []
+    if train_detector is not None:
+        trains = train_detector.detect_trains(img, hsv)
+
     return {
         'width': w,
         'height': h,
@@ -272,6 +280,7 @@ def get_detection_data(image_path):
         'segments': segments,
         'delays_platforms': delays_platforms,
         'delays_segments': delays_segments,
+        'trains': trains,
         'track_y_upper': track_y_upper,
         'track_y_lower': track_y_lower,
         'track_height': track_height,
@@ -367,6 +376,15 @@ HTML_TEMPLATE = '''
         }
         .segment-region:hover {
             stroke-width: 3;
+        }
+
+        /* Train markers */
+        .train-marker {
+            pointer-events: all;
+        }
+        .train-marker:hover rect {
+            stroke-width: 2;
+            fill: rgba(0, 150, 0, 0.9);
         }
 
         .info-panel {
@@ -528,6 +546,21 @@ HTML_TEMPLATE = '''
             </div>
 
             <div class="info-section">
+                <h3>Trains Detected ({{ detection.trains|length }})</h3>
+                <div id="trainsInfo">
+                    {% if detection.trains %}
+                        {% for t in detection.trains %}
+                        <div class="delay-item" style="background: #2a4a2a; border-left: 4px solid #44ff44; cursor: pointer;" onclick="showTrain('{{ t.id }}', {{ t.x }}, {{ t.y }}, '{{ t.track }}')">
+                            {{ t.id }} ({{ t.track }})
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-delays">No trains detected</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="info-section">
                 <h3>Click Info</h3>
                 <div class="click-info" id="clickInfo">
                     Click on stations or track segments to see details.
@@ -575,6 +608,10 @@ HTML_TEMPLATE = '''
                     <input type="checkbox" id="showSegments" checked onchange="updateOverlay()">
                     Show track segments
                 </label>
+                <label>
+                    <input type="checkbox" id="showTrains" checked onchange="updateOverlay()">
+                    Show train markers
+                </label>
             </div>
         </div>
     </div>
@@ -599,6 +636,7 @@ HTML_TEMPLATE = '''
         function updateOverlay() {
             const showStations = document.getElementById('showStations').checked;
             const showSegments = document.getElementById('showSegments').checked;
+            const showTrains = document.getElementById('showTrains').checked;
 
             let svg = `<svg viewBox="0 0 ${imgWidth} ${imgHeight}" preserveAspectRatio="xMidYMid meet">`;
 
@@ -646,6 +684,19 @@ HTML_TEMPLATE = '''
                 });
             }
 
+            // Draw train identifiers
+            if (showTrains && detection.trains) {
+                detection.trains.forEach(t => {
+                    svg += `<g class="train-marker" onclick="showTrain('${t.id}', ${t.x}, ${t.y}, '${t.track}')" style="cursor: pointer;">
+                        <rect x="${t.x - 20}" y="${t.y - 8}" width="40" height="16" rx="3"
+                              fill="rgba(0, 100, 0, 0.8)" stroke="#44ff44" stroke-width="1"/>
+                        <text x="${t.x}" y="${t.y + 4}"
+                              text-anchor="middle" fill="#ffffff" font-size="10"
+                              font-weight="bold">${t.id}</text>
+                    </g>`;
+                });
+            }
+
             svg += '</svg>';
             document.getElementById('overlay').innerHTML = svg;
         }
@@ -677,6 +728,21 @@ HTML_TEMPLATE = '''
                     Status: ${status}
                 `;
             }
+        }
+
+        function showTrain(id, x, y, track) {
+            // Parse train ID: route letter + 4-digit number + suffix
+            const route = id.charAt(0);
+            const number = id.substring(1, 5);
+            const suffix = id.substring(5);
+            document.getElementById('clickInfo').innerHTML = `
+                <strong>Train: ${id}</strong><br>
+                Route: ${route}<br>
+                Number: ${number}<br>
+                Suffix: ${suffix}<br>
+                Track: ${track}<br>
+                Position: (${x}, ${y})
+            `;
         }
 
         function toggleSection(section) {
