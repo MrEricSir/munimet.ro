@@ -157,7 +157,7 @@ def calculate_system_status(trains, delays_platforms, delays_segments):
     Returns: 'red', 'yellow', or 'green'
 
     Logic:
-    - Red: No trains have route suffixes (subway not operating)
+    - Red: Fewer than 2 trains have valid route suffixes (subway not operating)
     - Yellow: 2+ platforms in hold mode OR any track sections disabled
     - Green: Normal operation
 
@@ -165,27 +165,25 @@ def calculate_system_status(trains, delays_platforms, delays_segments):
     """
     import re
 
-    # Check if any trains have valid route suffixes
+    # Check how many trains have valid route suffixes
     # Train ID format: [Letter]?[4 digits][1-2 letter suffix]
     # The suffix (route) is the letters at the end after the number
     suffix_pattern = re.compile(r'\d{4}([A-Z]{1,2})$')
 
-    has_route_suffix = False
+    trains_with_routes = 0
+
     for train in trains:
         train_id = train.get('id', '')
         if train_id.startswith('UNKNOWN'):
             continue
         match = suffix_pattern.search(train_id)
         if match:
-            has_route_suffix = True
-            break
+            trains_with_routes += 1
 
-    # Red: No trains have route suffixes (subway likely not operating)
-    if trains and not has_route_suffix:
+    # Red: Fewer than 2 trains with route suffixes (subway likely not operating)
+    # This catches overnight/maintenance displays where only 0-1 trains show valid IDs
+    if trains_with_routes < 2:
         return 'red'
-
-    # If no trains detected at all, we can't determine status from routes
-    # Fall through to check for delays
 
     # Yellow: 2+ platforms in hold OR any track sections disabled
     platforms_in_hold = len(delays_platforms)
