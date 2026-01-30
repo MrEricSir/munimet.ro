@@ -2,11 +2,11 @@
 
 [![lint](https://github.com/MrEricSir/munimet.ro/actions/workflows/lint.yml/badge.svg)](https://github.com/MrEricSir/munimet.ro/actions/workflows/lint.yml)
 
-Real-time monitoring of San Francisco's Muni Metro subway using computer vision to classify status from internal SFMTA status images.
+Real-time monitoring of San Francisco's Muni Metro subway using OpenCV-based computer vision to detect system status from internal SFMTA status images.
 
 URL: https://munimet.ro
 
-This project was "vibe coded" using Anthropic's Claude Code. Runs without requiring any LLM or external AI services.
+This project was "vibe coded" using Anthropic's Claude Code. Uses deterministic computer vision analysis - no ML models or external AI services required.
 
 ## Quick Start
 
@@ -26,15 +26,14 @@ Quick checklist:
 git clone https://github.com/MrEricSir/munimet.ro.git
 cd munimet.ro
 
-# Download models and training data from GCS
+# Download training data from GCS (optional - for development/testing)
 ./scripts/sync-artifacts.sh download    # macOS/Linux
 # or
 .\scripts\sync-artifacts.ps1 download   # Windows
 ```
 
 The sync script will download:
-- Pre-trained models (~856MB)
-- Training dataset (~270MB)
+- Training dataset (~270MB) - labeled images for testing
 
 **Note:** Requires `gcloud` authentication. Run `gcloud auth login` first.
 
@@ -108,47 +107,44 @@ The sync scripts use `gsutil rsync` to efficiently download only changed files.
 
 ### For Contributors Without GCS Access
 
-Contributors can train their own models using collected data:
+Contributors can collect their own test images:
 
 1. Collect status images:
    ```bash
-   cd training
-   source venv/bin/activate
-   python download_muni_image.py  # Run periodically to build dataset
+   python scripts/download_muni_image.py  # Run periodically to build dataset
    ```
 
-2. Label images:
+2. Visualize detection:
    ```bash
-   python label_images.py  # GUI for labeling status (red/yellow/green)
+   python scripts/station_viewer.py  # Interactive detection viewer
    ```
 
-3. Train model:
+3. Run tests:
    ```bash
-   python train_model.py  # Fine-tune BLIP model on labeled data
+   pytest tests/test_system_status.py -v  # Verify detection accuracy
    ```
-
-See [training/README.md](training/README.md) for detailed training instructions.
 
 ## Project Structure
 
 ```
 munimet.ro/
 ├── lib/                    # Shared library code
-│   └── muni_lib.py        # Core download & prediction functions
+│   ├── muni_lib.py        # Core download & detection functions
+│   └── detection.py       # OpenCV-based status detection
 │
-├── training/              # Data collection & ML training
-│   ├── download_muni_image.py  # Status image collector
-│   ├── label_images.py         # Image labeling GUI
-│   ├── train_model.py          # Model training script
-│   └── requirements.txt        # ML dependencies
+├── scripts/               # Detection and utility scripts
+│   ├── station_detector.py     # Station position detection
+│   ├── train_detector_v3.py    # Train ID detection (OCR)
+│   ├── detect_stations.py      # Station configuration
+│   └── station_viewer.py       # Debug visualization tool
 │
 ├── api/                   # Production web API
 │   ├── api.py             # Falcon web server
 │   ├── check_status.py    # Status checker
 │   ├── check_status_job.py # Cloud Run Job entry point
-│   ├── predict_status.py  # Prediction script
-│   ├── index.html         # Landing page
-│   ├── dashboard.html     # Status dashboard
+│   ├── html/              # Frontend files
+│   │   ├── index.html     # Landing page
+│   │   └── dashboard.html # Status dashboard
 │   └── requirements.txt   # API dependencies
 │
 ├── deploy/                # Deployment configuration
@@ -156,14 +152,14 @@ munimet.ro/
 │   └── cloud/             # Google Cloud Run deployment
 │
 ├── tests/                 # Test suite
-│   └── test_frontend.py   # Frontend integration tests
+│   ├── images/            # Test images (~2MB)
+│   ├── test_system_status.py   # Status detection tests
+│   └── test_train_detection.py # Train detection tests
 │
 └── artifacts/             # Generated data (synced via GCS)
-    ├── training_data/     # ML training dataset (~270MB)
-    │   ├── images/        # 2,666 labeled snapshots
-    │   └── labels.json    # Training labels (570KB)
-    ├── models/            # Trained models (~856MB)
-    │   └── v1/            # BLIP model + classifier
+    ├── training_data/     # Reference images (~270MB)
+    │   ├── images/        # Labeled snapshots
+    │   └── labels.json    # Training labels
     └── runtime/           # Transient runtime data (gitignored)
         ├── cache/         # API response cache
         └── downloads/     # Recent snapshots
@@ -179,12 +175,18 @@ munimet.ro/
 
 ## Architecture
 
-### Training Pipeline
+### Detection Pipeline
 
-1. **Data Collection** - `download_muni_image.py` periodically captures status images
-2. **Labeling** - `label_images.py` provides GUI for manual classification
-3. **Training** - `train_model.py` fine-tunes BLIP vision-language model
-4. **Evaluation** - Model achieves >95% accuracy on held-out test set
+The system uses OpenCV-based computer vision to analyze SFMTA status images:
+
+1. **Image Download** - Fetches real-time status image from SFMTA internal system
+2. **Station Detection** - Identifies platform colors (blue=normal, yellow=hold)
+3. **Track Analysis** - Detects track segment status (cyan=normal, red=disabled)
+4. **Train Detection** - Locates trains and reads IDs via OCR (optional)
+5. **Status Calculation** - Determines system status (green/yellow/red) based on:
+   - Platforms in hold mode
+   - Disabled track segments
+   - Train bunching (4+ trains clustered together)
 
 ### Production Deployment
 
@@ -192,7 +194,7 @@ munimet.ro/
 ```
 Cache Writer (background process)
   ↓ downloads image every 60s
-  ↓ runs ML prediction
+  ↓ runs OpenCV detection
   ↓ writes JSON to local disk
 Local Cache File
   ↑ reads JSON (~30ms)
@@ -206,7 +208,7 @@ Browser
 Cloud Scheduler (every 3 min)
   ↓ triggers via OAuth
 Cloud Run Job (munimetro-checker)
-  ↓ downloads image + predicts status
+  ↓ downloads image + detects status
   ↓ writes JSON + exits
 Cloud Storage (gs://munimetro-cache/)
   ↑ reads JSON (~100-200ms)
@@ -217,49 +219,45 @@ Users
 
 ## Features
 
-- **ML-Powered Classification** - BLIP vision-language model for status classification and description generation
+- **Computer Vision Detection** - OpenCV-based analysis for deterministic status classification
+- **Rich Detection Data** - Detects trains, platform holds, disabled tracks, and bunching
 - **Production API** - Falcon web framework with health checks, caching, and graceful degradation
 - **Lightweight Frontend** - Vanilla JavaScript with zero runtime dependencies
 - **Containerized Deployment** - Multi-stage Docker builds with security best practices
 - **Smart Caching** - Best-of-two logic reduces false positives (~30ms local response time)
 - **Cloud Native** - Serverless deployment on Google Cloud Run with automatic scaling
+- **No ML Dependencies** - No PyTorch or large model files required
 
 ## Development Workflow
 
 1. **Collect Data** - Run `download_muni_image.py` periodically
-2. **Label Data** - Use `label_images.py` to classify images
-3. **Train Model** - Execute `train_model.py` to fine-tune BLIP
+2. **Test Detection** - Use `scripts/station_viewer.py` to visualize detection
+3. **Run Tests** - Execute `pytest tests/` to verify detection accuracy
 4. **Test Locally** - Deploy with `./deploy/local/setup.sh && ./deploy/local/start.sh`
 5. **Deploy Cloud** - Deploy to Cloud Run with `./deploy/cloud/deploy-services.sh`
 
 ## Technology Stack
 
-- **ML Framework**: PyTorch, Transformers (HuggingFace)
-- **Vision Model**: BLIP (Salesforce) fine-tuned for status classification
+- **Computer Vision**: OpenCV for image analysis
+- **OCR**: Tesseract for train ID recognition (optional)
 - **Web Framework**: Falcon (async-ready, production WSGI)
 - **Frontend**: Vanilla JavaScript (no build step)
 - **Deployment**: Docker, Google Cloud Run, Cloud Scheduler
-- **Storage**: Google Cloud Storage (model files, training data, cache)
+- **Storage**: Google Cloud Storage (training data, cache)
 
 ## Requirements
 
-### Training Environment
-- Python 3.12+ (3.13+ recommended)
-- PyTorch 2.0+ (with CUDA support for GPU training)
-- Transformers (HuggingFace)
-- Pillow
-- tkinter (for labeling GUI)
-- Optional: NVIDIA GPU with CUDA for faster training (~10x speedup)
-
 ### API Environment
 - Python 3.13+
-- Falcon
-- Gunicorn
+- OpenCV (opencv-python-headless)
+- Falcon, Gunicorn
+- Optional: Tesseract OCR for train ID detection
 - Google Cloud Storage client (for cloud deployment)
 
 ### Development Tools
 - Docker & Docker Compose
 - Google Cloud SDK with gsutil (for accessing training data and cloud deployment)
+- pytest for running tests
 
 ## License
 

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.station_viewer import calculate_system_status, get_detection_data
 
 TESTS_DIR = Path(__file__).parent
-IMAGES_DIR = TESTS_DIR.parent / "artifacts" / "training_data" / "images"
+IMAGES_DIR = TESTS_DIR / "images"
 
 
 # Known correct statuses for specific images

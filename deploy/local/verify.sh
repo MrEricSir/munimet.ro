@@ -13,15 +13,14 @@ echo ""
 
 PID_DIR="artifacts/runtime/pids"
 RUNTIME_DIR="artifacts/runtime"
-MODELS_DIR="artifacts/models/v1"
 ISSUES=0
 
-echo "[1/6] Checking Python environment..."
+echo "[1/5] Checking Python environment..."
 if [ -d "api/venv" ]; then
     echo "✓ Virtual environment exists: api/venv"
 
-    # Check if venv has dependencies
-    if source api/venv/bin/activate 2>/dev/null && python -c "import falcon, torch, transformers" 2>/dev/null; then
+    # Check if venv has dependencies (falcon, cv2, numpy for OpenCV-based detection)
+    if source api/venv/bin/activate 2>/dev/null && python -c "import falcon, cv2, numpy" 2>/dev/null; then
         echo "✓ Dependencies installed"
         deactivate
     else
@@ -36,23 +35,7 @@ else
 fi
 echo ""
 
-echo "[2/6] Checking ML model..."
-if [ -f "$MODELS_DIR/status_classifier.pt" ]; then
-    echo "✓ Model exists: $MODELS_DIR/status_classifier.pt"
-
-    # Show model size and age
-    MODEL_SIZE=$(ls -lh "$MODELS_DIR/status_classifier.pt" | awk '{print $5}')
-    MODEL_DATE=$(ls -l "$MODELS_DIR/status_classifier.pt" | awk '{print $6, $7, $8}')
-    echo "  Size: $MODEL_SIZE"
-    echo "  Modified: $MODEL_DATE"
-else
-    echo "❌ Model not found"
-    echo "   Train a model or copy from training artifacts"
-    ISSUES=$((ISSUES + 1))
-fi
-echo ""
-
-echo "[3/6] Checking runtime directories..."
+echo "[2/5] Checking runtime directories..."
 for dir in cache downloads pids; do
     if [ -d "$RUNTIME_DIR/$dir" ]; then
         echo "✓ $RUNTIME_DIR/$dir exists"
@@ -63,7 +46,7 @@ for dir in cache downloads pids; do
 done
 echo ""
 
-echo "[4/6] Checking cache writer status..."
+echo "[3/5] Checking cache writer status..."
 if [ -f "$PID_DIR/cache-writer.pid" ]; then
     CACHE_PID=$(cat "$PID_DIR/cache-writer.pid")
     if ps -p $CACHE_PID > /dev/null 2>&1; then
@@ -79,9 +62,9 @@ if [ -f "$PID_DIR/cache-writer.pid" ]; then
 
             # Check cache content
             if command -v jq &> /dev/null; then
-                STATUS=$(cat "$RUNTIME_DIR/cache/latest_status.json" | jq -r '.status' 2>/dev/null || echo "unknown")
-                CONFIDENCE=$(cat "$RUNTIME_DIR/cache/latest_status.json" | jq -r '.confidence' 2>/dev/null || echo "unknown")
-                echo "  Status: $STATUS (confidence: $CONFIDENCE)"
+                STATUS=$(cat "$RUNTIME_DIR/cache/latest_status.json" | jq -r '.best_status.status // .statuses[0].status // "unknown"' 2>/dev/null || echo "unknown")
+                TRAINS=$(cat "$RUNTIME_DIR/cache/latest_status.json" | jq -r '.best_status.detection.trains | length // 0' 2>/dev/null || echo "0")
+                echo "  Status: $STATUS ($TRAINS trains detected)"
             fi
         else
             echo "⚠️  Cache file not found (may still be initializing)"
@@ -97,7 +80,7 @@ else
 fi
 echo ""
 
-echo "[5/6] Checking API server status..."
+echo "[4/5] Checking API server status..."
 if [ -f "$PID_DIR/api.pid" ]; then
     API_PID=$(cat "$PID_DIR/api.pid")
     if ps -p $API_PID > /dev/null 2>&1; then
@@ -136,7 +119,7 @@ else
 fi
 echo ""
 
-echo "[6/6] Recent logs (last 5 entries)..."
+echo "[5/5] Recent logs (last 5 entries)..."
 echo ""
 if [ -f "$RUNTIME_DIR/cache-writer.log" ]; then
     echo "--- Cache Writer ---"

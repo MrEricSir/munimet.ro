@@ -3,7 +3,7 @@
 Muni Status API - Web service for checking SF Muni subway status.
 
 Endpoints:
-    GET /status - Download latest image and return predicted status
+    GET /status - Return current status (from cache or live detection)
 
 Usage:
     gunicorn api:app --bind 0.0.0.0:8000
@@ -23,24 +23,19 @@ PROJECT_ROOT = API_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, predict_muni_status, load_muni_model, read_cache
+from lib.muni_lib import download_muni_image, detect_muni_status, read_cache
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 CACHE_MAX_AGE = 300  # seconds (5 minutes) - fallback if cache is stale
 ENABLE_FALLBACK = os.getenv('ENABLE_FALLBACK', 'true').lower() == 'true'
 
-# Pre-load model at startup only if fallback mode is enabled
-# If using cache writer, set ENABLE_FALLBACK=false to make API lightweight
-MODEL = PROCESSOR = LABEL_TO_STATUS = DEVICE = None
-
+print("Muni Status API starting...")
 if ENABLE_FALLBACK:
-    print("Loading ML model for fallback mode...")
-    MODEL, PROCESSOR, LABEL_TO_STATUS, DEVICE = load_muni_model()
-    print(f"Model loaded successfully on {DEVICE}")
+    print("Fallback mode enabled - will perform live detection if cache is stale")
 else:
     print("Fallback mode disabled - API will only serve cached results")
-    print("Set ENABLE_FALLBACK=true to enable live download+predict fallback")
+    print("Set ENABLE_FALLBACK=true to enable live detection fallback")
 
 
 class StatusResource:
@@ -52,13 +47,14 @@ class StatusResource:
 
         Returns JSON with:
         - status: green/yellow/red
-        - description: AI-generated description
-        - confidence: prediction confidence (0-1)
+        - description: status description
+        - confidence: detection confidence (1.0 for deterministic detection)
         - probabilities: breakdown by status
         - timestamp: when check was performed
         - image_path: path to downloaded image
         - cached: whether result came from cache
         - cache_age: age of cache in seconds (if cached)
+        - detection: detailed detection data (trains, delays, etc.)
         """
         timestamp = datetime.now().isoformat()
 
@@ -86,12 +82,16 @@ class StatusResource:
                             'yellow': round(best['probabilities']['yellow'], 4),
                             'red': round(best['probabilities']['red'], 4)
                         },
-                        'image_path': best['image_path'],
-                        'image_dimensions': best['image_dimensions'],
+                        'image_path': best.get('image_path'),
+                        'image_dimensions': best.get('image_dimensions'),
                         'timestamp': best['timestamp'],
                         'cached': True,
                         'cache_age': round(cache_age, 1)
                     }
+
+                    # Add detection details if available
+                    if 'detection' in best:
+                        response_data['detection'] = best['detection']
 
                     # Add status history info if available
                     if 'statuses' in cache_data and len(cache_data['statuses']) > 1:
@@ -107,7 +107,7 @@ class StatusResource:
                     resp.media = response_data
                     return
             except (KeyError, ValueError) as e:
-                # Cache is corrupted, fall through to download + predict
+                # Cache is corrupted, fall through to download + detect
                 print(f"Cache read failed: {e}")
 
         # Cache miss or stale - check if fallback is enabled
@@ -115,12 +115,12 @@ class StatusResource:
             resp.status = falcon.HTTP_503
             resp.media = {
                 'error': 'Cache unavailable and fallback mode disabled',
-                'details': 'Set ENABLE_FALLBACK=true to enable live predictions',
+                'details': 'Set ENABLE_FALLBACK=true to enable live detection',
                 'timestamp': timestamp
             }
             return
 
-        # Fallback mode: download and predict
+        # Fallback mode: download and detect
         download_result = download_muni_image(
             output_folder=SNAPSHOT_DIR,
             validate_dimensions=True
@@ -135,19 +135,13 @@ class StatusResource:
             }
             return
 
-        # Predict status using pre-loaded model
+        # Detect status using OpenCV
         try:
-            prediction = predict_muni_status(
-                download_result['filepath'],
-                model=MODEL,
-                processor=PROCESSOR,
-                label_to_status=LABEL_TO_STATUS,
-                device=DEVICE
-            )
+            detection = detect_muni_status(download_result['filepath'])
         except Exception as e:
             resp.status = falcon.HTTP_500
             resp.media = {
-                'error': 'Failed to predict status',
+                'error': 'Failed to detect status',
                 'details': str(e),
                 'image_path': download_result['filepath'],
                 'timestamp': timestamp
@@ -157,13 +151,13 @@ class StatusResource:
         # Return successful response
         resp.status = falcon.HTTP_200
         resp.media = {
-            'status': prediction['status'],
-            'description': prediction['description'],
-            'confidence': round(prediction['status_confidence'], 4),
+            'status': detection['status'],
+            'description': detection['description'],
+            'confidence': round(detection['status_confidence'], 4),
             'probabilities': {
-                'green': round(prediction['probabilities']['green'], 4),
-                'yellow': round(prediction['probabilities']['yellow'], 4),
-                'red': round(prediction['probabilities']['red'], 4)
+                'green': round(detection['probabilities']['green'], 4),
+                'yellow': round(detection['probabilities']['yellow'], 4),
+                'red': round(detection['probabilities']['red'], 4)
             },
             'image_path': download_result['filepath'],
             'image_dimensions': {
@@ -171,7 +165,8 @@ class StatusResource:
                 'height': download_result['height']
             },
             'timestamp': timestamp,
-            'cached': False
+            'cached': False,
+            'detection': detection.get('detection', {})
         }
 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Download latest Muni snapshot and predict its status.
+Download latest Muni snapshot and detect its status.
 
 Usage:
     python check_status.py                    # Single check
@@ -10,8 +10,6 @@ Usage:
 """
 
 import sys
-import os
-import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -22,22 +20,18 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, predict_muni_status, read_cache, write_cache, post_to_bluesky
+from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, post_to_bluesky
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 DEFAULT_INTERVAL = 30  # seconds
 
 
-def check_status(should_write_cache=False, model=None, processor=None, label_to_status=None, device=None):
-    """Download image and predict status.
+def check_status(should_write_cache=False):
+    """Download image and detect status.
 
     Args:
         should_write_cache: If True, write result to cache file
-        model: Pre-loaded model (optional, will load if not provided)
-        processor: Pre-loaded processor (optional, will load if not provided)
-        label_to_status: Pre-loaded label mapping (optional, will load if not provided)
-        device: Pre-loaded device (optional, will load if not provided)
 
     Returns:
         bool: True if successful, False otherwise
@@ -50,53 +44,64 @@ def check_status(should_write_cache=False, model=None, processor=None, label_to_
     result = download_muni_image(output_folder=SNAPSHOT_DIR, validate_dimensions=True)
 
     if not result['success']:
-        print(f"❌ Download failed: {result['error']}")
+        print(f"Download failed: {result['error']}")
         return False
 
-    print(f"✓ Downloaded: {result['filepath']}")
-    print(f"  Dimensions: {result['width']} × {result['height']}")
+    print(f"Downloaded: {result['filepath']}")
+    print(f"  Dimensions: {result['width']} x {result['height']}")
     print()
 
-    # Predict status
+    # Detect status using OpenCV
     print("Analyzing image...")
     try:
-        prediction = predict_muni_status(
-            result['filepath'],
-            model=model,
-            processor=processor,
-            label_to_status=label_to_status,
-            device=device
-        )
+        detection = detect_muni_status(result['filepath'])
     except Exception as e:
-        print(f"❌ Prediction failed: {e}")
+        print(f"Detection failed: {e}")
         return False
 
     # Display results
     status_emoji = {
-        'green': '🟢',
-        'yellow': '🟡',
-        'red': '🔴'
+        'green': '[GREEN]',
+        'yellow': '[YELLOW]',
+        'red': '[RED]'
     }
-    emoji = status_emoji.get(prediction['status'], '⚪')
+    emoji = status_emoji.get(detection['status'], '[?]')
 
     print()
-    print(f"Status: {emoji} {prediction['status'].upper()}")
-    print(f"Confidence: {prediction['status_confidence']:.1%}")
-    print(f"Description: {prediction['description']}")
+    print(f"Status: {emoji} {detection['status'].upper()}")
+    print(f"Description: {detection['description']}")
     print()
-    print("Probabilities:")
-    print(f"  🟢 Green:  {prediction['probabilities']['green']:.1%}")
-    print(f"  🟡 Yellow: {prediction['probabilities']['yellow']:.1%}")
-    print(f"  🔴 Red:    {prediction['probabilities']['red']:.1%}")
+
+    # Display detection details
+    det = detection.get('detection', {})
+    trains = det.get('trains', [])
+    delays_platforms = det.get('delays_platforms', [])
+    delays_segments = det.get('delays_segments', [])
+    delays_bunching = det.get('delays_bunching', [])
+
+    print(f"Trains detected: {len(trains)}")
+    if delays_platforms:
+        print(f"Platforms in hold: {len(delays_platforms)}")
+        for d in delays_platforms:
+            print(f"  - {d['name']} ({d['direction']})")
+    if delays_segments:
+        print(f"Track segments disabled: {len(delays_segments)}")
+        for d in delays_segments:
+            print(f"  - {d['from']} to {d['to']} ({d['direction']})")
+    if delays_bunching:
+        print(f"Train bunching: {len(delays_bunching)}")
+        for d in delays_bunching:
+            print(f"  - {d['train_count']} trains at {d['station']} ({d['direction']})")
 
     # Write to cache if requested
     if should_write_cache:
         # Create new status entry
         new_status = {
-            'status': prediction['status'],
-            'description': prediction['description'],
-            'confidence': prediction['status_confidence'],
-            'probabilities': prediction['probabilities'],
+            'status': detection['status'],
+            'description': detection['description'],
+            'confidence': detection['status_confidence'],
+            'probabilities': detection['probabilities'],
+            'detection': detection.get('detection', {}),
             'image_path': result['filepath'],
             'image_dimensions': {
                 'width': result['width'],
@@ -134,31 +139,29 @@ def check_status(should_write_cache=False, model=None, processor=None, label_to_
         }
 
         if write_cache(cache_data):
-            print(f"\n✓ Cache updated")
+            print(f"\nCache updated")
             if len(statuses) > 1:
                 print(f"  Current: {statuses[0]['status']}, Previous: {statuses[1]['status']}, Best: {best_status['status']}")
         else:
-            print(f"\n❌ Cache write failed")
+            print(f"\nCache write failed")
 
         # Post to Bluesky if status changed
-        current_status = prediction['status']
+        current_status = detection['status']
         if previous_status is not None and current_status != previous_status:
-            print(f"\n📢 Status changed: {previous_status} → {current_status}")
+            print(f"\nStatus changed: {previous_status} -> {current_status}")
             bluesky_result = post_to_bluesky(current_status, previous_status)
             if bluesky_result['success']:
-                print(f"✓ Posted to Bluesky: {bluesky_result['uri']}")
+                print(f"Posted to Bluesky: {bluesky_result['uri']}")
             else:
-                print(f"⚠ Bluesky post failed: {bluesky_result['error']}")
+                print(f"Bluesky post failed: {bluesky_result['error']}")
 
     return True
 
 
 def main():
-    from lib.muni_lib import load_muni_model
-
     # Parse arguments
     continuous = '--continuous' in sys.argv or '-c' in sys.argv
-    write_cache = '--write-cache' in sys.argv
+    should_write_cache = '--write-cache' in sys.argv
 
     # Parse interval
     interval = DEFAULT_INTERVAL
@@ -170,27 +173,20 @@ def main():
             print("Warning: Invalid --interval value, using default (30 seconds)")
 
     print("=" * 60)
-    print("Muni Status Checker")
+    print("Muni Status Checker (OpenCV Detection)")
     if continuous:
         print("Mode: Continuous (Ctrl+C to stop)")
         print(f"Interval: {interval} seconds")
     else:
         print("Mode: Single check")
-    if write_cache:
+    if should_write_cache:
         from lib.muni_lib import get_cache_path
         print(f"Cache: Enabled ({get_cache_path()})")
     print("=" * 60)
 
-    # Pre-load model for continuous mode to avoid reloading on every iteration
-    model = processor = label_to_status = device = None
-    if continuous:
-        print("\nLoading ML model (one-time setup)...")
-        model, processor, label_to_status, device = load_muni_model()
-        print(f"✓ Model loaded on {device}")
-
     if not continuous:
         # Single check
-        check_status(should_write_cache=write_cache)
+        check_status(should_write_cache=should_write_cache)
     else:
         # Continuous checking
         count = 0
@@ -204,13 +200,7 @@ def main():
                 print(f"Check #{count}")
                 print(f"{'='*60}")
 
-                if check_status(
-                    should_write_cache=write_cache,
-                    model=model,
-                    processor=processor,
-                    label_to_status=label_to_status,
-                    device=device
-                ):
+                if check_status(should_write_cache=should_write_cache):
                     successful += 1
                 else:
                     failed += 1

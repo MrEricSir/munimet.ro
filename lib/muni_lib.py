@@ -4,15 +4,15 @@ Shared library for SF Muni Central image processing.
 
 Contains reusable functions for:
 - Downloading and validating Muni subway status images
-- Predicting status from images using trained ML model
+- Detecting status from images using OpenCV-based analysis
+- Caching status data locally or in Google Cloud Storage
+- Posting status updates to Bluesky
 """
 
 import os
 import requests
-import time
 import json
 from datetime import datetime
-from urllib.parse import urljoin
 from pathlib import Path
 from PIL import Image
 
@@ -26,9 +26,6 @@ if not os.getenv('CLOUD_RUN'):
     except ImportError:
         pass  # python-dotenv not installed, skip
 
-# Lazy imports for ML dependencies (only needed for prediction)
-# These are imported inside functions to avoid cross-environment dependencies
-
 
 # Path resolution - get absolute paths relative to project root
 # This works regardless of where the script is run from
@@ -41,11 +38,6 @@ IMAGE_ID = "snapshotImage"
 WAIT_TIME = 10
 EXPECTED_WIDTH = 1860
 EXPECTED_HEIGHT = 800
-MODEL_DIR = str(PROJECT_ROOT / "artifacts" / "models" / "v1")
-
-# GCS model storage
-GCS_MODELS_BUCKET = os.getenv('GCS_MODELS_BUCKET', 'munimetro-annex')
-GCS_MODELS_PATH = 'models/snapshots'
 
 
 def get_cache_path():
@@ -205,32 +197,6 @@ def post_to_bluesky(status, previous_status=None):
         }
 
 
-def _get_classifier_class():
-    """Lazy import and return MuniClassifier class."""
-    import torch.nn as nn
-
-    class MuniClassifier(nn.Module):
-        """BLIP model with additional classification head for status."""
-
-        def __init__(self, base_model, num_classes=3):
-            super().__init__()
-            self.base_model = base_model
-            self.status_classifier = nn.Sequential(
-                nn.Linear(768, 256),
-                nn.ReLU(),
-                nn.Dropout(0.1),
-                nn.Linear(256, num_classes)
-            )
-
-        def forward(self, pixel_values):
-            vision_outputs = self.base_model.vision_model(pixel_values=pixel_values)
-            pooled_output = vision_outputs.pooler_output
-            status_logits = self.status_classifier(pooled_output)
-            return status_logits
-
-    return MuniClassifier
-
-
 def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True):
     """
     Download a single Muni subway status image.
@@ -306,253 +272,68 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
         }
 
 
-def _download_model_from_gcs(version, target_dir):
+def detect_muni_status(image_path):
     """
-    Download a model version from GCS to a local directory.
+    Detect subway status from an image using OpenCV-based analysis.
 
-    Args:
-        version: Model version (e.g., '20251223_224331')
-        target_dir: Local directory to download to
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    from google.cloud import storage
-
-    bucket_name = GCS_MODELS_BUCKET
-    source_prefix = f"{GCS_MODELS_PATH}/{version}/model/"
-
-    try:
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-
-        # List all blobs in the model directory
-        blobs = list(bucket.list_blobs(prefix=source_prefix))
-
-        if not blobs:
-            print(f"No model files found at gs://{bucket_name}/{source_prefix}")
-            return False
-
-        # Create target directory
-        os.makedirs(target_dir, exist_ok=True)
-
-        # Download each file
-        for blob in blobs:
-            # Get relative path (filename only)
-            filename = blob.name.replace(source_prefix, '')
-            if not filename:  # Skip directory markers
-                continue
-
-            local_path = os.path.join(target_dir, filename)
-            print(f"  Downloading {filename}...")
-            blob.download_to_filename(local_path)
-
-        return True
-
-    except Exception as e:
-        print(f"Error downloading model from GCS: {e}")
-        return False
-
-
-def _get_model_dir():
-    """
-    Get the model directory, downloading from GCS if MODEL_VERSION is set.
-
-    Returns:
-        str: Path to model directory
-    """
-    model_version = os.getenv('MODEL_VERSION')
-
-    if not model_version:
-        # No version specified, use local model
-        return MODEL_DIR
-
-    # On Cloud Run, download to /tmp for writable storage
-    if os.getenv('CLOUD_RUN'):
-        target_dir = f"/tmp/models/{model_version}"
-    else:
-        target_dir = str(PROJECT_ROOT / "artifacts" / "models" / f"v1_gcs_{model_version}")
-
-    # Check if already downloaded
-    classifier_path = os.path.join(target_dir, 'status_classifier.pt')
-    if os.path.exists(classifier_path):
-        return target_dir
-
-    # Download from GCS
-    print(f"Downloading model version {model_version} from GCS...")
-    if _download_model_from_gcs(model_version, target_dir):
-        print(f"Model downloaded to {target_dir}")
-        return target_dir
-    else:
-        if os.getenv('CLOUD_RUN'):
-            raise RuntimeError(
-                f"Failed to download model version '{model_version}' from GCS. "
-                f"Check that the model exists and the service account has access to gs://{GCS_MODELS_BUCKET}/{GCS_MODELS_PATH}/{model_version}/"
-            )
-        print(f"Failed to download model, falling back to local")
-        return MODEL_DIR
-
-
-def load_muni_model(model_dir=None):
-    """
-    Load the trained Muni status prediction model.
-
-    If MODEL_VERSION environment variable is set, downloads that version from GCS.
-    Otherwise, uses the local model directory.
-
-    Args:
-        model_dir: Directory containing the trained model (optional, auto-detected if not provided)
-
-    Returns:
-        tuple: (model, processor, label_to_status, device)
-
-    Raises:
-        FileNotFoundError: If model directory doesn't exist
-    """
-    # Lazy import of ML dependencies
-    import torch
-    from transformers import BlipProcessor, BlipForConditionalGeneration
-
-    # Determine model directory
-    if model_dir is None:
-        model_dir = _get_model_dir()
-
-    if not os.path.exists(model_dir):
-        raise FileNotFoundError(
-            f"Model directory not found: {model_dir}\n"
-            f"Please train the model first using: python train_model.py"
-        )
-
-    # Get classifier class
-    MuniClassifier = _get_classifier_class()
-
-    # Determine device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    # Load processor and base model
-    processor = BlipProcessor.from_pretrained(model_dir, use_fast=False)
-    base_model = BlipForConditionalGeneration.from_pretrained(model_dir)
-
-    # Load classification head
-    model = MuniClassifier(base_model)
-    classifier_path = os.path.join(model_dir, 'status_classifier.pt')
-    if os.path.exists(classifier_path):
-        model.status_classifier.load_state_dict(
-            torch.load(classifier_path, map_location=device)
-        )
-
-    # Move model to device
-    model = model.to(device)
-    model.eval()
-
-    # Load label mappings
-    config_path = os.path.join(model_dir, 'config.json')
-    with open(config_path, 'r') as f:
-        config = json.load(f)
-        label_to_status = {int(k): v for k, v in config['label_to_status'].items()}
-
-    return model, processor, label_to_status, device
-
-
-def predict_muni_status(image_path, model=None, processor=None, label_to_status=None, device=None, model_dir=None):
-    """
-    Predict subway status from an image.
+    This replaces the previous BLIP model-based prediction with a deterministic
+    computer vision approach that analyzes:
+    - Train positions and IDs via OCR
+    - Platform hold status (yellow vs blue)
+    - Track segment status (red vs cyan)
+    - Train bunching/clustering
 
     Args:
         image_path: Path to the image file
-        model: Pre-loaded model (optional, will load if not provided)
-        processor: Pre-loaded processor (optional, will load if not provided)
-        label_to_status: Label mapping dict (optional, will load if not provided)
-        device: Torch device (optional, will determine if not provided)
-        model_dir: Model directory (optional, auto-detected via _get_model_dir if not provided)
 
     Returns:
         dict: {
             'status': str ('green', 'yellow', 'red'),
-            'status_confidence': float (0-1),
-            'description': str,
+            'status_confidence': float (always 1.0 for deterministic detection),
+            'description': str (human-readable status description),
             'probabilities': {
                 'green': float,
                 'yellow': float,
                 'red': float
+            },
+            'detection': {
+                'stations': [...],
+                'segments': [...],
+                'trains': [...],
+                'delays_platforms': [...],
+                'delays_segments': [...],
+                'delays_bunching': [...]
             }
         }
 
     Raises:
         ValueError: If image cannot be loaded
-        FileNotFoundError: If model not found and not provided
     """
-    # Load model if not provided
-    if model is None or processor is None or label_to_status is None:
-        model, processor, label_to_status, device = load_muni_model(model_dir)
+    from lib.detection import detect_system_status
 
-    # Lazy import of torch for inference
-    import torch
+    # Run OpenCV-based detection
+    result = detect_system_status(image_path)
 
-    # Load image
-    try:
-        image = Image.open(image_path).convert('RGB')
-    except Exception as e:
-        raise ValueError(f"Error loading image: {e}")
-
-    # Process image
-    inputs = processor(images=image, return_tensors="pt")
-    pixel_values = inputs.pixel_values.to(device)
-
-    with torch.inference_mode():
-        # Generate caption
-        generated_ids = model.base_model.generate(
-            pixel_values=pixel_values,
-            max_length=64,
-            num_beams=3,
-            early_stopping=True
-        )
-        description = processor.decode(generated_ids[0], skip_special_tokens=True)
-
-        # Classify status with threshold adjustment
-        status_logits = model(pixel_values)
-        status_probs = torch.softmax(status_logits, dim=1)
-
-        # Extract probabilities
-        green_prob = status_probs[0, 0].item()
-        yellow_prob = status_probs[0, 1].item()
-        red_prob = status_probs[0, 2].item()
-
-        # Apply decision thresholds to reduce false positives
-        # Require high confidence for yellow predictions to avoid false alarms
-        #
-        # TUNING GUIDE (see CONFIGURATION.md for details):
-        # - Too many false yellows? Increase YELLOW_THRESHOLD to 0.75-0.80
-        # - Missing real yellows? Decrease YELLOW_THRESHOLD to 0.60-0.65
-        # - Production is ~95% green, so even small false positive rates = many false alarms
-        #
-        RED_THRESHOLD = 0.50     # Red needs 50% confidence (serious issues are usually clear)
-        YELLOW_THRESHOLD = 0.75  # Yellow needs 75% confidence (safe default for Dec 25 model)
-        # Green is default if neither red nor yellow meet their thresholds
-
-        # Decision logic prioritizing precision over recall
-        if red_prob > RED_THRESHOLD:
-            # Red is confident - critical issue detected
-            predicted_label = 2
-        elif yellow_prob > YELLOW_THRESHOLD:
-            # Yellow is confident - warning condition detected
-            predicted_label = 1
-        else:
-            # Default to green (normal operation)
-            # This includes cases where yellow is highest but below threshold
-            predicted_label = 0
-
-        confidence = status_probs[0, predicted_label].item()
-
-    predicted_status = label_to_status.get(predicted_label, 'unknown')
+    # Build backwards-compatible response format
+    status = result['system_status']
 
     return {
-        'status': predicted_status,
-        'status_confidence': confidence,
-        'description': description,
+        'status': status,
+        'status_confidence': result['confidence'],
+        'description': result['description'],
         'probabilities': {
-            'green': status_probs[0, 0].item(),
-            'yellow': status_probs[0, 1].item(),
-            'red': status_probs[0, 2].item()
+            'green': 1.0 if status == 'green' else 0.0,
+            'yellow': 1.0 if status == 'yellow' else 0.0,
+            'red': 1.0 if status == 'red' else 0.0,
+        },
+        'detection': {
+            'system_status': result['system_status'],
+            'stations': result['stations'],
+            'segments': result['segments'],
+            'trains': result['trains'],
+            'delays_platforms': result['delays_platforms'],
+            'delays_segments': result['delays_segments'],
+            'delays_bunching': result['delays_bunching'],
+            'image_dimensions': result['image_dimensions'],
         }
     }

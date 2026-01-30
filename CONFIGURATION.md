@@ -74,13 +74,12 @@ This document records the actual configuration values used for this deployment.
 
 ### Sync Scripts
 
-Training data and models are synced with Google Cloud Storage using `gsutil rsync`:
+Training data is synced with Google Cloud Storage using `gsutil rsync`:
 
 - **Bucket**: `gs://munimetro-annex`
 - **Scripts**:
-  - `scripts/sync-models.sh` / `scripts/sync-models.ps1` - Sync model files (~856MB)
   - `scripts/sync-training-data.sh` / `scripts/sync-training-data.ps1` - Sync training data (~270MB)
-  - `scripts/sync-artifacts.sh` / `scripts/sync-artifacts.ps1` - Sync all artifacts (~1.1GB)
+  - `scripts/sync-artifacts.sh` / `scripts/sync-artifacts.ps1` - Sync all artifacts (~270MB)
 - **Authentication**: Google Cloud SDK (`gcloud auth login`)
 - **Protocol**: HTTPS via gsutil
 
@@ -117,17 +116,6 @@ Training data and models are synced with Google Cloud Storage using `gsutil rsyn
 - **Tests**: `tests/venv/`
 
 ## File Locations
-
-### Models (GCS synced)
-
-- **Directory**: `artifacts/models/v1/`
-- **Size**: ~856MB
-- **Files**:
-  - `model.safetensors` (854MB) - BLIP vision transformer
-  - `status_classifier.pt` (775KB) - Status classification head
-  - `config.json`, `generation_config.json`, `preprocessor_config.json`
-  - `tokenizer.json`, `tokenizer_config.json`, `vocab.txt`, `special_tokens_map.json`
-- **Sync**: Use `scripts/sync-models.sh download` to download from GCS
 
 ### Training Data (GCS synced)
 
@@ -184,57 +172,54 @@ At 100K API requests/day:
 - **Format**: JPEG
 - **Size**: ~200KB per image
 
-## Model Configuration
+## Detection Configuration
 
-- **Base Model**: Salesforce/blip-image-captioning-base
-- **Architecture**: Vision transformer + language model
-- **Fine-tuning**: Status classification head
-- **Classes**: 3 (red, yellow, green)
-- **Training Accuracy**: >95% on held-out test set
-- **Inference Time**: ~2-3 seconds (CPU)
+The system uses OpenCV-based computer vision for deterministic status detection.
 
-### Prediction Thresholds
+### Detection Logic
 
-The model uses confidence thresholds to reduce false positives in production. These can be tuned based on observed performance.
+**Location**: `lib/detection.py`
 
-**Location**: `lib/muni_lib.py` (lines 359-360)
+The system status is determined by:
 
-```python
-RED_THRESHOLD = 0.50     # Red needs 50% confidence
-YELLOW_THRESHOLD = 0.70  # Yellow needs 70% confidence
+1. **Red (Not Operating)**:
+   - Fewer than 2 trains with valid route suffixes detected
+   - Indicates overnight/maintenance mode
+
+2. **Yellow (Delays)**:
+   - 2+ platforms in hold mode (yellow color), OR
+   - Any track sections disabled (red color), OR
+   - Train bunching detected (4+ trains clustered together)
+
+3. **Green (Normal)**:
+   - 2+ trains with valid routes operating
+   - No significant delays detected
+
+### Detection Parameters
+
+**HSV Color Ranges** (`scripts/station_detector.py`):
+- Platform blue (normal): H=95-115, S=100-255, V=100-255
+- Platform yellow (hold): H=20-35, S=150-255, V=150-255
+- Track cyan (normal): H=80-100, S=100-255, V=100-255
+- Track red (disabled): H=0-10 or 170-180, S=100-255, V=100-255
+
+**Train Bunching** (`lib/detection.py`):
+- Threshold: 4+ trains in cluster
+- Cluster distance: 70 pixels
+- Excluded stations: CT, EM (turnaround points)
+
+### Testing Detection
+
+```bash
+# Run detection on a single image
+python lib/detection.py tests/images/muni_snapshot_20251207_092107.jpg
+
+# Run all detection tests
+pytest tests/test_system_status.py -v
+
+# Interactive detection viewer
+python scripts/station_viewer.py
 ```
-
-**How it works**:
-1. If `red_probability > RED_THRESHOLD` → Predict RED
-2. Else if `yellow_probability > YELLOW_THRESHOLD` → Predict YELLOW
-3. Otherwise → Predict GREEN (default)
-
-**Tuning guidelines**:
-
-| Problem | Solution | Example |
-|---------|----------|---------|
-| Too many false yellow alarms | **Increase** `YELLOW_THRESHOLD` | `0.70` → `0.75` or `0.80` |
-| Missing real yellow warnings | **Decrease** `YELLOW_THRESHOLD` | `0.70` → `0.65` or `0.60` |
-| Too many false red alarms | **Increase** `RED_THRESHOLD` | `0.50` → `0.60` or `0.70` |
-| Missing real red alerts | **Decrease** `RED_THRESHOLD` | `0.50` → `0.40` or `0.35` |
-
-**Common scenarios**:
-
-- **Production default** (balanced): `RED=0.50`, `YELLOW=0.70`
-- **High precision** (fewer false alarms): `RED=0.60`, `YELLOW=0.80`
-- **High recall** (catch all issues): `RED=0.40`, `YELLOW=0.60`
-- **Conservative** (only obvious issues): `RED=0.70`, `YELLOW=0.85`
-
-**Testing threshold changes**:
-1. Edit `lib/muni_lib.py` lines 359-360
-2. Test locally: `python -m api.check_status_job`
-3. Deploy: `./deploy/cloud/deploy-services.sh`
-4. Monitor for 24-48 hours to evaluate performance
-
-**Trade-offs**:
-- Higher threshold = Fewer false alarms, but may miss edge cases
-- Lower threshold = Catch more issues, but more false alarms
-- Production traffic is ~95% green, so even 5% false positive rate = many false alarms
 
 ## Notes
 

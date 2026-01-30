@@ -24,10 +24,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Stage 2: Runtime stage - minimal production image
 FROM python:3.13-slim-bookworm
 
-# Install runtime dependencies only
+# Install runtime dependencies
+# - curl: health checks
+# - tesseract-ocr: train ID detection (optional but improves accuracy)
+# - libgl1: OpenCV headless runtime
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
+    tesseract-ocr \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder
@@ -43,11 +48,11 @@ WORKDIR /app
 # Copy shared library
 COPY --chown=muni:muni lib/ ./lib/
 
+# Copy detection scripts (required by lib/detection.py)
+COPY --chown=muni:muni scripts/ ./scripts/
+
 # Copy API application files to api/ subdirectory to preserve path structure
 COPY --chown=muni:muni api/ ./api/
-
-# NOTE: ML model is NOT baked into image - it's downloaded from GCS at runtime
-# Set MODEL_VERSION env var when deploying to specify which model to use
 
 # Create directories for runtime data with proper permissions
 RUN mkdir -p /app/artifacts/runtime/downloads /app/artifacts/runtime/cache && \
@@ -71,18 +76,17 @@ ENV PYTHONUNBUFFERED=1 \
 EXPOSE 8000
 
 # Health check - verify API is responding
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run gunicorn with proper worker configuration
-# - Single worker to avoid memory issues with ML model
+# - Multiple workers now possible (no heavy ML model)
 # - Graceful timeout for proper shutdown
-# - Access logging disabled for performance (enable with --access-logfile -)
 CMD ["gunicorn", \
     "api.api:app", \
     "--bind", "0.0.0.0:8000", \
-    "--workers", "1", \
-    "--timeout", "120", \
+    "--workers", "2", \
+    "--timeout", "60", \
     "--graceful-timeout", "30", \
     "--log-level", "info", \
     "--access-logfile", "-"]
