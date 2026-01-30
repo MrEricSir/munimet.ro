@@ -16,3 +16,6 @@ flask>=3.0.0
 # Tesseract OCR for train ID detection
 # Note: Requires Tesseract installed on system (brew install tesseract on macOS)
 pytesseract>=0.3.10
+
+# Testing
+pytest>=8.0.0
