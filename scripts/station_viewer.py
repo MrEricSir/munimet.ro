@@ -150,7 +150,131 @@ def detect_platform_color(hsv, x, y, size=25, height=25):
         return 'unknown', 0
 
 
-def calculate_system_status(trains, delays_platforms, delays_segments):
+def detect_train_bunching(trains, threshold=4, cluster_distance=70):
+    """
+    Detect train bunching (multiple trains clustered close together approaching a station).
+
+    Train bunching occurs when several trains queue up very close to each other,
+    indicating delays or congestion. This is different from normal busy operation
+    where trains are evenly spaced.
+
+    The algorithm looks for clusters of 4+ trains where each train is within
+    cluster_distance pixels of its neighbor, approaching a non-excluded station.
+
+    Args:
+        trains: List of train dicts with 'x', 'track' keys
+        threshold: Number of trains in a cluster to consider bunching (default 4)
+        cluster_distance: Max pixel distance between adjacent trains in a cluster
+
+    Returns:
+        List of dicts describing bunching incidents:
+        [{'station': 'PO', 'track': 'upper', 'direction': 'Westbound', 'train_count': 5}, ...]
+        Direction is 'Northbound'/'Southbound' for CT/US/YB, 'Westbound'/'Eastbound' for others.
+    """
+    # Stations to exclude from bunching analysis:
+    # - CT (Chinatown) and EM (Embarcadero): turnaround points where trains queue normally
+    # - Internal stations (MN, FP, TT): not passenger stations
+    EXCLUDED_STATIONS = {'CT', 'EM', 'MN', 'FP', 'TT'}
+
+    # Direction terminology: CT, US, YB are Northbound/Southbound; others are Westbound/Eastbound
+    NORTH_SOUTH_STATIONS = {'CT', 'US', 'YB'}
+
+    def get_direction(station_code, track):
+        """Get the direction label for a station and track."""
+        if track == 'upper':
+            return 'Northbound' if station_code in NORTH_SOUTH_STATIONS else 'Westbound'
+        else:
+            return 'Southbound' if station_code in NORTH_SOUTH_STATIONS else 'Eastbound'
+
+    bunching_incidents = []
+
+    # Separate trains by track and sort by x position
+    upper_trains = sorted([t for t in trains if t.get('track') == 'upper'], key=lambda t: t['x'])
+    lower_trains = sorted([t for t in trains if t.get('track') == 'lower'], key=lambda t: t['x'])
+
+    def find_clusters(sorted_trains):
+        """Find clusters of trains that are close together."""
+        if len(sorted_trains) < threshold:
+            return []
+
+        clusters = []
+        current_cluster = [sorted_trains[0]]
+
+        for i in range(1, len(sorted_trains)):
+            # Check if this train is close to the previous one
+            if sorted_trains[i]['x'] - sorted_trains[i-1]['x'] <= cluster_distance:
+                current_cluster.append(sorted_trains[i])
+            else:
+                # End current cluster, start new one
+                if len(current_cluster) >= threshold:
+                    clusters.append(current_cluster)
+                current_cluster = [sorted_trains[i]]
+
+        # Don't forget the last cluster
+        if len(current_cluster) >= threshold:
+            clusters.append(current_cluster)
+
+        return clusters
+
+    # Find clusters on each track
+    upper_clusters = find_clusters(upper_trains)
+    lower_clusters = find_clusters(lower_trains)
+
+    # For each cluster, find the station it's approaching
+    for cluster in upper_clusters:
+        # Upper track moves westbound (left), so cluster approaches the station to its left
+        cluster_left_x = min(t['x'] for t in cluster)
+
+        # Find the nearest station to the left of (or at) this cluster
+        nearest_station = None
+        min_distance = float('inf')
+        for station_code, station_x in STATION_X_POSITIONS.items():
+            if station_code in EXCLUDED_STATIONS:
+                continue
+            # Station must be to the left of or at the cluster
+            if station_x <= cluster_left_x:
+                distance = cluster_left_x - station_x
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_station = station_code
+
+        if nearest_station and min_distance < 300:  # Must be reasonably close to a station
+            bunching_incidents.append({
+                'station': nearest_station,
+                'track': 'upper',
+                'direction': get_direction(nearest_station, 'upper'),
+                'train_count': len(cluster),
+            })
+
+    for cluster in lower_clusters:
+        # Lower track moves eastbound (right), so cluster approaches the station to its right
+        cluster_right_x = max(t['x'] for t in cluster)
+
+        # Find the nearest station to the right of (or at) this cluster
+        nearest_station = None
+        min_distance = float('inf')
+        for station_code, station_x in STATION_X_POSITIONS.items():
+            if station_code in EXCLUDED_STATIONS:
+                continue
+            # Station must be to the right of or at the cluster
+            if station_x >= cluster_right_x:
+                distance = station_x - cluster_right_x
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_station = station_code
+
+        if nearest_station and min_distance < 300:  # Must be reasonably close to a station
+            bunching_incidents.append({
+                'station': nearest_station,
+                'track': 'lower',
+                'direction': get_direction(nearest_station, 'lower'),
+                'train_count': len(cluster),
+            })
+
+    return bunching_incidents
+
+
+def calculate_system_status(trains, delays_platforms, delays_segments, bunching_incidents=None):
     """
     Calculate overall system status based on train and delay data.
 
@@ -158,12 +282,15 @@ def calculate_system_status(trains, delays_platforms, delays_segments):
 
     Logic:
     - Red: Fewer than 2 trains have valid route suffixes (subway not operating)
-    - Yellow: 2+ platforms in hold mode OR any track sections disabled
+    - Yellow: 2+ platforms in hold mode OR any track sections disabled OR train bunching
     - Green: Normal operation
 
     Precedence: red > yellow > green
     """
     import re
+
+    if bunching_incidents is None:
+        bunching_incidents = []
 
     # Check how many trains have valid route suffixes
     # Train ID format: [Letter]?[4 digits][1-2 letter suffix]
@@ -185,11 +312,12 @@ def calculate_system_status(trains, delays_platforms, delays_segments):
     if trains_with_routes < 2:
         return 'red'
 
-    # Yellow: 2+ platforms in hold OR any track sections disabled
+    # Yellow: 2+ platforms in hold OR any track sections disabled OR train bunching
     platforms_in_hold = len(delays_platforms)
     tracks_disabled = len(delays_segments)
+    has_bunching = len(bunching_incidents) > 0
 
-    if platforms_in_hold >= 2 or tracks_disabled > 0:
+    if platforms_in_hold >= 2 or tracks_disabled > 0 or has_bunching:
         return 'yellow'
 
     # Green: Normal operation
@@ -328,8 +456,11 @@ def get_detection_data(image_path):
                 'confidence': t.get('confidence', 'high')
             })
 
+    # Detect train bunching (multiple trains waiting to enter a station)
+    bunching_incidents = detect_train_bunching(trains)
+
     # Calculate overall system status
-    system_status = calculate_system_status(trains, delays_platforms, delays_segments)
+    system_status = calculate_system_status(trains, delays_platforms, delays_segments, bunching_incidents)
 
     return {
         'width': w,
@@ -338,6 +469,7 @@ def get_detection_data(image_path):
         'segments': segments,
         'delays_platforms': delays_platforms,
         'delays_segments': delays_segments,
+        'delays_bunching': bunching_incidents,
         'trains': trains,
         'track_y_upper': track_y_upper,
         'track_y_lower': track_y_lower,

@@ -156,5 +156,131 @@ class TestStatusCalculationLogic:
         assert calculate_system_status(trains_one_valid, [], []) == 'red'
 
 
+class TestTrainBunchingDetection:
+    """Tests for train bunching detection feature."""
+
+    def test_no_bunching_with_evenly_spaced_trains(self):
+        """Evenly spaced trains (>100px apart) should not trigger bunching."""
+        from scripts.station_viewer import detect_train_bunching
+
+        # Trains evenly spaced across the system (x positions >100px apart)
+        trains = [
+            {'id': 'W2010LL', 'x': 200, 'track': 'upper'},
+            {'id': 'M2089MM', 'x': 500, 'track': 'upper'},
+            {'id': 'D2099J', 'x': 900, 'track': 'upper'},
+            {'id': 'F2164SS', 'x': 1200, 'track': 'lower'},
+            {'id': 'B2181TT', 'x': 800, 'track': 'lower'},
+        ]
+
+        bunching = detect_train_bunching(trains)
+        assert bunching == [], f"Should detect no bunching, got: {bunching}"
+
+    def test_bunching_detected_upper_track(self):
+        """4+ trains clustered close together on upper track should trigger bunching."""
+        from scripts.station_viewer import detect_train_bunching
+
+        # Powell (PO) is at x=971
+        # 4 trains clustered (within 70px of each other) to the right of Powell
+        # Cluster is at x=1000-1150, approaching Powell from the east (westbound track)
+        trains = [
+            {'id': 'W2010LL', 'x': 1000, 'track': 'upper'},
+            {'id': 'M2089MM', 'x': 1050, 'track': 'upper'},  # 50px gap
+            {'id': 'D2099J', 'x': 1100, 'track': 'upper'},   # 50px gap
+            {'id': 'F2164SS', 'x': 1150, 'track': 'upper'},  # 50px gap
+        ]
+
+        bunching = detect_train_bunching(trains)
+        assert len(bunching) > 0, f"Should detect bunching, got: {bunching}"
+        # Cluster is approaching PO (x=971) from the right
+        assert any(b['station'] == 'PO' for b in bunching), f"Should detect bunching approaching PO, got: {bunching}"
+
+    def test_bunching_detected_lower_track(self):
+        """4+ trains clustered close together on lower track should trigger bunching."""
+        from scripts.station_viewer import detect_train_bunching
+
+        # Powell (PO) is at x=971
+        # 4 trains clustered (within 70px of each other) to the left of Powell
+        # Cluster is at x=750-900, approaching Powell from the west (eastbound track)
+        trains = [
+            {'id': 'W2010LL', 'x': 750, 'track': 'lower'},
+            {'id': 'M2089MM', 'x': 800, 'track': 'lower'},  # 50px gap
+            {'id': 'D2099J', 'x': 850, 'track': 'lower'},   # 50px gap
+            {'id': 'F2164SS', 'x': 900, 'track': 'lower'},  # 50px gap
+        ]
+
+        bunching = detect_train_bunching(trains)
+        assert len(bunching) > 0, f"Should detect bunching, got: {bunching}"
+        # Cluster is approaching PO (x=971) from the left
+        assert any(b['station'] == 'PO' for b in bunching), f"Should detect bunching approaching PO, got: {bunching}"
+
+    def test_excluded_stations_ignored(self):
+        """Chinatown (CT) and Embarcadero (EM) should not report bunching."""
+        from scripts.station_viewer import detect_train_bunching
+
+        # CT is at x=1564, EM is at x=1182
+        # Bunch trains right at CT (upper track, trains to right of CT)
+        # These are past CT heading towards end of line - should be excluded
+        trains = [
+            {'id': 'W2010LL', 'x': 1580, 'track': 'upper'},
+            {'id': 'M2089MM', 'x': 1630, 'track': 'upper'},  # 50px gap
+            {'id': 'D2099J', 'x': 1680, 'track': 'upper'},   # 50px gap
+            {'id': 'F2164SS', 'x': 1730, 'track': 'upper'},  # 50px gap
+        ]
+
+        bunching = detect_train_bunching(trains)
+        # Should not detect bunching at CT or EM (excluded turnaround stations)
+        assert not any(b['station'] == 'CT' for b in bunching), f"CT should be excluded, got: {bunching}"
+        assert not any(b['station'] == 'EM' for b in bunching), f"EM should be excluded, got: {bunching}"
+
+    def test_three_trains_not_bunching(self):
+        """3 trains clustered should NOT trigger bunching (threshold is 4)."""
+        from scripts.station_viewer import detect_train_bunching
+
+        # 3 trains clustered near Powell - below threshold
+        trains = [
+            {'id': 'W2010LL', 'x': 1000, 'track': 'upper'},
+            {'id': 'M2089MM', 'x': 1050, 'track': 'upper'},  # 50px gap
+            {'id': 'D2099J', 'x': 1100, 'track': 'upper'},   # 50px gap
+        ]
+
+        bunching = detect_train_bunching(trains)
+        assert bunching == [], f"3 trains should not trigger bunching, got: {bunching}"
+
+    def test_four_trains_spread_out_not_bunching(self):
+        """4 trains spread apart (>70px between each) should NOT trigger bunching."""
+        from scripts.station_viewer import detect_train_bunching
+
+        # 4 trains but spread apart - not clustered (gaps > 70px)
+        trains = [
+            {'id': 'W2010LL', 'x': 1000, 'track': 'upper'},
+            {'id': 'M2089MM', 'x': 1100, 'track': 'upper'},  # 100px gap
+            {'id': 'D2099J', 'x': 1200, 'track': 'upper'},   # 100px gap
+            {'id': 'F2164SS', 'x': 1300, 'track': 'upper'},  # 100px gap
+        ]
+
+        bunching = detect_train_bunching(trains)
+        assert bunching == [], f"Spread out trains should not trigger bunching, got: {bunching}"
+
+    def test_bunching_triggers_yellow_status(self):
+        """Bunching incidents should trigger yellow system status."""
+        from scripts.station_viewer import calculate_system_status
+
+        trains_with_routes = [
+            {'id': 'W2010LL', 'x': 1000, 'track': 'upper'},
+            {'id': 'M2089MM', 'x': 1050, 'track': 'upper'},
+            {'id': 'D2099J', 'x': 1100, 'track': 'upper'},
+            {'id': 'F2164SS', 'x': 1150, 'track': 'upper'},
+        ]
+
+        # With bunching incidents, should be yellow
+        bunching = [{'station': 'PO', 'track': 'upper', 'train_count': 4}]
+        status = calculate_system_status(trains_with_routes, [], [], bunching)
+        assert status == 'yellow', f"Expected yellow with bunching, got {status}"
+
+        # Without bunching, same trains should be green
+        status_no_bunching = calculate_system_status(trains_with_routes, [], [], [])
+        assert status_no_bunching == 'green', f"Expected green without bunching, got {status_no_bunching}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
