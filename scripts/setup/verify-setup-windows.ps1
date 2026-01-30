@@ -63,24 +63,8 @@ if (Test-Path ".git") {
 }
 Write-Host ""
 
-# Check model files
-Write-Host "[5/6] Checking model files..." -ForegroundColor White
-if (Test-Path "artifacts/models/v1/model.safetensors") {
-    $modelSize = (Get-Item "artifacts/models/v1/model.safetensors").Length
-    if ($modelSize -gt 100000000) {
-        Write-Host "  OK Model files present ($('{0:N0}' -f $modelSize) bytes)" -ForegroundColor Green
-    } else {
-        Write-Host "  WARNING Model file too small, may need to download" -ForegroundColor Yellow
-        Write-Host "    Run: .\scripts\sync-models.ps1 download" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "  WARNING Model files not found" -ForegroundColor Yellow
-    Write-Host "    Run: .\scripts\sync-models.ps1 download" -ForegroundColor Yellow
-}
-Write-Host ""
-
 # Check Python virtual environment
-Write-Host "[6/6] Checking Python virtual environment..." -ForegroundColor White
+Write-Host "[5/5] Checking Python virtual environment..." -ForegroundColor White
 if (Test-Path "training/venv") {
     Write-Host "  OK Training virtual environment exists" -ForegroundColor Green
 } else {

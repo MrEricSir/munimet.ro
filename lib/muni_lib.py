@@ -276,8 +276,7 @@ def detect_muni_status(image_path):
     """
     Detect subway status from an image using OpenCV-based analysis.
 
-    This replaces the previous BLIP model-based prediction with a deterministic
-    computer vision approach that analyzes:
+    Uses a deterministic computer vision approach that analyzes:
     - Train positions and IDs via OCR
     - Platform hold status (yellow vs blue)
     - Track segment status (red vs cyan)

@@ -442,11 +442,10 @@ git --version
 # Check Google Cloud SDK
 gcloud --version
 
-# Check Python environment (from training/)
-cd training
+# Check Python environment (from api/)
+cd api
 source venv/bin/activate  # Windows: venv\Scripts\activate
-python -c "import torch; print(f'PyTorch: {torch.__version__}')"
-python -c "import transformers; print(f'Transformers: {transformers.__version__}')"
+python -c "import falcon; import cv2; print('Dependencies OK')"
 deactivate
 ```
 
@@ -538,15 +537,10 @@ gsutil ls gs://munimetro-annex/
 
 **Solution:**
 ```bash
-# Download the missing files
-./scripts/sync-models.sh download          # Model files (~856MB)
+# Download training data (optional - for development/testing)
 ./scripts/sync-training-data.sh download   # Training data (~270MB)
 
-# Or download everything
-./scripts/sync-artifacts.sh download       # All artifacts (~1.1GB)
-
 # Verify files downloaded
-ls -lh artifacts/models/v1/model.safetensors
 ls -lh artifacts/training_data/images/
 ```
 

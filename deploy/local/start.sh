@@ -18,13 +18,6 @@ if [ ! -d "api/venv" ]; then
     exit 1
 fi
 
-# Check if model exists
-if [ ! -f "artifacts/models/v1/status_classifier.pt" ]; then
-    echo "❌ ML model not found: artifacts/models/v1/status_classifier.pt"
-    echo "   Train a model first or copy from training artifacts"
-    exit 1
-fi
-
 # Create PID directory
 mkdir -p artifacts/runtime/pids
 

@@ -252,9 +252,6 @@ Check logs and verify model files:
 tail -20 artifacts/runtime/cache-writer.log
 tail -20 artifacts/runtime/api-error.log
 
-# Verify model exists
-ls -lh artifacts/models/v1/status_classifier.pt
-
 # Run verification script
 ./deploy/local/verify.sh
 ```
@@ -318,22 +315,6 @@ gcloud logging read 'resource.type="cloud_run_job"' --limit 50
 
 # Verify cache in GCS
 gsutil stat gs://munimetro-cache/latest_status.json
-```
-
-### Model Loading Errors
-
-```bash
-# Verify model files exist
-ls -lh artifacts/models/v1/
-
-# Test model loading
-python3 -c "from lib.muni_lib import load_model; load_model()"
-
-# Check PyTorch installation
-python3 -c "import torch; print(torch.__version__)"
-
-# Download model from GCS (if missing)
-./scripts/sync-models.sh download
 ```
 
 ## Performance Optimization

@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
-Manage ML models for MuniMetro.
+DEPRECATED: This script is no longer needed.
+
+The system now uses OpenCV-based detection instead of ML models.
+No model management is required.
+
+---
+
+(Legacy) Manage ML models for MuniMetro.
 
 Commands:
     list        List available model snapshots in GCS

@@ -49,7 +49,7 @@ Access: See service URL in [CONFIGURATION.md](../CONFIGURATION.md)
 ```
 Terminal 1: Cache Writer (background)
   ↓ downloads image every 60s
-  ↓ runs ML prediction
+  ↓ runs OpenCV detection
   ↓ writes JSON
 artifacts/runtime/cache/latest_status.json
   ↑ reads JSON (~30ms)
@@ -61,8 +61,7 @@ Browser: http://localhost:8000
 ### Prerequisites
 
 - Python 3.11+
-- Trained ML model in `artifacts/models/v1/` (status_classifier.pt + model.safetensors)
-- ~2GB RAM
+- ~512MB RAM
 
 ### Setup (First Time)
 
@@ -83,7 +82,7 @@ This script:
 ```
 
 This starts:
-- **Cache writer** - Downloads images + predicts status every 60s (background)
+- **Cache writer** - Downloads images + detects status every 60s (background)
 - **API server** - Serves cached results with ~30ms response time (gunicorn)
 
 Both services log to `artifacts/runtime/*.log`.
@@ -96,11 +95,10 @@ Both services log to `artifacts/runtime/*.log`.
 
 Checks:
 1. Python environment and dependencies
-2. ML model exists
-3. Runtime directories
-4. Cache writer process
-5. API server process
-6. Endpoint health (/health, /status)
+2. Runtime directories
+3. Cache writer process
+4. API server process
+5. Endpoint health (/health, /status)
 
 ### Stopping Services
 
@@ -117,9 +115,6 @@ Gracefully stops both services, falling back to force kill if needed.
 # Check logs
 tail -f artifacts/runtime/cache-writer.log
 tail -f artifacts/runtime/api-error.log
-
-# Verify model exists
-ls -lh artifacts/models/v1/status_classifier.pt
 
 # Reinstall dependencies
 ./deploy/local/setup.sh
@@ -150,7 +145,7 @@ tail -f artifacts/runtime/cache-writer.log
 Cloud Scheduler (every 3 min)
   ↓ triggers (OAuth)
 munimetro-checker (Cloud Run Job)
-  ↓ downloads image + predicts status
+  ↓ downloads image + detects status
   ↓ writes JSON + exits
 Cloud Storage (gs://munimetro-cache/latest_status.json)
   ↑ reads JSON (~100-200ms)
@@ -208,7 +203,7 @@ This script:
 3. Deploys `munimetro-checker` (Cloud Run Job, updates status when triggered)
 4. Grants service account permissions
 
-**First deployment: ~10-15 minutes** (downloading ML model layers)
+**First deployment: ~5-10 minutes**
 **Subsequent deployments: ~3-5 minutes**
 
 ### Setting Up Scheduler
@@ -344,9 +339,8 @@ gcloud run jobs executions list --job=CHECKER_JOB_NAME --region=REGION --limit=1
 gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="CHECKER_JOB_NAME"' --limit 100
 
 # Common issues:
-# - Model download timeout → increase --task-timeout in deploy script
 # - GCS permission denied → check service account IAM
-# - Out of memory → increase --memory to 4Gi in deploy script
+# - Out of memory → increase --memory in deploy script
 ```
 
 **Scheduler not triggering:**

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Inference script to predict Muni subway status from images.
+Inference script to detect Muni subway status from images.
 
 Usage:
     python predict_status.py <image_path>
@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib.muni_lib import predict_muni_status
+from lib.muni_lib import detect_muni_status
 
 
 def main():
@@ -31,14 +31,14 @@ def main():
 
     # Display header
     print("=" * 60)
-    print("Muni Subway Status Predictor")
+    print("Muni Subway Status Detector")
     print("=" * 60)
     print()
 
-    # Make prediction using shared library
-    print(f"Loading model...")
+    # Make detection using shared library
+    print(f"Analyzing image: {image_path}")
     try:
-        result = predict_muni_status(image_path)
+        result = detect_muni_status(image_path)
     except FileNotFoundError as e:
         print(f"Error: {e}")
         sys.exit(1)
@@ -46,34 +46,49 @@ def main():
         print(f"Error: {e}")
         sys.exit(1)
 
-    print(f"Analyzing image: {image_path}")
     print()
 
     # Display results
-    print("PREDICTION RESULTS")
+    print("DETECTION RESULTS")
     print("=" * 60)
     print()
 
     # Status with color
     status_emoji = {
-        'green': '🟢',
-        'yellow': '🟡',
-        'red': '🔴'
+        'green': '[GREEN]',
+        'yellow': '[YELLOW]',
+        'red': '[RED]'
     }
-    emoji = status_emoji.get(result['status'], '⚪')
+    emoji = status_emoji.get(result['status'], '[?]')
 
     print(f"Status: {emoji} {result['status'].upper()}")
-    print(f"Confidence: {result['status_confidence']:.1%}")
+    print(f"Description: {result['description']}")
     print()
 
-    print("Status Probabilities:")
-    print(f"  🟢 Green:  {result['probabilities']['green']:.1%}")
-    print(f"  🟡 Yellow: {result['probabilities']['yellow']:.1%}")
-    print(f"  🔴 Red:    {result['probabilities']['red']:.1%}")
-    print()
+    # Detection details
+    detection = result.get('detection', {})
+    trains = detection.get('trains', [])
+    delays_platforms = detection.get('delays_platforms', [])
+    delays_segments = detection.get('delays_segments', [])
+    delays_bunching = detection.get('delays_bunching', [])
 
-    print("Description:")
-    print(f"  {result['description']}")
+    print(f"Trains detected: {len(trains)}")
+
+    if delays_platforms:
+        print(f"\nPlatforms in hold ({len(delays_platforms)}):")
+        for d in delays_platforms:
+            print(f"  - {d['name']} ({d['direction']})")
+
+    if delays_segments:
+        print(f"\nTrack segments disabled ({len(delays_segments)}):")
+        for d in delays_segments:
+            print(f"  - {d['from']} -> {d['to']} ({d['direction']})")
+
+    if delays_bunching:
+        print(f"\nTrain bunching ({len(delays_bunching)}):")
+        for d in delays_bunching:
+            print(f"  - {d['train_count']} trains at {d['station']} ({d['direction']})")
+
     print()
     print("=" * 60)
 
