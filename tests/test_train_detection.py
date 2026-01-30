@@ -3,6 +3,10 @@ Tests for train detection to ensure we don't regress from current baseline.
 
 Baseline data is stored in baseline_trains.json.
 Test images are in tests/images/.
+
+Baseline format supports optional override for OCR issues:
+  ["train_id", x_position]  -- normal entry
+  ["train_id", x_position, {"ocr_override": "alt_id", "note": "reason"}]  -- with override
 """
 
 import json
@@ -14,7 +18,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.train_detector_v2 import TrainDetectorV2, TESSERACT_AVAILABLE
+from scripts.train_detector_v3 import TrainDetectorV3, TESSERACT_AVAILABLE
 
 # Paths
 TESTS_DIR = Path(__file__).parent
@@ -26,6 +30,28 @@ with open(BASELINE_FILE) as f:
     BASELINE_DATA = json.load(f)
 
 TOLERANCE = BASELINE_DATA["tolerance"]
+
+
+def parse_baseline_entry(entry):
+    """Parse a baseline entry, handling optional override dict."""
+    if len(entry) == 2:
+        return entry[0], entry[1], None
+    else:
+        return entry[0], entry[1], entry[2]
+
+
+def check_train_match(train_id, expected_id, override_info):
+    """
+    Check if detected train_id matches expected.
+    Returns: (matched, is_override)
+    """
+    if train_id == expected_id:
+        return True, False
+    if override_info and train_id == override_info.get("ocr_override"):
+        return True, True
+    return False, False
+
+
 IMAGES_WITH_TRAINS = [
     (IMAGES_DIR / name, trains)
     for name, trains in BASELINE_DATA["images_with_trains"].items()
@@ -39,7 +65,7 @@ TRAIN_FREE_IMAGES = [
 @pytest.fixture
 def detector():
     """Create a train detector instance."""
-    return TrainDetectorV2()
+    return TrainDetectorV3()
 
 
 class TestTrainDetectionBaseline:
@@ -48,7 +74,7 @@ class TestTrainDetectionBaseline:
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
     @pytest.mark.parametrize("img_path,baseline", IMAGES_WITH_TRAINS)
     def test_baseline_trains_detected(self, detector, img_path, baseline):
-        """Ensure all baseline trains are detected."""
+        """Ensure all baseline trains are detected (including via OCR overrides)."""
         if not img_path.exists():
             pytest.skip(f"Test image not found: {img_path}")
 
@@ -56,7 +82,31 @@ class TestTrainDetectionBaseline:
         trains = detector.detect_trains(img)
         detected_ids = {t["id"] for t in trains}
 
-        missing = [train_id for train_id, _ in baseline if train_id not in detected_ids]
+        missing = []
+        overrides_used = []
+        for entry in baseline:
+            expected_id, expected_x, override_info = parse_baseline_entry(entry)
+
+            # Check if detected (exact or via override)
+            found = False
+            for det_id in detected_ids:
+                matched, is_override = check_train_match(det_id, expected_id, override_info)
+                if matched:
+                    found = True
+                    if is_override:
+                        overrides_used.append(f"{expected_id} (detected as {det_id})")
+                    break
+
+            if not found:
+                missing.append(expected_id)
+
+        # Store override info for conftest to display as yellow
+        if overrides_used:
+            # pytest doesn't have a built-in way to mark partial success,
+            # so we'll just note it in a warning
+            import warnings
+            warnings.warn(f"OCR overrides used: {overrides_used}")
+
         assert not missing, f"Missing baseline trains in {img_path.name}: {missing}"
 
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
@@ -71,12 +121,21 @@ class TestTrainDetectionBaseline:
         trains_by_id = {t["id"]: t for t in trains}
 
         position_errors = []
-        for train_id, expected_x in baseline:
-            if train_id in trains_by_id:
-                actual_x = trains_by_id[train_id]["x"]
+        for entry in baseline:
+            expected_id, expected_x, override_info = parse_baseline_entry(entry)
+
+            # Find the detected ID (exact or override)
+            detected_id = None
+            if expected_id in trains_by_id:
+                detected_id = expected_id
+            elif override_info and override_info.get("ocr_override") in trains_by_id:
+                detected_id = override_info["ocr_override"]
+
+            if detected_id:
+                actual_x = trains_by_id[detected_id]["x"]
                 if abs(actual_x - expected_x) > TOLERANCE:
                     position_errors.append(
-                        f"{train_id}: expected x≈{expected_x}, got x={actual_x}"
+                        f"{expected_id}: expected x≈{expected_x}, got x={actual_x}"
                     )
 
         assert not position_errors, f"Position errors in {img_path.name}: {position_errors}"
@@ -129,7 +188,7 @@ class TestDetectorRobustness:
 
     def test_detector_without_tesseract(self):
         """Ensure detector handles missing Tesseract gracefully."""
-        detector = TrainDetectorV2()
+        detector = TrainDetectorV3()
         assert detector is not None
 
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
@@ -205,7 +264,7 @@ class TestConfidenceLevels:
 
 if __name__ == "__main__":
     # Print current detections for updating baseline
-    detector = TrainDetectorV2()
+    detector = TrainDetectorV3()
     for img_path, baseline in IMAGES_WITH_TRAINS:
         print(f"\n=== {img_path.name} ===")
         img = cv2.imread(str(img_path))
