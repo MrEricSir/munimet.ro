@@ -150,6 +150,54 @@ def detect_platform_color(hsv, x, y, size=25, height=25):
         return 'unknown', 0
 
 
+def calculate_system_status(trains, delays_platforms, delays_segments):
+    """
+    Calculate overall system status based on train and delay data.
+
+    Returns: 'red', 'yellow', or 'green'
+
+    Logic:
+    - Red: No trains have route suffixes (subway not operating)
+    - Yellow: 2+ platforms in hold mode OR any track sections disabled
+    - Green: Normal operation
+
+    Precedence: red > yellow > green
+    """
+    import re
+
+    # Check if any trains have valid route suffixes
+    # Train ID format: [Letter]?[4 digits][1-2 letter suffix]
+    # The suffix (route) is the letters at the end after the number
+    suffix_pattern = re.compile(r'\d{4}([A-Z]{1,2})$')
+
+    has_route_suffix = False
+    for train in trains:
+        train_id = train.get('id', '')
+        if train_id.startswith('UNKNOWN'):
+            continue
+        match = suffix_pattern.search(train_id)
+        if match:
+            has_route_suffix = True
+            break
+
+    # Red: No trains have route suffixes (subway likely not operating)
+    if trains and not has_route_suffix:
+        return 'red'
+
+    # If no trains detected at all, we can't determine status from routes
+    # Fall through to check for delays
+
+    # Yellow: 2+ platforms in hold OR any track sections disabled
+    platforms_in_hold = len(delays_platforms)
+    tracks_disabled = len(delays_segments)
+
+    if platforms_in_hold >= 2 or tracks_disabled > 0:
+        return 'yellow'
+
+    # Green: Normal operation
+    return 'green'
+
+
 def get_detection_data(image_path):
     """Get station detection data for an image."""
     img = cv2.imread(str(image_path))
@@ -282,6 +330,9 @@ def get_detection_data(image_path):
                 'confidence': t.get('confidence', 'high')
             })
 
+    # Calculate overall system status
+    system_status = calculate_system_status(trains, delays_platforms, delays_segments)
+
     return {
         'width': w,
         'height': h,
@@ -293,6 +344,7 @@ def get_detection_data(image_path):
         'track_y_upper': track_y_upper,
         'track_y_lower': track_y_lower,
         'track_height': track_height,
+        'system_status': system_status,
     }
 
 
@@ -532,6 +584,34 @@ HTML_TEMPLATE = '''
         </div>
 
         <div class="info-panel">
+            <div class="info-section" style="text-align: center; padding: 15px;">
+                <h3 style="margin-bottom: 10px;">System Status</h3>
+                {% if detection.system_status == 'red' %}
+                <div style="background: #cc2020; color: white; padding: 15px; border-radius: 8px; font-size: 1.3em; font-weight: bold;">
+                    🔴 NOT OPERATING
+                </div>
+                <div style="color: #ff8888; font-size: 0.85em; margin-top: 8px;">
+                    No trains showing route information
+                </div>
+                {% elif detection.system_status == 'yellow' %}
+                <div style="background: #b8a000; color: white; padding: 15px; border-radius: 8px; font-size: 1.3em; font-weight: bold;">
+                    🟡 DELAYS DETECTED
+                </div>
+                <div style="color: #ffcc88; font-size: 0.85em; margin-top: 8px;">
+                    {% if detection.delays_segments %}{{ detection.delays_segments|length }} track section(s) disabled{% endif %}
+                    {% if detection.delays_segments and detection.delays_platforms|length >= 2 %}, {% endif %}
+                    {% if detection.delays_platforms|length >= 2 %}{{ detection.delays_platforms|length }} platforms in hold{% endif %}
+                </div>
+                {% else %}
+                <div style="background: #208020; color: white; padding: 15px; border-radius: 8px; font-size: 1.3em; font-weight: bold;">
+                    🟢 NORMAL OPERATION
+                </div>
+                <div style="color: #88ff88; font-size: 0.85em; margin-top: 8px;">
+                    All systems operating normally
+                </div>
+                {% endif %}
+            </div>
+
             <h2>Detection Info</h2>
 
             <div class="info-section">
