@@ -333,6 +333,7 @@ def detect_muni_status(image_path):
             'delays_platforms': result['delays_platforms'],
             'delays_segments': result['delays_segments'],
             'delays_bunching': result['delays_bunching'],
+            'delay_summaries': result.get('delay_summaries', []),
             'image_dimensions': result['image_dimensions'],
         }
     }

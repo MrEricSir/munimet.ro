@@ -7,9 +7,6 @@
     <link rel="icon" href="/static/favicon.png">
     <title>MuniMet.ro</title>
         <link rel="stylesheet" href="/static/style.css">
-    <style>
-
-    </style>
 </head>
 <body>
     <div class="container">
@@ -30,7 +27,8 @@
 
             <div class="footer">
                 <div class="about-info">
-                    <a href="/about">About</a>
+                    <a href="/about">About</a> | 
+                    <a href="https://bsky.app/profile/munimetro.bsky.social"><img src="/static/bluesky_icon.png" style="max-height: 20px;" /></a>
                 </div>
             </div>
         </div>
@@ -62,21 +60,29 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    renderStatus(data.status, data.description);
+                    const delaySummaries = data.detection?.delay_summaries || [];
+                    renderStatus(data.status, delaySummaries);
                 } else {
-                    renderStatus('error');
+                    renderStatus('error', []);
                 }
             } catch (error) {
-                renderStatus('error');
+                renderStatus('error', []);
             }
         }
 
-        function renderStatus(status, apiDescription = null) {
+        function renderStatus(status, delaySummaries = []) {
             // Find the image filename, or default to the error image.
             const image = statusImage[status] || statusImage['error'];
 
-            // For yellow status, use the AI-generated description from the API
+            // Get the status message
             let message = statusMessages[status] || 'Unknown status';
+
+            // Build details section for yellow status
+            let detailsHtml = '';
+            if (status === 'yellow' && delaySummaries.length > 0) {
+                const items = delaySummaries.map(s => `<div class="details-item">${s}</div>`).join('');
+                detailsHtml = `<div class="details">${items}</div>`;
+            }
 
             // Check if status changed
             const statusChanged = previousStatus !== null && previousStatus !== status;
@@ -86,6 +92,7 @@
                     <img src="/static/${image}">
                 </div>
                 <div class="description">${message}</div>
+                ${detailsHtml}
             `;
 
             const statusElement = document.getElementById('status');

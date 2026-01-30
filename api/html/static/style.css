@@ -181,6 +181,23 @@ p.sub-credits {
     color: #a0aec0;
 }
 
+.details {
+    flex-shrink: 0;
+    margin-bottom: 15px;
+}
+
+.details-item {
+    /* padding: 8px 12px; */
+    margin: 6px 0;
+    font-size: 1.6em;
+    flex-shrink: 0;
+}
+
+.details-item:before {
+    content: "\2022\00a0";
+    opacity: 0.6;
+}
+
 /* Landscape/desktop adjustments - limit image height */
 @media (orientation: landscape) {
     .status-icon {
@@ -206,6 +223,10 @@ p.sub-credits {
         font-size: 1.6em;
     }
 
+    .details-item {
+        font-size: 1.2em;
+    }
+
     #app {
         padding: 20px;
     }
@@ -222,6 +243,10 @@ p.sub-credits {
 
     .description {
         font-size: 1.3em;
+    }
+
+    .details-item {
+        font-size: 0.7em;
     }
 
     #app {

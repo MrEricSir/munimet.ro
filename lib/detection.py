@@ -292,26 +292,119 @@ def calculate_system_status(trains, delays_platforms, delays_segments, bunching_
     return 'green'
 
 
+# Station order for determining consecutive stations in direction of travel
+# Westbound: travels right-to-left (EM -> WE), so list in that order
+# Eastbound: travels left-to-right (WE -> EM), so list in that order
+WESTBOUND_ORDER = ['EM', 'MO', 'PO', 'CC', 'VN', 'CH', 'CA', 'FH', 'WE']
+EASTBOUND_ORDER = ['WE', 'FH', 'CA', 'CH', 'VN', 'CC', 'PO', 'MO', 'EM']
+# Northbound: travels right-to-left (YB -> CT)
+# Southbound: travels left-to-right (CT -> YB)
+NORTHBOUND_ORDER = ['YB', 'US', 'CT']
+SOUTHBOUND_ORDER = ['CT', 'US', 'YB']
+
+
+def generate_delay_summaries(delays_platforms, delays_segments, bunching_incidents):
+    """
+    Generate human-readable delay summaries for display.
+
+    Examples:
+    - Single station hold: "Northbound delay at Union Square"
+    - Multiple consecutive holds: "Westbound delay from Church to West Portal"
+    - Red track segment: "Eastbound service not running between Powell and Montgomery"
+    - Train bunching: "Westbound backup at Powell (4 trains)"
+
+    Returns:
+        list: List of human-readable summary strings
+    """
+    summaries = []
+
+    # Get the station order for each direction
+    direction_orders = {
+        'Westbound': WESTBOUND_ORDER,
+        'Eastbound': EASTBOUND_ORDER,
+        'Northbound': NORTHBOUND_ORDER,
+        'Southbound': SOUTHBOUND_ORDER,
+    }
+
+    # Group platform delays by direction
+    platforms_by_direction = {}
+    for delay in delays_platforms:
+        direction = delay['direction']
+        if direction not in platforms_by_direction:
+            platforms_by_direction[direction] = []
+        platforms_by_direction[direction].append(delay)
+
+    # Process each direction's platform delays
+    for direction, delays in platforms_by_direction.items():
+        station_codes = [d['station'] for d in delays]
+        order = direction_orders.get(direction, [])
+
+        # Sort stations by their position in the direction order
+        station_positions = {code: order.index(code) for code in station_codes if code in order}
+        sorted_codes = sorted(station_codes, key=lambda c: station_positions.get(c, 999))
+
+        # Find consecutive groups
+        groups = []
+        current_group = []
+
+        for code in sorted_codes:
+            if code not in order:
+                continue
+            pos = order.index(code)
+
+            if not current_group:
+                current_group = [code]
+            elif order.index(current_group[-1]) + 1 == pos:
+                # Consecutive
+                current_group.append(code)
+            else:
+                # Gap - start new group
+                groups.append(current_group)
+                current_group = [code]
+
+        if current_group:
+            groups.append(current_group)
+
+        # Generate summaries for each group
+        for group in groups:
+            if len(group) == 1:
+                # Single station
+                station_name = STATION_NAMES.get(group[0], group[0])
+                summaries.append(f"{direction} delay at {station_name}")
+            else:
+                # Multiple consecutive stations - from first to last in direction
+                first_name = STATION_NAMES.get(group[0], group[0])
+                last_name = STATION_NAMES.get(group[-1], group[-1])
+                summaries.append(f"{direction} delay from {first_name} to {last_name}")
+
+    # Process red track segments
+    for segment in delays_segments:
+        from_name = STATION_NAMES.get(segment['from'], segment['from'])
+        to_name = STATION_NAMES.get(segment['to'], segment['to'])
+        direction = segment['direction']
+        summaries.append(f"{direction} service not running between {from_name} and {to_name}")
+
+    # Process train bunching
+    for bunching in bunching_incidents:
+        station_name = STATION_NAMES.get(bunching['station'], bunching['station'])
+        direction = bunching['direction']
+        count = bunching['train_count']
+        summaries.append(f"{direction} backup at {station_name} ({count} trains)")
+
+    return summaries
+
+
 def generate_description(status, trains, delays_platforms, delays_segments, bunching_incidents):
     """Generate a human-readable description of the system status."""
     if status == 'red':
         return "System not operating - insufficient train activity detected"
 
-    descriptions = []
-
-    if delays_platforms:
-        stations = [d['name'] for d in delays_platforms]
-        descriptions.append(f"{len(delays_platforms)} platform(s) in hold mode: {', '.join(stations)}")
-
-    if delays_segments:
-        descriptions.append(f"{len(delays_segments)} track section(s) disabled")
-
-    if bunching_incidents:
-        for b in bunching_incidents:
-            descriptions.append(f"{b['train_count']} trains bunched at {STATION_NAMES.get(b['station'], b['station'])} ({b['direction']})")
-
     if status == 'yellow':
-        return "Delays detected - " + "; ".join(descriptions)
+        # Use the new readable summaries
+        summaries = generate_delay_summaries(delays_platforms, delays_segments, bunching_incidents)
+        if summaries:
+            return "Delays detected - " + "; ".join(summaries)
+        return "Delays detected"
 
     return f"Normal operation - {len(trains)} trains detected, all systems running"
 
@@ -440,13 +533,15 @@ def detect_system_status(image_path):
     # Calculate overall status
     system_status = calculate_system_status(trains, delays_platforms, delays_segments, bunching_incidents)
 
-    # Generate description
+    # Generate description and summaries
     description = generate_description(system_status, trains, delays_platforms, delays_segments, bunching_incidents)
+    delay_summaries = generate_delay_summaries(delays_platforms, delays_segments, bunching_incidents)
 
     return {
         'system_status': system_status,
         'confidence': 1.0,  # Deterministic detection
         'description': description,
+        'delay_summaries': delay_summaries,
         'stations': stations,
         'segments': segments,
         'trains': trains,

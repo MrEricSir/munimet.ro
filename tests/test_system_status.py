@@ -282,5 +282,125 @@ class TestTrainBunchingDetection:
         assert status_no_bunching == 'green', f"Expected green without bunching, got {status_no_bunching}"
 
 
+class TestDelaySummaryGeneration:
+    """Unit tests for delay summary generation logic."""
+
+    def test_single_station_hold(self):
+        """Single station hold produces 'delay at X' message."""
+        from lib.detection import generate_delay_summaries
+
+        delays = [{'station': 'US', 'name': 'Union Square', 'track': 'upper', 'direction': 'Northbound'}]
+        summaries = generate_delay_summaries(delays, [], [])
+
+        assert summaries == ["Northbound delay at Union Square"]
+
+    def test_consecutive_delays_grouped(self):
+        """Consecutive station holds produce 'from X to Y' message."""
+        from lib.detection import generate_delay_summaries
+
+        delays = [
+            {'station': 'CH', 'name': 'Church', 'track': 'upper', 'direction': 'Westbound'},
+            {'station': 'CA', 'name': 'Castro', 'track': 'upper', 'direction': 'Westbound'},
+            {'station': 'FH', 'name': 'Forest Hill', 'track': 'upper', 'direction': 'Westbound'},
+            {'station': 'WE', 'name': 'West Portal', 'track': 'upper', 'direction': 'Westbound'},
+        ]
+        summaries = generate_delay_summaries(delays, [], [])
+
+        assert summaries == ["Westbound delay from Church to West Portal"]
+
+    def test_red_track_segment(self):
+        """Red track segment produces 'service not running' message."""
+        from lib.detection import generate_delay_summaries
+
+        segments = [{'from': 'PO', 'to': 'MO', 'direction': 'Eastbound', 'key': 'PO_MO_lower'}]
+        summaries = generate_delay_summaries([], segments, [])
+
+        assert summaries == ["Eastbound service not running between Powell and Montgomery"]
+
+    def test_train_bunching(self):
+        """Train bunching produces 'backup at X' message."""
+        from lib.detection import generate_delay_summaries
+
+        bunching = [{'station': 'PO', 'track': 'upper', 'direction': 'Westbound', 'train_count': 4}]
+        summaries = generate_delay_summaries([], [], bunching)
+
+        assert summaries == ["Westbound backup at Powell (4 trains)"]
+
+    def test_empty_delays(self):
+        """No delays produces empty list."""
+        from lib.detection import generate_delay_summaries
+
+        assert generate_delay_summaries([], [], []) == []
+
+
+class TestDelaySummaryBaseline:
+    """Regression tests for delay summaries against known images.
+
+    Expected results are in tests/baseline_delay_summaries.json
+    """
+
+    @pytest.fixture
+    def baseline(self):
+        """Load baseline from JSON file."""
+        import json
+        with open(TESTS_DIR / "baseline_delay_summaries.json") as f:
+            return json.load(f)["images"]
+
+    def _get_baseline_images(self):
+        """Get list of images that have delay summaries (yellow status with delays)."""
+        import json
+        with open(TESTS_DIR / "baseline_delay_summaries.json") as f:
+            data = json.load(f)["images"]
+        # Return images that have non-empty delay_summaries
+        return [(name, info) for name, info in data.items() if info["delay_summaries"]]
+
+    @pytest.mark.parametrize("image_name,expected", [
+        ("IMG_9791.jpg", ["Eastbound delay from Forest Hill to Church", "Eastbound delay at Embarcadero", "Westbound delay from Embarcadero to Van Ness"]),
+        ("IMG_9794.jpg", ["Westbound delay from Embarcadero to Van Ness", "Eastbound delay from Montgomery to Embarcadero"]),
+        ("muni_snapshot_20251207_092107.jpg", ["Eastbound delay from Civic Center to Powell"]),
+        ("muni_snapshot_20251207_122227.jpg", ["Eastbound delay from Castro to Church"]),
+        ("muni_snapshot_20251216_190936.jpg", ["Eastbound delay from Powell to Montgomery"]),
+    ])
+    def test_delay_summaries_match_baseline(self, image_name, expected):
+        """Test that delay summaries match baseline for images with delays."""
+        from lib.detection import detect_system_status
+
+        img_path = IMAGES_DIR / image_name
+        if not img_path.exists():
+            pytest.skip(f"Test image not found: {img_path}")
+
+        result = detect_system_status(str(img_path))
+        actual = result.get('delay_summaries', [])
+
+        assert len(actual) == len(expected), (
+            f"{image_name}: expected {len(expected)} summaries, got {len(actual)}. "
+            f"Expected: {expected}, Got: {actual}"
+        )
+        for exp in expected:
+            assert exp in actual, (
+                f"{image_name}: expected '{exp}' in summaries. Got: {actual}"
+            )
+
+    @pytest.mark.parametrize("image_name", [
+        "muni_snapshot_20251206_144619.jpg",
+        "muni_snapshot_20251206_184417.jpg",
+        "muni_snapshot_20251207_221313.jpg",
+        "muni_snapshot_20251209_000943.jpg",
+        "muni_snapshot_20251228_071410.jpg",
+    ])
+    def test_green_status_no_delays(self, image_name):
+        """Test that green status images have no delay summaries."""
+        from lib.detection import detect_system_status
+
+        img_path = IMAGES_DIR / image_name
+        if not img_path.exists():
+            pytest.skip(f"Test image not found: {img_path}")
+
+        result = detect_system_status(str(img_path))
+
+        assert result['system_status'] == 'green', f"{image_name}: expected green status"
+        assert result.get('delay_summaries', []) == [], f"{image_name}: expected no delay summaries"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -1,64 +1,27 @@
-# Sync artifacts with Google Cloud Storage (Windows PowerShell version)
+# Sync artifacts (training images) with Google Cloud Storage (Windows PowerShell version)
+#
+# This is an alias for sync-training-data.ps1 for convenience.
+# ML models are no longer used (replaced with OpenCV-based detection).
 #
 # Usage:
 #   .\scripts\sync-artifacts.ps1 upload    # Upload local changes to GCS
 #   .\scripts\sync-artifacts.ps1 download  # Download changes from GCS
 #   .\scripts\sync-artifacts.ps1 both      # Sync both directions
-#
-# To delete files from GCS, use the individual scripts:
-#   .\scripts\sync-models.ps1 delete <path>
-#   .\scripts\sync-training-data.ps1 delete <path>
+#   .\scripts\sync-artifacts.ps1 delete <path>  # Delete from GCS
 
 param(
     [Parameter(Position=0)]
-    [string]$Command = "both"
-)
+    [string]$Command = "both",
 
-$ErrorActionPreference = "Stop"
+    [Parameter(Position=1)]
+    [string]$Path = ""
+)
 
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-Write-Host "=========================================="
-Write-Host "Sync Artifacts with Google Cloud Storage"
-Write-Host "=========================================="
-Write-Host ""
-
-# Check authentication
-try {
-    $account = gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>&1
-    if ([string]::IsNullOrWhiteSpace($account)) {
-        throw "Not authenticated"
-    }
-} catch {
-    Write-Host "Error: Not authenticated with Google Cloud" -ForegroundColor Red
-    Write-Host "Run: gcloud auth login"
-    exit 1
-}
-
-$cmd = $Command.ToLower()
-if ($cmd -eq "upload" -or $cmd -eq "download" -or $cmd -eq "both") {
-    Write-Host "[1/2] Syncing training data..."
+# Forward to sync-training-data.ps1
+if ($Path) {
+    & "$SCRIPT_DIR\sync-training-data.ps1" $Command $Path
+} else {
     & "$SCRIPT_DIR\sync-training-data.ps1" $Command
-    Write-Host ""
-
-    Write-Host "[2/2] Syncing models..."
-    & "$SCRIPT_DIR\sync-models.ps1" $Command
 }
-else {
-    Write-Host "Error: Unknown command '$Command'" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Usage:"
-    Write-Host "  .\scripts\sync-artifacts.ps1 upload    # Upload local changes to GCS"
-    Write-Host "  .\scripts\sync-artifacts.ps1 download  # Download changes from GCS"
-    Write-Host "  .\scripts\sync-artifacts.ps1 both      # Sync both directions"
-    Write-Host ""
-    Write-Host "To delete files from GCS, use the individual scripts:"
-    Write-Host "  .\scripts\sync-models.ps1 delete <path>"
-    Write-Host "  .\scripts\sync-training-data.ps1 delete <path>"
-    exit 1
-}
-
-Write-Host ""
-Write-Host "=========================================="
-Write-Host "Sync complete!"
-Write-Host "=========================================="

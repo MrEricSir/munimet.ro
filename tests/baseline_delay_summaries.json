@@ -1,0 +1,126 @@
+{
+  "description": "Baseline delay summaries for regression testing. Each image maps to expected status and delay summary strings.",
+  "images": {
+    "IMG_9791.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay from Forest Hill to Church",
+        "Eastbound delay at Embarcadero",
+        "Westbound delay from Embarcadero to Van Ness"
+      ]
+    },
+    "IMG_9792.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay from Forest Hill to Church",
+        "Eastbound delay from Montgomery to Embarcadero",
+        "Westbound delay from Embarcadero to Van Ness"
+      ]
+    },
+    "IMG_9793.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay from Forest Hill to Church",
+        "Eastbound delay from Montgomery to Embarcadero",
+        "Westbound delay from Embarcadero to Van Ness"
+      ]
+    },
+    "IMG_9794.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Westbound delay from Embarcadero to Van Ness",
+        "Eastbound delay from Montgomery to Embarcadero"
+      ]
+    },
+    "muni_snapshot_20251206_144619.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20251206_184417.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20251207_005046.jpg": {
+      "status": "red",
+      "delay_summaries": [
+        "Eastbound delay at West Portal",
+        "Eastbound delay at Church"
+      ]
+    },
+    "muni_snapshot_20251207_021407.jpg": {
+      "status": "red",
+      "delay_summaries": [
+        "Eastbound delay at West Portal",
+        "Eastbound delay at Church"
+      ]
+    },
+    "muni_snapshot_20251207_092107.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay from Civic Center to Powell"
+      ]
+    },
+    "muni_snapshot_20251207_122227.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay from Castro to Church"
+      ]
+    },
+    "muni_snapshot_20251207_221313.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20251208_002133.jpg": {
+      "status": "red",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20251209_000943.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20251212_002115.jpg": {
+      "status": "red",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20251212_002127.jpg": {
+      "status": "red",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20251212_002351.jpg": {
+      "status": "red",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20251216_190936.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay from Powell to Montgomery"
+      ]
+    },
+    "muni_snapshot_20251228_071410.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260124_015604.jpg": {
+      "status": "red",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260124_020104.jpg": {
+      "status": "red",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260124_041839.jpg": {
+      "status": "red",
+      "delay_summaries": [
+        "Eastbound service not running between West Portal and Forest Hill",
+        "Eastbound service not running between Forest Hill and Castro",
+        "Eastbound service not running between Castro and Church",
+        "Eastbound service not running between Church and Van Ness",
+        "Eastbound service not running between Van Ness and Civic Center",
+        "Eastbound service not running between Civic Center and Powell",
+        "Eastbound service not running between Powell and Montgomery",
+        "Eastbound service not running between Montgomery and Embarcadero",
+        "Eastbound backup at Civic Center (4 trains)"
+      ]
+    }
+  }
+}
