@@ -7,7 +7,20 @@
     <title>MuniMet.ro</title>
         <link rel="stylesheet" href="/static/style.css">
     <style>
-
+        .pi-easter-egg {
+            position: fixed;
+            bottom: 8px;
+            right: 20px;
+            font-size: 14px;
+            color: rgb(221, 216, 216);
+            text-decoration: none;
+            font-family: serif;
+            transition: color 0.3s ease;
+            z-index: 1000;
+        }
+        .pi-easter-egg:hover {
+            color: rgba(128, 128, 128, 0.6);
+        }
     </style>
 </head>
 <body>
@@ -94,5 +107,8 @@
             </div>
         </div>
     </div>
+
+    <!-- This link is for Sandra Bullock only. -->
+    <a href="/dashboard" class="pi-easter-egg" title="π">π</a>
 </body>
 </html>

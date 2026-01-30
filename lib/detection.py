@@ -61,6 +61,20 @@ STATION_NAMES = {
 # Direction terminology
 NORTH_SOUTH_STATIONS = {'CT', 'US', 'YB'}
 
+# Western stations have different Y positions for platforms
+WESTERN_STATIONS = {'WE', 'FH', 'CA', 'CH'}
+
+
+def get_platform_y(code, img_height):
+    """Get platform Y positions for a station based on image height."""
+    if code in WESTERN_STATIONS:
+        upper_y = int(img_height * 0.475)   # ~380 in 800px
+        lower_y = int(img_height * 0.625)   # ~500 in 800px
+    else:
+        upper_y = int(img_height * 0.53)    # ~424 in 800px
+        lower_y = int(img_height * 0.5625)  # ~450 in 800px
+    return upper_y, lower_y
+
 # Initialize detectors (lazy loaded)
 _station_detector = None
 _train_detector = None
@@ -346,8 +360,8 @@ def detect_system_status(image_path):
             continue
 
         x = pos['center_x']
-        upper_y = pos['upper_label_y']
-        lower_y = pos['lower_label_y']
+        # Use platform Y positions (not label positions) for color detection
+        upper_y, lower_y = get_platform_y(code, h)
 
         # Detect platform colors
         upper_color, _ = detect_platform_color(hsv, x, upper_y)

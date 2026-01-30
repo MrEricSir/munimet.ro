@@ -129,7 +129,19 @@ def check_status(should_write_cache=False):
         # Determine best status (most optimistic)
         # Priority: green > yellow > red
         status_priority = {'green': 3, 'yellow': 2, 'red': 1}
-        best_status = max(statuses, key=lambda s: status_priority.get(s['status'], 0))
+        best_status_value = max([s['status'] for s in statuses], key=lambda x: status_priority.get(x, 0))
+
+        # Find the most recent entry with the best status
+        # This ensures we use the most recent delay info if status is yellow
+        best_status = None
+        for s in statuses:  # statuses[0] is most recent
+            if s['status'] == best_status_value:
+                best_status = s
+                break
+
+        # Fallback to most recent if somehow not found
+        if best_status is None:
+            best_status = statuses[0]
 
         # Write cache with status history
         cache_data = {

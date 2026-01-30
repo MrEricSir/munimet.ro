@@ -183,6 +183,43 @@ class HealthResource:
         }
 
 
+class LatestImageResource:
+    """Serve the latest downloaded status image."""
+
+    def on_get(self, req, resp):
+        """Handle GET request to /latest-image"""
+        # Try to get image path from cache
+        cache_data = read_cache()
+        image_path = None
+
+        if cache_data:
+            # Get image path from most recent status
+            statuses = cache_data.get('statuses', [])
+            if statuses and 'image_path' in statuses[0]:
+                image_path = statuses[0]['image_path']
+
+        # Fallback: find most recent image in downloads directory
+        if not image_path or not os.path.exists(image_path):
+            downloads_dir = Path(SNAPSHOT_DIR)
+            if downloads_dir.exists():
+                images = sorted(downloads_dir.glob('muni_snapshot_*.jpg'), reverse=True)
+                if images:
+                    image_path = str(images[0])
+
+        if not image_path or not os.path.exists(image_path):
+            resp.status = falcon.HTTP_404
+            resp.media = {'error': 'No image available'}
+            return
+
+        # Serve the image
+        with open(image_path, 'rb') as f:
+            resp.data = f.read()
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'image/jpeg'
+        resp.set_header('Cache-Control', 'public, max-age=30')
+
+
 class StaticResource:
     """Serve the frontend HTML files with proper caching."""
     def __init__(self, filename):
@@ -221,6 +258,7 @@ falcon_app.add_route('/dashboard', StaticResource('dashboard.html'))
 falcon_app.add_route('/about', StaticResource('about.html'))
 falcon_app.add_route('/status', StatusResource())
 falcon_app.add_route('/health', HealthResource())
+falcon_app.add_route('/latest-image', LatestImageResource())
 
 # Wrap with WhiteNoise for efficient static file serving with compression and caching
 # WhiteNoise automatically compresses files (gzip/brotli) and adds proper headers
