@@ -73,20 +73,35 @@ class TrainDetectorV2:
         track_band = np.zeros((h, w), dtype=np.uint8)
         track_band[track_y_min:track_y_max, :] = 255
 
-        # Find cyan and red track pixels (to exclude)
-        cyan_mask = cv2.inRange(hsv, np.array([85, 100, 150]), np.array([105, 255, 255]))
-        red1 = cv2.inRange(hsv, np.array([0, 100, 100]), np.array([10, 255, 255]))
-        red2 = cv2.inRange(hsv, np.array([170, 100, 100]), np.array([180, 255, 255]))
+        # Find cyan track pixels (to exclude) - more restrictive to not exclude trains
+        # Cyan track: H=90-100, high saturation (>180), specific value range
+        cyan_mask = cv2.inRange(hsv, np.array([88, 180, 150]), np.array([102, 255, 220]))
+
+        # Find red track pixels (to exclude)
+        # Red delay track: high saturation red
+        red1 = cv2.inRange(hsv, np.array([0, 150, 100]), np.array([8, 255, 255]))
+        red2 = cv2.inRange(hsv, np.array([172, 150, 100]), np.array([180, 255, 255]))
         red_mask = red1 | red2
 
-        # Find colored (non-gray) objects - lower threshold to catch faded train symbols
+        # Find colored (non-gray) objects - use moderate threshold to avoid track signals
         saturation = hsv[:, :, 1]
-        colored_mask = (saturation > 30).astype(np.uint8) * 255
+        colored_mask = (saturation > 60).astype(np.uint8) * 255
 
         # Candidates: colored objects in track band, excluding cyan and red track pixels
         candidate_mask = cv2.bitwise_and(colored_mask, track_band)
         candidate_mask = cv2.bitwise_and(candidate_mask, cv2.bitwise_not(cyan_mask))
         candidate_mask = cv2.bitwise_and(candidate_mask, cv2.bitwise_not(red_mask))
+
+        # Morphological operations to:
+        # 1. Fill small holes inside train symbols (blue squares create holes)
+        # 2. Separate touching objects
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        candidate_mask = cv2.morphologyEx(candidate_mask, cv2.MORPH_CLOSE, kernel_close)
+
+        # Erode slightly to separate touching objects, then dilate back
+        kernel_erode = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        candidate_mask = cv2.erode(candidate_mask, kernel_erode, iterations=1)
+        candidate_mask = cv2.dilate(candidate_mask, kernel_erode, iterations=1)
 
         # Find contours
         contours, _ = cv2.findContours(candidate_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -103,29 +118,49 @@ class TrainDetectorV2:
             if area < 40 or rect_area < 50:
                 continue
 
-            # Shape filtering: trains are rectangles
+            # Shape filtering: trains are rectangles (possibly with arrows)
             # Rectangularity = how much of bounding box is filled
             rectangularity = area / max(rect_area, 1)
 
             # Aspect ratio (width/height)
             aspect = cw / max(ch, 1)
 
-            # Train symbols: reasonably rectangular (>0.45) with normal aspect ratio
-            # This filters out arrows (low rectangularity) and dots (very small)
-            if rectangularity < 0.45:
+            # Train symbols: reasonably rectangular with normal aspect ratio
+            # Lower threshold (0.28) to allow trains with internal blue squares/X marks
+            # and trains with arrows that create irregular shapes
+            if rectangularity < 0.28:
                 continue
-            if aspect < 0.4 or aspect > 4.0:
+            # Allow wider aspect ratio for trains with arrows (up to 5.0)
+            if aspect < 0.3 or aspect > 5.0:
                 continue
-            if cw < 8 or cw > 45 or ch < 5 or ch > 30:
+            # Size constraints - allow slightly larger for trains with arrows
+            if cw < 8 or cw > 60 or ch < 5 or ch > 35:
                 continue
 
             cx, cy = x + cw // 2, y + ch // 2
 
-            # Color filtering: train symbols have lower saturation than track elements
-            # Real trains: S=42-87, False positives (track elements): S=94+
+            # Color analysis for the symbol
             symbol_roi = hsv[y:y+ch, x:x+cw]
             avg_saturation = symbol_roi[:, :, 1].mean()
-            if avg_saturation > 90:  # Filter high-saturation track elements
+            avg_hue = symbol_roi[:, :, 0].mean()
+
+            # Check if symbol contains train-like colors (yellow, red, green, blue)
+            yellow_px = cv2.inRange(symbol_roi, np.array([15, 50, 100]), np.array([40, 255, 255])).sum()
+            blue_px = cv2.inRange(symbol_roi, np.array([100, 50, 50]), np.array([130, 255, 255])).sum()
+            red_px = cv2.inRange(symbol_roi, np.array([0, 50, 50]), np.array([10, 255, 255])).sum()
+            red_px += cv2.inRange(symbol_roi, np.array([170, 50, 50]), np.array([180, 255, 255])).sum()
+            green_px = cv2.inRange(symbol_roi, np.array([35, 50, 100]), np.array([85, 255, 255])).sum()
+
+            total_colored_px = yellow_px + blue_px + red_px + green_px
+            has_train_colors = total_colored_px > 50
+
+            # Filter: high saturation cyan (track-colored) without train colors = likely track element
+            is_track_cyan = (88 <= avg_hue <= 102) and avg_saturation > 150
+            if is_track_cyan and not has_train_colors:
+                continue
+
+            # Filter: very high saturation (>180) without train colors = likely UI element
+            if avg_saturation > 180 and not has_train_colors:
                 continue
 
             # Determine which track based on Y position
@@ -145,6 +180,11 @@ class TrainDetectorV2:
                 'nearby_text': nearby_text
             })
 
+        # Second pass: look for train-colored rectangles specifically
+        # This catches trains that got merged with track elements in the first pass
+        train_color_symbols = self._detect_train_color_rectangles(image, hsv, h, w, track_y_min, track_y_max, upper_track_y)
+        symbols.extend(train_color_symbols)
+
         # Remove duplicate symbols (keep one per ~30 pixel cluster)
         symbols = sorted(symbols, key=lambda s: s['x'])
         unique = []
@@ -158,6 +198,65 @@ class TrainDetectorV2:
                 unique.append(s)
 
         return unique
+
+    def _detect_train_color_rectangles(self, image, hsv, h, w, track_y_min, track_y_max, upper_track_y):
+        """Detect rectangles with specific train colors (yellow, orange, green)."""
+        symbols = []
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Define train colors to look for with their size constraints
+        # (lower, upper, name, max_width, max_height)
+        train_colors = [
+            # Yellow trains (H=18-38) - most common train marker color
+            (np.array([18, 80, 140]), np.array([38, 255, 255]), 'yellow', 50, 30),
+            # Orange/amber trains (H=8-18) - special status trains
+            (np.array([8, 80, 140]), np.array([18, 255, 255]), 'orange', 50, 30),
+            # Green trains (H=40-70) - some route indicators
+            (np.array([40, 60, 100]), np.array([70, 255, 255]), 'green', 50, 30),
+            # Red trains (H=0-8 or H=172-180) - delay/alert trains, strict size to avoid track lines
+            (np.array([0, 100, 120]), np.array([8, 255, 255]), 'red_low', 35, 20),
+            (np.array([172, 100, 120]), np.array([180, 255, 255]), 'red_high', 35, 20),
+        ]
+
+        for lower, upper, color_name, max_w, max_h in train_colors:
+            color_mask = cv2.inRange(hsv, lower, upper)
+
+            # Only look in track band
+            track_mask = np.zeros_like(color_mask)
+            track_mask[track_y_min:track_y_max, :] = 255
+            color_mask = cv2.bitwise_and(color_mask, track_mask)
+
+            # Find contours
+            contours, _ = cv2.findContours(color_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            for cnt in contours:
+                x, y, cw, ch = cv2.boundingRect(cnt)
+                area = cv2.contourArea(cnt)
+
+                # Size filter for train symbols (use color-specific max sizes)
+                if cw < 10 or cw > max_w or ch < 8 or ch > max_h:
+                    continue
+                if area < 80:
+                    continue
+
+                cx, cy = x + cw // 2, y + ch // 2
+
+                # Determine track
+                track = 'upper' if cy < upper_track_y else 'lower'
+
+                # Get nearby text
+                nearby_text = self._get_nearby_text(gray, cx, h, w, track)
+
+                symbols.append({
+                    'x': cx,
+                    'y': cy,
+                    'track': track,
+                    'type': 'color_rect',
+                    'color': color_name,
+                    'nearby_text': nearby_text
+                })
+
+        return symbols
 
     def _get_nearby_text(self, gray, x, h, w, track):
         """Get raw OCR text from label region near a symbol position."""
@@ -240,7 +339,7 @@ class TrainDetectorV2:
         return None
 
     def _detect_by_ocr(self, gray, hsv, h, w):
-        """Detect trains using OCR on text labels."""
+        """Detect trains using OCR on text labels (both dark and colored text)."""
         trains = []
 
         # Detect in upper and lower bands
@@ -251,6 +350,7 @@ class TrainDetectorV2:
             y_min = int(h * band_start)
             y_max = int(h * band_end)
             band = gray[y_min:y_max, :]
+            band_hsv = hsv[y_min:y_max, :]
             band_h = y_max - y_min
 
             # Find dark text columns
@@ -258,49 +358,168 @@ class TrainDetectorV2:
             col_sums = dark_mask.sum(axis=0)
             text_columns = np.where(col_sums > 3)[0]
 
-            if len(text_columns) == 0:
-                continue
+            if len(text_columns) > 0:
+                # Group columns
+                column_groups = self._group_columns(text_columns)
 
-            # Group columns
-            column_groups = []
-            start = text_columns[0]
-            prev = start
-            for x in text_columns[1:]:
-                if x - prev > 10:
-                    column_groups.append((start, prev))
-                    start = x
-                prev = x
-            column_groups.append((start, prev))
+                # Process each column group
+                for x1, x2 in column_groups:
+                    width = x2 - x1
+                    if width < 6:
+                        continue
 
-            # Process each column group
-            for x1, x2 in column_groups:
-                width = x2 - x1
-                if width < 6:
-                    continue
+                    # Sub-column splitting for wide groups
+                    if width > 20:
+                        sub_cols = [(sub_x, min(sub_x + 15, x2))
+                                    for sub_x in range(x1, x2, 12)]
+                    else:
+                        sub_cols = [(x1, x2)]
 
-                # Sub-column splitting for wide groups
-                if width > 20:
-                    sub_cols = [(sub_x, min(sub_x + 15, x2))
-                                for sub_x in range(x1, x2, 12)]
-                else:
-                    sub_cols = [(x1, x2)]
+                    for sub_x1, sub_x2 in sub_cols:
+                        train_id = self._ocr_column(band, dark_mask, sub_x1, sub_x2, band_h, track)
+                        if train_id:
+                            center_x = (sub_x1 + sub_x2) // 2
+                            trains.append({
+                                'id': train_id,
+                                'x': center_x,
+                                'y': y_min + band_h // 2,
+                                'track': track,
+                                'type': 'ocr'
+                            })
 
-                for sub_x1, sub_x2 in sub_cols:
-                    train_id = self._ocr_column(band, dark_mask, sub_x1, sub_x2, band_h, track)
-                    if train_id:
-                        center_x = (sub_x1 + sub_x2) // 2
-                        trains.append({
-                            'id': train_id,
-                            'x': center_x,
-                            'y': y_min + band_h // 2,
-                            'track': track,
-                            'type': 'ocr'
-                        })
+            # Also detect colored text labels (yellow, green, red)
+            colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
+            trains.extend(colored_trains)
 
         # Deduplicate OCR trains
         trains = self._deduplicate(trains)
 
         return trains
+
+    def _group_columns(self, columns):
+        """Group adjacent columns into regions."""
+        if len(columns) == 0:
+            return []
+        groups = []
+        start = columns[0]
+        prev = start
+        for x in columns[1:]:
+            if x - prev > 10:
+                groups.append((start, prev))
+                start = x
+            prev = x
+        groups.append((start, prev))
+        return groups
+
+    def _detect_colored_labels(self, band_gray, band_hsv, band_h, y_offset, track):
+        """Detect colored text labels (yellow, green, red train IDs)."""
+        trains = []
+
+        # Create masks for colored text
+        # Yellow text (H=15-40, high saturation and value)
+        yellow = cv2.inRange(band_hsv, np.array([15, 80, 120]), np.array([40, 255, 255]))
+        # Green text (H=35-85)
+        green = cv2.inRange(band_hsv, np.array([35, 80, 120]), np.array([85, 255, 255]))
+        # Red text
+        red1 = cv2.inRange(band_hsv, np.array([0, 80, 100]), np.array([15, 255, 255]))
+        red2 = cv2.inRange(band_hsv, np.array([165, 80, 100]), np.array([180, 255, 255]))
+        red = red1 | red2
+
+        colored_mask = yellow | green | red
+
+        # Find columns with colored text
+        col_sums = colored_mask.sum(axis=0)
+        colored_cols = np.where(col_sums > 100)[0]  # Need significant colored pixels
+
+        if len(colored_cols) == 0:
+            return trains
+
+        # Group into regions
+        groups = self._group_columns(colored_cols)
+
+        for x1, x2 in groups:
+            width = x2 - x1
+            if width < 5 or width > 50:  # Too narrow or too wide
+                continue
+
+            # Find vertical extent
+            col_region = colored_mask[:, x1:x2+1]
+            row_sums = col_region.sum(axis=1)
+            text_rows = np.where(row_sums > 0)[0]
+            if len(text_rows) < 10:  # Not enough vertical extent for train ID
+                continue
+
+            y1 = max(0, text_rows[0] - 2)
+            y2 = min(band_h, text_rows[-1] + 2)
+
+            # Skip station label areas (same logic as dark text OCR)
+            if track == 'lower':
+                station_cutoff = int(band_h * 0.15)
+                if y1 < station_cutoff:
+                    y1 = station_cutoff
+            elif track == 'upper':
+                station_cutoff = int(band_h * 0.80)
+                if y2 > station_cutoff:
+                    y2 = station_cutoff
+
+            if y2 - y1 < 20:
+                continue
+
+            # Extract ROI for OCR
+            pad = 3
+            roi_x1 = max(0, x1 - pad)
+            roi_x2 = min(band_gray.shape[1], x2 + pad)
+
+            # Try OCR on color mask (inverted for black text on white)
+            color_roi = colored_mask[y1:y2, roi_x1:roi_x2]
+
+            if color_roi.size == 0:
+                continue
+
+            train_id = self._ocr_color_mask(color_roi)
+            if train_id:
+                center_x = (x1 + x2) // 2
+                trains.append({
+                    'id': train_id,
+                    'x': center_x,
+                    'y': y_offset + (y1 + y2) // 2,
+                    'track': track,
+                    'type': 'ocr_colored'
+                })
+
+        return trains
+
+    def _ocr_color_mask(self, mask):
+        """Run OCR on a color mask (handles vertical text)."""
+        if not TESSERACT_AVAILABLE:
+            return None
+
+        # Scale up for better OCR
+        scale = 4
+        mask_large = cv2.resize(mask, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+
+        # Clean up with morphology
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        mask_clean = cv2.morphologyEx(mask_large, cv2.MORPH_CLOSE, kernel)
+
+        # Try multiple orientations (vertical text needs rotation)
+        for rotation in [None, cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE]:
+            if rotation is not None:
+                img_to_ocr = cv2.rotate(mask_clean, rotation)
+            else:
+                img_to_ocr = mask_clean
+
+            try:
+                # Try both normal and inverted
+                for img in [img_to_ocr, 255 - img_to_ocr]:
+                    text = pytesseract.image_to_string(img, config='--psm 6')
+                    train_id = self._extract_train_id(text)
+                    if train_id:
+                        return train_id
+            except Exception:
+                pass
+
+        return None
 
     def _ocr_column(self, band, dark_mask, x1, x2, band_h, track):
         """Run OCR on a column and extract train ID."""
