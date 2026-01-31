@@ -12,7 +12,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.station_viewer import calculate_system_status, get_detection_data
+from lib.detection import calculate_system_status, detect_system_status, detect_train_bunching
 
 TESTS_DIR = Path(__file__).parent
 IMAGES_DIR = TESTS_DIR / "images"
@@ -57,7 +57,7 @@ class TestSystemStatus:
         if not img_path.exists():
             pytest.skip(f"Test image not found: {img_path}")
 
-        detection = get_detection_data(img_path)
+        detection = detect_system_status(str(img_path))
         assert detection is not None, f"Failed to process image: {image_name}"
 
         actual_status = detection['system_status']
@@ -72,7 +72,7 @@ class TestSystemStatus:
 
     def test_status_precedence(self):
         """Test that red > yellow > green precedence is maintained."""
-        from scripts.station_viewer import calculate_system_status
+        from lib.detection import calculate_system_status
 
         # Mock data for testing precedence
         # Need at least 2 trains with routes for green
@@ -113,7 +113,7 @@ class TestStatusCalculationLogic:
 
     def test_empty_trains_is_red(self):
         """With no trains or insufficient valid trains, should be red."""
-        from scripts.station_viewer import calculate_system_status
+        from lib.detection import calculate_system_status
 
         # No trains -> red (< 2 valid routes)
         assert calculate_system_status([], [], []) == 'red'
@@ -124,7 +124,7 @@ class TestStatusCalculationLogic:
 
     def test_route_suffix_detection(self):
         """Test that route suffix detection works correctly."""
-        from scripts.station_viewer import calculate_system_status
+        from lib.detection import calculate_system_status
 
         # Single train with valid suffix - red (need at least 2)
         assert calculate_system_status([{'id': 'W2010LL'}], [], []) == 'red'
@@ -162,7 +162,7 @@ class TestTrainBunchingDetection:
 
     def test_no_bunching_with_evenly_spaced_trains(self):
         """Evenly spaced trains (>100px apart) should not trigger bunching."""
-        from scripts.station_viewer import detect_train_bunching
+        from lib.detection import detect_train_bunching
 
         # Trains evenly spaced across the system (x positions >100px apart)
         trains = [
@@ -178,7 +178,7 @@ class TestTrainBunchingDetection:
 
     def test_bunching_detected_upper_track(self):
         """4+ trains clustered close together on upper track should trigger bunching."""
-        from scripts.station_viewer import detect_train_bunching
+        from lib.detection import detect_train_bunching
 
         # Powell (PO) is at x=971
         # 4 trains clustered (within 70px of each other) to the right of Powell
@@ -197,7 +197,7 @@ class TestTrainBunchingDetection:
 
     def test_bunching_detected_lower_track(self):
         """4+ trains clustered close together on lower track should trigger bunching."""
-        from scripts.station_viewer import detect_train_bunching
+        from lib.detection import detect_train_bunching
 
         # Powell (PO) is at x=971
         # 4 trains clustered (within 70px of each other) to the left of Powell
@@ -216,7 +216,7 @@ class TestTrainBunchingDetection:
 
     def test_excluded_stations_ignored(self):
         """Chinatown (CT) and Embarcadero (EM) should not report bunching."""
-        from scripts.station_viewer import detect_train_bunching
+        from lib.detection import detect_train_bunching
 
         # CT is at x=1564, EM is at x=1182
         # Bunch trains right at CT (upper track, trains to right of CT)
@@ -235,7 +235,7 @@ class TestTrainBunchingDetection:
 
     def test_three_trains_not_bunching(self):
         """3 trains clustered should NOT trigger bunching (threshold is 4)."""
-        from scripts.station_viewer import detect_train_bunching
+        from lib.detection import detect_train_bunching
 
         # 3 trains clustered near Powell - below threshold
         trains = [
@@ -249,7 +249,7 @@ class TestTrainBunchingDetection:
 
     def test_four_trains_spread_out_not_bunching(self):
         """4 trains spread apart (>70px between each) should NOT trigger bunching."""
-        from scripts.station_viewer import detect_train_bunching
+        from lib.detection import detect_train_bunching
 
         # 4 trains but spread apart - not clustered (gaps > 70px)
         trains = [
@@ -264,7 +264,7 @@ class TestTrainBunchingDetection:
 
     def test_bunching_triggers_yellow_status(self):
         """Bunching incidents should trigger yellow system status."""
-        from scripts.station_viewer import calculate_system_status
+        from lib.detection import calculate_system_status
 
         trains_with_routes = [
             {'id': 'W2010LL', 'x': 1000, 'track': 'upper'},
