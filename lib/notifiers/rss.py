@@ -138,6 +138,12 @@ def _generate_xml(items):
     atom_link.set('rel', 'self')
     atom_link.set('type', 'application/rss+xml')
 
+    # Add channel image
+    image = ET.SubElement(channel, 'image')
+    ET.SubElement(image, 'url').text = f'{FEED_LINK}/static/favicon.png'
+    ET.SubElement(image, 'title').text = FEED_TITLE
+    ET.SubElement(image, 'link').text = FEED_LINK
+
     ET.SubElement(channel, 'lastBuildDate').text = now
 
     # Add items
