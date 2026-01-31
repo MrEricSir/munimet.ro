@@ -6,6 +6,7 @@ Dispatches status change notifications to all enabled channels.
 
 import os
 from . import bluesky, rss
+from .messages import STATUS_MESSAGES
 
 
 def notify_status_change(status, previous_status, delay_summaries=None, timestamp=None):
@@ -42,8 +43,8 @@ def notify_status_change(status, previous_status, delay_summaries=None, timestam
         }
 
     # RSS feed (always enabled - no credentials needed)
-    # Build description from status
-    description = _build_description(status, delay_summaries)
+    # Use same status message as Bluesky
+    description = STATUS_MESSAGES.get(status, f'Status: {status}')
     results['rss'] = rss.update_rss_feed(
         status=status,
         description=description,
@@ -52,17 +53,3 @@ def notify_status_change(status, previous_status, delay_summaries=None, timestam
     )
 
     return results
-
-
-def _build_description(status, delay_summaries):
-    """Build a description string for RSS items."""
-    if status == 'green':
-        return 'Muni Metro is operating normally.'
-    elif status == 'yellow':
-        if delay_summaries:
-            return 'Delays detected on Muni Metro.'
-        return 'Minor issues detected on Muni Metro.'
-    elif status == 'red':
-        return 'Muni Metro is not currently operating.'
-    else:
-        return f'Muni Metro status: {status}'

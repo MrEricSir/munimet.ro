@@ -5,13 +5,7 @@ Posts status updates to Bluesky social network.
 """
 
 import os
-
-# Status messages matching the frontend (api/html/index.html)
-STATUS_MESSAGES = {
-    'green': '🟢 All aboard: Muni is on track',
-    'yellow': "🟡 Uh oh: Muni's not feeling well",
-    'red': '🔴 Muni is taking a nap',
-}
+from .messages import STATUS_MESSAGES
 
 
 def post_to_bluesky(status, previous_status=None, delay_summaries=None):
