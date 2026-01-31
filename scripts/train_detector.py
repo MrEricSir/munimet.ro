@@ -51,14 +51,16 @@ class TrainDetector:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        # Step 1: OCR-based detection (streamlined)
+        # Step 1: OCR-based detection (primary method)
         ocr_trains = self._detect_by_ocr(gray, h, w, hsv)
 
-        # Step 2: Symbol detection
-        symbols = self._detect_symbols(hsv, h, w, gray)
-
-        # Step 3: Merge
-        trains = self._merge(ocr_trains, symbols)
+        # Step 2: Symbol detection only if OCR found very few trains
+        # This reduces false positives when OCR is working well
+        if len(ocr_trains) < 3:
+            symbols = self._detect_symbols(hsv, h, w, gray)
+            trains = self._merge(ocr_trains, symbols)
+        else:
+            trains = ocr_trains
 
         return trains
 
@@ -90,10 +92,11 @@ class TrainDetector:
                     if width < 6:
                         continue
 
-                    # Sub-column splitting for wide groups
-                    if width > 20:
-                        sub_cols = [(sub_x, min(sub_x + 15, x2))
-                                    for sub_x in range(x1, x2, 12)]
+                    # Sub-column splitting for very wide groups only
+                    # Train IDs are typically 15-25 pixels wide
+                    if width > 35:
+                        sub_cols = [(sub_x, min(sub_x + 20, x2))
+                                    for sub_x in range(x1, x2, 18)]
                     else:
                         sub_cols = [(x1, x2)]
 
@@ -152,7 +155,8 @@ class TrainDetector:
             if y1 < station_cutoff:
                 y1 = station_cutoff
         elif track == 'upper':
-            station_cutoff = int(band_h * 0.80)
+            # Allow more of the band - station labels are filtered by name matching
+            station_cutoff = int(band_h * 0.95)
             if y2 > station_cutoff:
                 y2 = station_cutoff
 
@@ -275,15 +279,15 @@ class TrainDetector:
         track_band = np.zeros((h, w), dtype=np.uint8)
         track_band[track_y_min:track_y_max, :] = 255
 
-        # Exclude cyan and red track pixels
-        cyan_mask = cv2.inRange(hsv, np.array([88, 180, 150]), np.array([102, 255, 220]))
+        # Exclude cyan and red track pixels (widen cyan range to catch lighter cyan)
+        cyan_mask = cv2.inRange(hsv, np.array([85, 120, 140]), np.array([105, 255, 230]))
         red1 = cv2.inRange(hsv, np.array([0, 150, 100]), np.array([8, 255, 255]))
         red2 = cv2.inRange(hsv, np.array([172, 150, 100]), np.array([180, 255, 255]))
         red_mask = red1 | red2
 
-        # Find colored objects
+        # Find colored objects (high threshold to reduce false positives from track signals)
         saturation = hsv[:, :, 1]
-        colored_mask = (saturation > 60).astype(np.uint8) * 255
+        colored_mask = (saturation > 150).astype(np.uint8) * 255
         candidate_mask = cv2.bitwise_and(colored_mask, track_band)
         candidate_mask = cv2.bitwise_and(candidate_mask, cv2.bitwise_not(cyan_mask))
         candidate_mask = cv2.bitwise_and(candidate_mask, cv2.bitwise_not(red_mask))
@@ -299,17 +303,18 @@ class TrainDetector:
             x, y, cw, ch = cv2.boundingRect(cnt)
             area = cv2.contourArea(cnt)
 
-            if area < 40 or cw * ch < 50:
+            # Strict filters to reduce false positives from track signals
+            if area < 200 or cw * ch < 250:
                 continue
-            if cw < 8 or cw > 60 or ch < 5 or ch > 35:
+            if cw < 18 or cw > 45 or ch < 10 or ch > 20:
                 continue
 
             rectangularity = area / max(cw * ch, 1)
-            if rectangularity < 0.28:
+            if rectangularity < 0.5:
                 continue
 
             aspect = cw / max(ch, 1)
-            if aspect < 0.3 or aspect > 5.0:
+            if aspect < 1.5 or aspect > 3.5:
                 continue
 
             cx, cy = x + cw // 2, y + ch // 2
@@ -336,10 +341,10 @@ class TrainDetector:
     def _detect_train_colors(self, hsv, h, w, track_y_min, track_y_max, upper_track_y):
         """Detect train-colored rectangles."""
         symbols = []
+        # Only detect yellow/gold train colors - exclude orange (used for track signals)
         train_colors = [
-            (np.array([18, 80, 140]), np.array([38, 255, 255]), 50, 30),
-            (np.array([8, 80, 140]), np.array([18, 255, 255]), 50, 30),
-            (np.array([40, 60, 100]), np.array([70, 255, 255]), 50, 30),
+            (np.array([20, 100, 150]), np.array([35, 255, 255]), 45, 25),  # Yellow/gold trains
+            (np.array([40, 80, 120]), np.array([65, 255, 255]), 45, 25),   # Green trains
         ]
 
         track_mask = np.zeros((h, w), dtype=np.uint8)
@@ -353,7 +358,11 @@ class TrainDetector:
             for cnt in contours:
                 x, y, cw, ch = cv2.boundingRect(cnt)
                 area = cv2.contourArea(cnt)
-                if cw < 10 or cw > max_w or ch < 8 or ch > max_h or area < 80:
+                # Tighter filters: trains are wider than tall rectangles
+                if cw < 15 or cw > max_w or ch < 8 or ch > max_h or area < 150:
+                    continue
+                aspect = cw / max(ch, 1)
+                if aspect < 1.5 or aspect > 4.0:
                     continue
                 cx, cy = x + cw // 2, y + ch // 2
                 track = 'upper' if cy < upper_track_y else 'lower'
@@ -395,6 +404,10 @@ class TrainDetector:
         combined = combined.replace('Z', '7')
         combined = combined.replace('(', '').replace(')', '').replace(' ', '')
 
+        # Fix duplicate leading letters (OCR sometimes doubles them in vertical text)
+        if len(combined) >= 2 and combined[0].isalpha() and combined[0] == combined[1]:
+            combined = combined[1:]
+
         if combined and combined[0].isdigit():
             combined = combined.replace('L', '1').replace('S', '5').replace('B', '8')
 
@@ -405,10 +418,16 @@ class TrainDetector:
         if matches:
             return matches[0]
 
-        # Position-based 7/T fix
+        # Position-based 7/T fix for vertical text where 7 is often read as T
         if len(combined) >= 5:
             fixed = list(combined)
-            digit_start = 1 if combined[0].isalpha() else 0
+            # Find where digits start
+            digit_start = 0
+            for i, c in enumerate(combined):
+                if c.isdigit() or c == 'T':  # T might be misread 7
+                    digit_start = i
+                    break
+
             for i in range(len(fixed)):
                 if digit_start <= i < digit_start + 4:
                     if fixed[i] == 'T':

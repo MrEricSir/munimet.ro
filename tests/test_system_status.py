@@ -27,6 +27,7 @@ KNOWN_STATUSES = [
     ("muni_snapshot_20251206_144619.jpg", "green", "Normal afternoon operation"),
     ("muni_snapshot_20251207_221313.jpg", "green", "Normal operation"),
     ("muni_snapshot_20251228_071410.jpg", "green", "Normal early morning operation"),
+    ("muni_snapshot_20260130_233157.jpg", "green", "Normal operation - 8 trains (3 upper, 5 lower)"),
 
     # Delays detected (yellow)
     ("muni_snapshot_20251207_092107.jpg", "yellow", "2 platforms in hold"),
@@ -387,6 +388,7 @@ class TestDelaySummaryBaseline:
         "muni_snapshot_20251207_221313.jpg",
         "muni_snapshot_20251209_000943.jpg",
         "muni_snapshot_20251228_071410.jpg",
+        "muni_snapshot_20260130_233157.jpg",
     ])
     def test_green_status_no_delays(self, image_name):
         """Test that green status images have no delay summaries."""
