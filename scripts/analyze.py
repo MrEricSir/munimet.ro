@@ -79,10 +79,14 @@ def main():
         for s in summaries:
             print(f"  • {s}")
 
-    # Show train count
+    # Show trains
     trains = result.get('trains', [])
     print()
     print(f"  Trains detected: {len(trains)}")
+    if trains:
+        for t in sorted(trains, key=lambda x: x['x']):
+            conf = f" [{t['confidence']}]" if t.get('confidence') != 'high' else ''
+            print(f"    {t['id']}{conf} - {t['track']} track @ x={t['x']}")
 
     if args.verbose:
         # Show platform status
@@ -111,14 +115,6 @@ def main():
             print(f"  Train bunching ({len(bunching)}):")
             for b in bunching:
                 print(f"    {b['station']} ({b['direction']}): {b['train_count']} trains")
-
-        # Show all trains
-        if trains:
-            print()
-            print(f"  All trains:")
-            for t in sorted(trains, key=lambda x: x['x']):
-                conf = f" [{t['confidence']}]" if t.get('confidence') != 'high' else ''
-                print(f"    {t['id']}{conf} @ x={t['x']} ({t['track']})")
 
     print()
 
