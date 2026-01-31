@@ -194,9 +194,9 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
 
     bunching_incidents = []
 
-    # Separate trains by track and sort by x
-    upper_trains = sorted([t for t in trains if t.get('track') == 'upper'], key=lambda t: t['x'])
-    lower_trains = sorted([t for t in trains if t.get('track') == 'lower'], key=lambda t: t['x'])
+    # Separate trains by track and sort by x (exclude UNKNOWN trains - often false positives)
+    upper_trains = sorted([t for t in trains if t.get('track') == 'upper' and not t.get('id', '').startswith('UNKNOWN')], key=lambda t: t['x'])
+    lower_trains = sorted([t for t in trains if t.get('track') == 'lower' and not t.get('id', '').startswith('UNKNOWN')], key=lambda t: t['x'])
 
     def find_clusters(sorted_trains):
         if len(sorted_trains) < threshold:
