@@ -139,9 +139,8 @@ Write-Host "2. Run: .\scripts\setup\setup-python-env.ps1" -ForegroundColor White
 Write-Host "3. Verify setup: .\scripts\setup\verify-setup-windows.ps1" -ForegroundColor White
 Write-Host "4. Follow SETUP.md for project configuration" -ForegroundColor White
 Write-Host ""
-Write-Host "For collaborators downloading training data:" -ForegroundColor Cyan
+Write-Host "For collaborators downloading reference data:" -ForegroundColor Cyan
 Write-Host "  - Authenticate with Google Cloud: gcloud auth login" -ForegroundColor White
-Write-Host "  - Download models: .\scripts\sync-models.ps1 download" -ForegroundColor White
-Write-Host "  - Download training data: .\scripts\sync-training-data.ps1 download" -ForegroundColor White
+Write-Host "  - Download reference data: .\scripts\sync-reference-data.ps1 download" -ForegroundColor White
 Write-Host "  - See SETUP.md for detailed instructions" -ForegroundColor White
 Write-Host ""

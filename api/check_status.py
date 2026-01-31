@@ -161,7 +161,8 @@ def check_status(should_write_cache=False):
         current_status = detection['status']
         if previous_status is not None and current_status != previous_status:
             print(f"\nStatus changed: {previous_status} -> {current_status}")
-            bluesky_result = post_to_bluesky(current_status, previous_status)
+            delay_summaries = detection.get('detection', {}).get('delay_summaries', [])
+            bluesky_result = post_to_bluesky(current_status, previous_status, delay_summaries)
             if bluesky_result['success']:
                 print(f"Posted to Bluesky: {bluesky_result['uri']}")
             else:

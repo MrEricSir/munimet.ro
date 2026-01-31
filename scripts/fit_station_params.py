@@ -22,7 +22,7 @@ from scripts.detect_stations import (
     ICON_COUNT_THRESHOLD, TOTAL_ICON_THRESHOLD, RED_TRACK_THRESHOLD,
 )
 
-EVALUATIONS_FILE = "artifacts/training_data/station_evaluations.json"
+EVALUATIONS_FILE = "artifacts/reference_data/station_evaluations.json"
 
 # Parameter grid
 ICON_COUNT_VALUES = [1, 2, 3, 4, 5]

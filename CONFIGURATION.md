@@ -19,11 +19,11 @@ This document records the actual configuration values used for this deployment.
 - **Purpose**: API response cache for Cloud Run deployment
 - **Access**: Private (service account only)
 
-#### Training Data and Models Bucket
+#### Reference Data and Models Bucket
 - **Bucket Name**: `munimetro-annex`
 - **Region**: `us-west1`
 - **Storage Class**: Standard
-- **Purpose**: Training data and model storage (synced via GCS rsync scripts)
+- **Purpose**: Reference data and model storage (synced via GCS rsync scripts)
 - **Size**: ~1.1GB
 - **Access**: Private (collaborators with GCS access)
 
@@ -74,11 +74,11 @@ This document records the actual configuration values used for this deployment.
 
 ### Sync Scripts
 
-Training data is synced with Google Cloud Storage using `gsutil rsync`:
+Reference data is synced with Google Cloud Storage using `gsutil rsync`:
 
 - **Bucket**: `gs://munimetro-annex`
 - **Scripts**:
-  - `scripts/sync-training-data.sh` / `scripts/sync-training-data.ps1` - Sync training data (~270MB)
+  - `scripts/sync-reference-data.sh` / `scripts/sync-reference-data.ps1` - Sync training data (~270MB)
   - `scripts/sync-artifacts.sh` / `scripts/sync-artifacts.ps1` - Sync all artifacts (~270MB)
 - **Authentication**: Google Cloud SDK (`gcloud auth login`)
 - **Protocol**: HTTPS via gsutil
@@ -111,19 +111,18 @@ Training data is synced with Google Cloud Storage using `gsutil rsync`:
 
 ### Virtual Environments
 
-- **Training**: `training/venv/`
 - **API**: `api/venv/`
 - **Tests**: `tests/venv/`
 
 ## File Locations
 
-### Training Data (GCS synced)
+### Reference Data (GCS synced)
 
-- **Images Directory**: `artifacts/training_data/images/`
+- **Images Directory**: `artifacts/reference_data/images/`
 - **Count**: 2,666 labeled images
 - **Size**: ~270MB
-- **Labels File**: `artifacts/training_data/labels.json` (570KB)
-- **Sync**: Use `scripts/sync-training-data.sh download` to download from GCS
+- **Labels File**: `artifacts/reference_data/labels.json` (570KB)
+- **Sync**: Use `scripts/sync-reference-data.sh download` to download from GCS
 
 ## Environment Variables
 
@@ -152,7 +151,7 @@ PORT=8000
 - **Cloud Run Service (API)**: ~$0 (within free tier at current traffic)
 - **Cloud Run Jobs (Checker)**: ~$0.70 (14,400 executions/month @ ~10s each)
 - **Cloud Storage (Cache)**: ~$0.02 (1KB file, 100K reads/month)
-- **Cloud Storage (Training Data)**: ~$0 (1.1GB, within 5GB free tier)
+- **Cloud Storage (Reference Data)**: ~$0 (1.1GB, within 5GB free tier)
 - **Cloud Scheduler**: $0.10 (1 job)
 - **Cloud Monitoring**: $0 (within free tier limits)
 - **Total**: ~$0.82/month
@@ -225,5 +224,5 @@ python scripts/station_viewer.py
 
 - All timestamps use UTC
 - Cloud Run uses Pacific time for scheduler display
-- Training data and models synced with GCS using `gsutil rsync`
+- Reference data and models synced with GCS using `gsutil rsync`
 - Docker images are multi-stage builds (smaller production images)

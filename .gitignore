@@ -28,9 +28,8 @@ __MACOSX/
 # Generated artifacts - runtime data (not version controlled)
 artifacts/runtime/
 
-# Training data and models (managed via GCS - use sync scripts)
-artifacts/training_data/
-artifacts/models/
+# Reference data (managed via GCS - use sync scripts)
+artifacts/reference_data/
 
 # Logs
 *.log

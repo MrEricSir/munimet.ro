@@ -29,7 +29,7 @@ try:
         REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
         HSV_RANGES,
     )
-    from scripts.train_detector_v3 import TrainDetectorV3, TESSERACT_AVAILABLE
+    from scripts.train_detector import TrainDetector, TESSERACT_AVAILABLE
 except ModuleNotFoundError:
     from detect_stations import STATION_ORDER, INTERNAL_STATIONS
     from station_detector import (
@@ -39,14 +39,14 @@ except ModuleNotFoundError:
         REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
         HSV_RANGES,
     )
-    from train_detector_v3 import TrainDetectorV3, TESSERACT_AVAILABLE
+    from train_detector import TrainDetector, TESSERACT_AVAILABLE
 
 app = Flask(__name__)
 
 # Configuration
-IMAGE_FOLDER = Path(__file__).parent.parent / "artifacts" / "training_data" / "images"
+IMAGE_FOLDER = Path(__file__).parent.parent / "artifacts" / "reference_data" / "images"
 detector = StationDetector()
-train_detector = TrainDetectorV3() if TESSERACT_AVAILABLE else None
+train_detector = TrainDetector() if TESSERACT_AVAILABLE else None
 
 # Global state
 current_image_index = 0

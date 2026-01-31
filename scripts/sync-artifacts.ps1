@@ -1,7 +1,6 @@
-# Sync artifacts (training images) with Google Cloud Storage (Windows PowerShell version)
+# Sync artifacts (reference images) with Google Cloud Storage (Windows PowerShell version)
 #
-# This is an alias for sync-training-data.ps1 for convenience.
-# ML models are no longer used (replaced with OpenCV-based detection).
+# This is an alias for sync-reference-data.ps1 for convenience.
 #
 # Usage:
 #   .\scripts\sync-artifacts.ps1 upload    # Upload local changes to GCS
@@ -19,9 +18,9 @@ param(
 
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# Forward to sync-training-data.ps1
+# Forward to sync-reference-data.ps1
 if ($Path) {
-    & "$SCRIPT_DIR\sync-training-data.ps1" $Command $Path
+    & "$SCRIPT_DIR\sync-reference-data.ps1" $Command $Path
 } else {
-    & "$SCRIPT_DIR\sync-training-data.ps1" $Command
+    & "$SCRIPT_DIR\sync-reference-data.ps1" $Command
 }

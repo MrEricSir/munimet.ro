@@ -2,10 +2,10 @@
 # Sync training data with Google Cloud Storage
 #
 # Usage:
-#   ./scripts/sync-training-data.sh upload            # Upload local changes to GCS
-#   ./scripts/sync-training-data.sh download          # Download changes from GCS
-#   ./scripts/sync-training-data.sh both              # Sync both directions (default)
-#   ./scripts/sync-training-data.sh delete <path>     # Delete file/directory from GCS
+#   ./scripts/sync-reference-data.sh upload            # Upload local changes to GCS
+#   ./scripts/sync-reference-data.sh download          # Download changes from GCS
+#   ./scripts/sync-reference-data.sh both              # Sync both directions (default)
+#   ./scripts/sync-reference-data.sh delete <path>     # Delete file/directory from GCS
 
 set -e
 
@@ -29,7 +29,7 @@ EXCLUDE_PATTERNS=(
 )
 
 echo "=========================================="
-echo "Sync Training Data with GCS"
+echo "Sync Reference Data with GCS"
 echo "=========================================="
 echo ""
 
@@ -50,35 +50,35 @@ case "$COMMAND" in
     upload)
         echo "Uploading training data to GCS..."
         echo ""
-        gsutil -m rsync -r "${EXCLUDE_FLAGS[@]}" artifacts/training_data "$BUCKET/training_data"
+        gsutil -m rsync -r "${EXCLUDE_FLAGS[@]}" artifacts/reference_data "$BUCKET/reference_data"
         echo ""
-        echo "✓ Training data uploaded to $BUCKET/training_data"
+        echo "✓ Reference data uploaded to $BUCKET/reference_data"
         ;;
 
     download)
         echo "Downloading training data from GCS (~270MB)..."
         echo ""
-        mkdir -p artifacts/training_data
-        gsutil -m rsync -r "${EXCLUDE_FLAGS[@]}" "$BUCKET/training_data" artifacts/training_data
+        mkdir -p artifacts/reference_data
+        gsutil -m rsync -r "${EXCLUDE_FLAGS[@]}" "$BUCKET/reference_data" artifacts/reference_data
         echo ""
-        echo "✓ Training data downloaded to artifacts/training_data"
+        echo "✓ Reference data downloaded to artifacts/reference_data"
         ;;
 
     both)
         echo "Syncing training data bidirectionally..."
         echo ""
-        gsutil -m rsync -r "${EXCLUDE_FLAGS[@]}" artifacts/training_data "$BUCKET/training_data"
-        gsutil -m rsync -r "${EXCLUDE_FLAGS[@]}" "$BUCKET/training_data" artifacts/training_data
+        gsutil -m rsync -r "${EXCLUDE_FLAGS[@]}" artifacts/reference_data "$BUCKET/reference_data"
+        gsutil -m rsync -r "${EXCLUDE_FLAGS[@]}" "$BUCKET/reference_data" artifacts/reference_data
         echo ""
-        echo "✓ Training data synced"
+        echo "✓ Reference data synced"
         ;;
 
     delete)
         if [ -z "$DELETE_PATH" ]; then
             echo "Error: delete command requires a path"
             echo ""
-            echo "Usage: ./scripts/sync-training-data.sh delete <path>"
-            echo "Example: ./scripts/sync-training-data.sh delete training_data/2024-01/.DS_Store"
+            echo "Usage: ./scripts/sync-reference-data.sh delete <path>"
+            echo "Example: ./scripts/sync-reference-data.sh delete reference_data/2024-01/.DS_Store"
             exit 1
         fi
         echo "Deleting $BUCKET/$DELETE_PATH from GCS..."
@@ -92,10 +92,10 @@ case "$COMMAND" in
         echo "Error: Unknown command '$COMMAND'"
         echo ""
         echo "Usage:"
-        echo "  ./scripts/sync-training-data.sh upload            # Upload local changes to GCS"
-        echo "  ./scripts/sync-training-data.sh download          # Download changes from GCS"
-        echo "  ./scripts/sync-training-data.sh both              # Sync both directions"
-        echo "  ./scripts/sync-training-data.sh delete <path>     # Delete file/directory from GCS"
+        echo "  ./scripts/sync-reference-data.sh upload            # Upload local changes to GCS"
+        echo "  ./scripts/sync-reference-data.sh download          # Download changes from GCS"
+        echo "  ./scripts/sync-reference-data.sh both              # Sync both directions"
+        echo "  ./scripts/sync-reference-data.sh delete <path>     # Delete file/directory from GCS"
         exit 1
         ;;
 esac

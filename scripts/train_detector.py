@@ -1,12 +1,8 @@
 """
 Train identifier detection using OCR.
 
-Detects vertical train ID strings (e.g., "W2073LL") in track display images.
-
-Train ID format: [TrainNumber][Route]
-- TrainNumber: Letter + 4 digits (e.g., W2073, M2051) or just 4 digits
-- Route: 1-2 letters (K, L, M, N, T, S, J, KK, LL, MM, NN, TT, SS)
-         OR *, **, X, XX for out-of-service trains
+Detects train IDs (e.g., "L1234M") from Muni status images using Tesseract OCR.
+Optimized for speed with single preprocessing pass per text column.
 """
 
 import cv2
@@ -19,289 +15,406 @@ try:
 except ImportError:
     TESSERACT_AVAILABLE = False
 
-# Pattern to find train IDs - matches letter + 4 digits + 1-2 letter suffix
-# Also matches 4 digits + 1-2 letter suffix (some IDs don't have leading letter)
+# Train ID pattern
 TRAIN_ID_PATTERN = re.compile(r'[A-Z]?\d{4}[A-Z*X]{1,2}')
 
-# Y-bands where train IDs appear (percentage of image height)
-UPPER_TRAIN_BAND = (0.25, 0.48)  # Above upper track
-LOWER_TRAIN_BAND = (0.56, 0.80)  # Below lower track
+# Y-bands for text labels
+UPPER_TRAIN_BAND = (0.25, 0.48)
+LOWER_TRAIN_BAND = (0.56, 0.80)
+
+# Track Y positions
+UPPER_TRACK_Y = (0.48, 0.54)
+LOWER_TRACK_Y = (0.54, 0.62)
 
 
 class TrainDetector:
-    """Detects train identifiers in mimic display images."""
+    """Optimized train detector."""
 
     def __init__(self):
         if not TESSERACT_AVAILABLE:
-            print("Warning: pytesseract not installed. Train detection disabled.")
+            print("Warning: pytesseract not installed.")
 
-    def detect_trains(self, image, hsv=None):
-        """
-        Detect all train identifiers in the image.
+        self.station_labels = {
+            'USL', 'USR', 'YBL', 'YBR', 'CTL', 'CTR', 'TTL', 'TTR',
+            'FPL', 'FPR', 'MNL', 'MNR', 'MOR', 'MOL', 'POR', 'POL',
+            'CCL', 'CCR', 'VNL', 'VNR', 'CHR', 'CHL', 'CAR', 'CAL',
+            'FHR', 'FHL', 'WER', 'WEL', 'EMR', 'EML', 'GDL', 'GDR',
+            'WPL', 'WPR', 'BPL', 'BPR', 'FSL', 'FSR', 'GLL', 'GLR'
+        }
 
-        Returns:
-            List of dicts: [{'id': 'W2010L', 'x': 500, 'y': 300, 'track': 'upper'}, ...]
-        """
+    def detect_trains(self, image):
+        """Detect trains in the image using OCR."""
         if not TESSERACT_AVAILABLE:
             return []
 
         h, w = image.shape[:2]
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        trains = []
 
-        # Detect in upper band
-        upper_trains = self._detect_in_band(gray, w, h,
-            int(h * UPPER_TRAIN_BAND[0]),
-            int(h * UPPER_TRAIN_BAND[1]),
-            'upper',
-            hsv=hsv
-        )
-        trains.extend(upper_trains)
+        # Step 1: OCR-based detection (streamlined)
+        ocr_trains = self._detect_by_ocr(gray, h, w, hsv)
 
-        # Detect in lower band
-        lower_trains = self._detect_in_band(gray, w, h,
-            int(h * LOWER_TRAIN_BAND[0]),
-            int(h * LOWER_TRAIN_BAND[1]),
-            'lower',
-            hsv=hsv
-        )
-        trains.extend(lower_trains)
+        # Step 2: Symbol detection
+        symbols = self._detect_symbols(hsv, h, w, gray)
 
-        # Deduplicate: remove trains with same ID or overlapping positions
-        trains = self._deduplicate(trains)
+        # Step 3: Merge
+        trains = self._merge(ocr_trains, symbols)
 
         return trains
 
-    def _deduplicate(self, trains):
-        """Remove duplicate train detections."""
-        if not trains:
-            return trains
-
-        # Sort by x position
-        trains = sorted(trains, key=lambda t: (t['track'], t['x']))
-
-        # Remove duplicates: same ID or very close positions
-        unique = []
-        for train in trains:
-            is_dup = False
-            for existing in unique:
-                # Same track and close position (within 30 pixels)
-                if (existing['track'] == train['track'] and
-                    abs(existing['x'] - train['x']) < 30):
-                    # Keep the one with longer ID or first one
-                    if len(train['id']) > len(existing['id']):
-                        unique.remove(existing)
-                        unique.append(train)
-                    is_dup = True
-                    break
-            if not is_dup:
-                unique.append(train)
-
-        return unique
-
-    def _detect_in_band(self, gray, img_w, img_h, y_min, y_max, track, hsv=None):
-        """Detect train IDs in a horizontal band."""
+    def _detect_by_ocr(self, gray, h, w, hsv):
+        """Detect trains via OCR - single pass per column."""
         trains = []
-        band = gray[y_min:y_max, :]
-        band_h = y_max - y_min
 
-        # Find text column regions using multiple methods:
-        # 1. Dark pixels (black text)
-        dark_mask = (band < 100).astype(np.uint8)
-
-        # 2. Colored text (high saturation) - yellow, green, red, cyan train IDs
-        # Note: We use dark_mask for column grouping to avoid track lines filling gaps,
-        # but use colored_mask for OCR to catch colored train IDs
-        colored_mask = None
-        if hsv is not None:
+        for track, (band_start, band_end) in [
+            ('upper', UPPER_TRAIN_BAND),
+            ('lower', LOWER_TRAIN_BAND)
+        ]:
+            y_min = int(h * band_start)
+            y_max = int(h * band_end)
+            band = gray[y_min:y_max, :]
             band_hsv = hsv[y_min:y_max, :]
-            # Yellow text (H=15-35, S>100, V>120) - higher thresholds to avoid track
-            yellow = cv2.inRange(band_hsv, np.array([15, 100, 120]), np.array([35, 255, 255]))
-            # Green text (H=35-85, S>100, V>120)
-            green = cv2.inRange(band_hsv, np.array([35, 100, 120]), np.array([85, 255, 255]))
-            # Red text (H=0-15 or 165-180, S>80, V>100)
-            red1 = cv2.inRange(band_hsv, np.array([0, 80, 100]), np.array([15, 255, 255]))
-            red2 = cv2.inRange(band_hsv, np.array([165, 80, 100]), np.array([180, 255, 255]))
-            red = red1 | red2
-            # Cyan text - exclude track cyan by requiring higher saturation and brightness
-            # Track cyan is typically S=180-220, V=180-210; text cyan is brighter
-            cyan = cv2.inRange(band_hsv, np.array([85, 150, 200]), np.array([115, 255, 255]))
-            # Combine colored masks
-            colored_mask = ((yellow | green | red | cyan) > 0).astype(np.uint8)
+            band_h = y_max - y_min
 
-        # Use only dark pixels for column grouping (to avoid track lines merging columns)
-        col_dark_count = dark_mask.sum(axis=0)
+            # Find dark text columns
+            dark_mask = (band < 100).astype(np.uint8)
+            col_sums = dark_mask.sum(axis=0)
+            text_cols = np.where(col_sums > 3)[0]
 
-        # Find contiguous regions with dark pixels
-        text_columns = np.where(col_dark_count > 3)[0]
-        if len(text_columns) == 0:
-            return trains
+            if len(text_cols) > 0:
+                # Group columns
+                groups = self._group_columns(text_cols)
 
-        # Group adjacent columns (gap > 10 pixels = separate group)
-        # Use smaller gap to better separate adjacent train IDs
-        column_groups = []
-        start = text_columns[0]
+                for x1, x2 in groups:
+                    width = x2 - x1
+                    if width < 6:
+                        continue
+
+                    # Sub-column splitting for wide groups
+                    if width > 20:
+                        sub_cols = [(sub_x, min(sub_x + 15, x2))
+                                    for sub_x in range(x1, x2, 12)]
+                    else:
+                        sub_cols = [(x1, x2)]
+
+                    for sub_x1, sub_x2 in sub_cols:
+                        train_id = self._ocr_column(band, dark_mask, sub_x1, sub_x2, band_h, track)
+                        if train_id:
+                            center_x = (sub_x1 + sub_x2) // 2
+                            trains.append({
+                                'id': train_id,
+                                'x': center_x,
+                                'y': y_min + band_h // 2,
+                                'track': track,
+                                'confidence': 'high'
+                            })
+
+            # Also detect colored text labels (yellow, green)
+            colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
+            trains.extend(colored_trains)
+
+        return self._deduplicate(trains)
+
+    def _group_columns(self, columns):
+        """Group adjacent columns."""
+        if len(columns) == 0:
+            return []
+        groups = []
+        start = columns[0]
         prev = start
-        for x in text_columns[1:]:
+        for x in columns[1:]:
             if x - prev > 10:
-                column_groups.append((start, prev))
+                groups.append((start, prev))
                 start = x
             prev = x
-        column_groups.append((start, prev))
+        groups.append((start, prev))
+        return groups
 
-        # Process each column group
-        for x1, x2 in column_groups:
-            width = x2 - x1
-            if width < 6:  # Too narrow for train ID
-                continue
+    def _ocr_column(self, band, dark_mask, x1, x2, band_h, track):
+        """OCR a single column - ONE preprocessing pass."""
+        pad = 3
+        roi_x1 = max(0, x1 - pad)
+        roi_x2 = min(band.shape[1], x2 + pad)
+        col_mask = dark_mask[:, roi_x1:roi_x2]
 
-            # For wide groups (>20px), split into sub-columns to handle
-            # multiple train IDs that are side by side
-            if width > 20:
-                # Split into ~12px sub-columns (typical train ID character width)
-                sub_cols = []
-                for sub_x in range(x1, x2, 12):
-                    sub_cols.append((sub_x, min(sub_x + 15, x2)))
-            else:
-                sub_cols = [(x1, x2)]
+        # Find vertical extent
+        row_sums = col_mask.sum(axis=1)
+        text_rows = np.where(row_sums > 0)[0]
+        if len(text_rows) < 5:
+            return None
 
-            for sub_x1, sub_x2 in sub_cols:
-                # Extract column ROI with padding
-                pad = 3
-                roi_x1 = max(0, sub_x1 - pad)
-                roi_x2 = min(img_w, sub_x2 + pad)
-                col_roi = band[:, roi_x1:roi_x2]
-                col_mask = dark_mask[:, roi_x1:roi_x2]
+        y1 = max(0, text_rows[0] - 2)
+        y2 = min(band_h, text_rows[-1] + 2)
 
-                # Find vertical extent of text in this column (using dark mask)
-                row_text = col_mask.sum(axis=1)
-                text_rows = np.where(row_text > 0)[0]
-                if len(text_rows) < 5:  # Need some minimum height
-                    continue
+        # Skip station label regions
+        if track == 'lower':
+            station_cutoff = int(band_h * 0.15)
+            if y1 < station_cutoff:
+                y1 = station_cutoff
+        elif track == 'upper':
+            station_cutoff = int(band_h * 0.80)
+            if y2 > station_cutoff:
+                y2 = station_cutoff
 
-                y1 = max(0, text_rows[0] - 2)
-                y2 = min(band_h, text_rows[-1] + 2)
+        roi = band[y1:y2, roi_x1:roi_x2]
+        if roi.size == 0 or roi.shape[0] < 20:
+            return None
 
-                # Skip station label areas based on track:
-                # - Lower band: station labels at TOP (skip y < 15% of band)
-                # - Upper band: station labels at BOTTOM (skip y > 80% of band)
-                if track == 'lower':
-                    station_label_cutoff = int(band_h * 0.15)
-                    if y1 < station_label_cutoff:
-                        y1 = station_label_cutoff
-                elif track == 'upper':
-                    station_label_cutoff = int(band_h * 0.80)
-                    if y2 > station_label_cutoff:
-                        y2 = station_label_cutoff
-
-                roi = col_roi[y1:y2, :]
-                if roi.size == 0 or roi.shape[0] < 20:
-                    continue
-
-                # Check if this region has significant colored text
-                roi_colored = colored_mask[y1:y2, roi_x1:roi_x2] if colored_mask is not None else None
-                has_colored = roi_colored is not None and roi_colored.sum() > 30
-
-                # OCR this region
-                found_ids = self._ocr_column(roi, roi_colored if has_colored else None)
-
-                # Add found train IDs with positions
-                center_x = (roi_x1 + roi_x2) // 2
-                center_y = y_min + (y1 + y2) // 2
-
-                for i, train_id in enumerate(found_ids):
-                    trains.append({
-                        'id': train_id,
-                        'x': int(center_x),
-                        'y': int(center_y),
-                        'track': track
-                    })
-
-        return trains
-
-    def _ocr_column(self, roi, colored_mask=None):
-        """Run OCR on a column ROI and extract all train IDs."""
+        # Single OCR pass with Otsu
         scale = 4
-        found_ids = []
-
-        # Method 1: Standard grayscale OCR
-        roi_large = cv2.resize(roi, None, fx=scale, fy=scale,
-                               interpolation=cv2.INTER_LANCZOS4)
-        _, roi_bin = cv2.threshold(roi_large, 0, 255,
-                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        roi_large = cv2.resize(roi, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4)
+        _, roi_bin = cv2.threshold(roi_large, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
         try:
             text = pytesseract.image_to_string(roi_bin, config='--psm 6')
-            found_ids.extend(self._extract_train_ids(text))
+            return self._extract_train_id(text)
         except Exception:
-            pass
+            return None
 
-        # Method 2: If colored text detected and grayscale didn't find IDs, try color mask
-        if colored_mask is not None and len(found_ids) == 0:
-            # Use inverted color mask (black text on white background)
-            mask_large = cv2.resize(colored_mask * 255, None, fx=scale, fy=scale,
-                                   interpolation=cv2.INTER_NEAREST)
-            # Apply morphological operations to clean up
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-            mask_clean = cv2.morphologyEx(mask_large, cv2.MORPH_CLOSE, kernel)
+    def _detect_colored_labels(self, band_gray, band_hsv, band_h, y_offset, track):
+        """Detect colored text labels (yellow, green train IDs)."""
+        trains = []
 
-            try:
-                text = pytesseract.image_to_string(mask_clean, config='--psm 6')
-                found_ids.extend(self._extract_train_ids(text))
-            except Exception:
-                pass
+        # Yellow text (H=15-40, high saturation and value)
+        yellow = cv2.inRange(band_hsv, np.array([15, 80, 120]), np.array([40, 255, 255]))
+        # Green text (H=35-85)
+        green = cv2.inRange(band_hsv, np.array([35, 80, 120]), np.array([85, 255, 255]))
 
-        return found_ids
+        colored_mask = yellow | green
 
-    def _extract_train_ids(self, text):
+        # Find columns with colored text
+        col_sums = colored_mask.sum(axis=0)
+        colored_cols = np.where(col_sums > 100)[0]
 
-        # Join lines and clean up
+        if len(colored_cols) == 0:
+            return trains
+
+        # Group into regions
+        groups = self._group_columns(colored_cols)
+
+        for x1, x2 in groups:
+            width = x2 - x1
+            if width < 5 or width > 50:
+                continue
+
+            # Find vertical extent
+            col_region = colored_mask[:, x1:x2+1]
+            row_sums = col_region.sum(axis=1)
+            text_rows = np.where(row_sums > 0)[0]
+            if len(text_rows) < 10:
+                continue
+
+            y1 = max(0, text_rows[0] - 2)
+            y2 = min(band_h, text_rows[-1] + 2)
+
+            # Skip station label areas
+            if track == 'lower':
+                station_cutoff = int(band_h * 0.15)
+                if y1 < station_cutoff:
+                    y1 = station_cutoff
+            elif track == 'upper':
+                station_cutoff = int(band_h * 0.80)
+                if y2 > station_cutoff:
+                    y2 = station_cutoff
+
+            if y2 - y1 < 20:
+                continue
+
+            # Extract and OCR the colored mask region
+            pad = 3
+            roi_x1 = max(0, x1 - pad)
+            roi_x2 = min(band_gray.shape[1], x2 + pad)
+            color_roi = colored_mask[y1:y2, roi_x1:roi_x2]
+
+            if color_roi.size == 0:
+                continue
+
+            train_id = self._ocr_color_mask(color_roi)
+            if train_id:
+                center_x = (x1 + x2) // 2
+                trains.append({
+                    'id': train_id,
+                    'x': center_x,
+                    'y': y_offset + (y1 + y2) // 2,
+                    'track': track,
+                    'confidence': 'high'
+                })
+
+        return trains
+
+    def _ocr_color_mask(self, mask):
+        """Run OCR on a color mask."""
+        # Scale up
+        scale = 4
+        mask_large = cv2.resize(mask, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+
+        # Clean up
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        mask_clean = cv2.morphologyEx(mask_large, cv2.MORPH_CLOSE, kernel)
+
+        # Single OCR attempt (vertical text as-is, tesseract handles it)
+        try:
+            text = pytesseract.image_to_string(mask_clean, config='--psm 6')
+            train_id = self._extract_train_id(text)
+            if train_id:
+                return train_id
+
+            # Try inverted
+            text = pytesseract.image_to_string(255 - mask_clean, config='--psm 6')
+            return self._extract_train_id(text)
+        except Exception:
+            return None
+
+    def _detect_symbols(self, hsv, h, w, gray):
+        """Detect train symbols on tracks."""
+        track_y_min = int(h * 0.48)
+        track_y_max = int(h * 0.62)
+        upper_track_y = int(h * 0.52)
+
+        # Track band mask
+        track_band = np.zeros((h, w), dtype=np.uint8)
+        track_band[track_y_min:track_y_max, :] = 255
+
+        # Exclude cyan and red track pixels
+        cyan_mask = cv2.inRange(hsv, np.array([88, 180, 150]), np.array([102, 255, 220]))
+        red1 = cv2.inRange(hsv, np.array([0, 150, 100]), np.array([8, 255, 255]))
+        red2 = cv2.inRange(hsv, np.array([172, 150, 100]), np.array([180, 255, 255]))
+        red_mask = red1 | red2
+
+        # Find colored objects
+        saturation = hsv[:, :, 1]
+        colored_mask = (saturation > 60).astype(np.uint8) * 255
+        candidate_mask = cv2.bitwise_and(colored_mask, track_band)
+        candidate_mask = cv2.bitwise_and(candidate_mask, cv2.bitwise_not(cyan_mask))
+        candidate_mask = cv2.bitwise_and(candidate_mask, cv2.bitwise_not(red_mask))
+
+        # Morphology
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        candidate_mask = cv2.morphologyEx(candidate_mask, cv2.MORPH_CLOSE, kernel)
+
+        contours, _ = cv2.findContours(candidate_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        symbols = []
+        for cnt in contours:
+            x, y, cw, ch = cv2.boundingRect(cnt)
+            area = cv2.contourArea(cnt)
+
+            if area < 40 or cw * ch < 50:
+                continue
+            if cw < 8 or cw > 60 or ch < 5 or ch > 35:
+                continue
+
+            rectangularity = area / max(cw * ch, 1)
+            if rectangularity < 0.28:
+                continue
+
+            aspect = cw / max(ch, 1)
+            if aspect < 0.3 or aspect > 5.0:
+                continue
+
+            cx, cy = x + cw // 2, y + ch // 2
+            track = 'upper' if cy < upper_track_y else 'lower'
+
+            symbols.append({
+                'x': cx,
+                'y': cy,
+                'track': track
+            })
+
+        # Add train-colored rectangles
+        symbols.extend(self._detect_train_colors(hsv, h, w, track_y_min, track_y_max, upper_track_y))
+
+        # Deduplicate
+        symbols = sorted(symbols, key=lambda s: s['x'])
+        unique = []
+        for s in symbols:
+            if not any(abs(s['x'] - u['x']) < 30 and s['track'] == u['track'] for u in unique):
+                unique.append(s)
+
+        return unique
+
+    def _detect_train_colors(self, hsv, h, w, track_y_min, track_y_max, upper_track_y):
+        """Detect train-colored rectangles."""
+        symbols = []
+        train_colors = [
+            (np.array([18, 80, 140]), np.array([38, 255, 255]), 50, 30),
+            (np.array([8, 80, 140]), np.array([18, 255, 255]), 50, 30),
+            (np.array([40, 60, 100]), np.array([70, 255, 255]), 50, 30),
+        ]
+
+        track_mask = np.zeros((h, w), dtype=np.uint8)
+        track_mask[track_y_min:track_y_max, :] = 255
+
+        for lower, upper, max_w, max_h in train_colors:
+            color_mask = cv2.inRange(hsv, lower, upper)
+            color_mask = cv2.bitwise_and(color_mask, track_mask)
+            contours, _ = cv2.findContours(color_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            for cnt in contours:
+                x, y, cw, ch = cv2.boundingRect(cnt)
+                area = cv2.contourArea(cnt)
+                if cw < 10 or cw > max_w or ch < 8 or ch > max_h or area < 80:
+                    continue
+                cx, cy = x + cw // 2, y + ch // 2
+                track = 'upper' if cy < upper_track_y else 'lower'
+                symbols.append({'x': cx, 'y': cy, 'track': track})
+
+        return symbols
+
+    def _merge(self, ocr_trains, symbols):
+        """Merge OCR and symbol detections."""
+        trains = list(ocr_trains)
+
+        for sym in symbols:
+            has_match = any(
+                abs(sym['x'] - t['x']) < 50 and sym['track'] == t['track']
+                for t in trains
+            )
+            if not has_match:
+                trains.append({
+                    'id': f"UNKNOWN@{sym['x']}",
+                    'x': sym['x'],
+                    'y': sym['y'],
+                    'track': sym['track'],
+                    'confidence': 'low'
+                })
+
+        return trains
+
+    def _extract_train_id(self, text):
+        """Extract train ID from OCR text."""
         lines = [c.strip() for c in text.split('\n') if c.strip()]
-        combined = ''.join(lines)
+        combined = ''.join(lines).upper()
 
-        # Clean up common OCR errors
-        combined = combined.upper()
+        # OCR corrections
         combined = combined.replace('{', '7').replace('}', '7')
-        combined = combined.replace('[', '7').replace(']', '7')  # Brackets often misread as 7
-        combined = combined.replace('+', 'TT')  # + is often TT misread as single character
-        combined = combined.replace('|', '1').replace('!', '1').replace('L', '1') if combined and combined[0].isdigit() else combined.replace('|', '1').replace('!', '1')
+        combined = combined.replace('[', '7').replace(']', '7')
+        combined = combined.replace('+', 'TT')
+        combined = combined.replace('|', '1').replace('!', '1')
         combined = combined.replace('O', '0').replace('Q', '0')
-        combined = combined.replace('Z', '7')  # Z often misread as 7
-        combined = combined.replace('S', '5') if combined and combined[0].isdigit() else combined
-        combined = combined.replace('B', '8') if combined and combined[0].isdigit() else combined
-        combined = combined.replace('(', '').replace(')', '')
-        combined = combined.replace(' ', '')
+        combined = combined.replace('Z', '7')
+        combined = combined.replace('(', '').replace(')', '').replace(' ', '')
 
-        # Remove station label codes that might be concatenated with train IDs
-        # Station labels are 2-3 letter codes like USL, YBL, EMR, FPL, etc.
-        station_labels = ['USL', 'USR', 'YBL', 'YBR', 'CTL', 'CTR', 'TTL', 'TTR',
-                         'FPL', 'FPR', 'MNL', 'MNR', 'MOR', 'MOL', 'POR', 'POL',
-                         'CCL', 'CCR', 'VNL', 'VNR', 'CHR', 'CHL', 'CAR', 'CAL',
-                         'FHR', 'FHL', 'WER', 'WEL', 'EMR', 'EML', 'GDL', 'GDR']
-        for label in station_labels:
+        if combined and combined[0].isdigit():
+            combined = combined.replace('L', '1').replace('S', '5').replace('B', '8')
+
+        for label in self.station_labels:
             combined = combined.replace(label, '')
 
-        # Find all train IDs in the text
-        found_ids = TRAIN_ID_PATTERN.findall(combined)
+        matches = TRAIN_ID_PATTERN.findall(combined)
+        if matches:
+            return matches[0]
 
-        # If no matches found, try fixing 7/T confusion based on position
-        # Train ID format: [Letter]?[4 digits][1-2 letters]
-        # In digit positions: T should be 7
-        # In letter positions: 7 should be T
-        if not found_ids and len(combined) >= 5:
+        # Position-based 7/T fix
+        if len(combined) >= 5:
             fixed = list(combined)
-            # Find where digits should start (after optional leading letter)
             digit_start = 1 if combined[0].isalpha() else 0
-
             for i in range(len(fixed)):
-                # In digit positions (digit_start to digit_start+3)
                 if digit_start <= i < digit_start + 4:
                     if fixed[i] == 'T':
                         fixed[i] = '7'
                     elif fixed[i] == 'I':
                         fixed[i] = '1'
-                # In letter positions (after digit_start+3)
                 elif i >= digit_start + 4:
                     if fixed[i] == '7':
                         fixed[i] = 'T'
@@ -309,8 +422,28 @@ class TrainDetector:
                         fixed[i] = 'L'
                     elif fixed[i] == '0':
                         fixed[i] = 'O'
+            matches = TRAIN_ID_PATTERN.findall(''.join(fixed))
+            if matches:
+                return matches[0]
 
-            fixed_str = ''.join(fixed)
-            found_ids = TRAIN_ID_PATTERN.findall(fixed_str)
+        return None
 
-        return found_ids
+    def _deduplicate(self, trains):
+        """Remove duplicates."""
+        if not trains:
+            return trains
+        trains = sorted(trains, key=lambda t: (t['track'], t['x']))
+        unique = []
+        for train in trains:
+            is_dup = False
+            for existing in unique:
+                if (existing['track'] == train['track'] and
+                        abs(existing['x'] - train['x']) < 30):
+                    if len(train['id']) > len(existing['id']):
+                        unique.remove(existing)
+                        unique.append(train)
+                    is_dup = True
+                    break
+            if not is_dup:
+                unique.append(train)
+        return unique

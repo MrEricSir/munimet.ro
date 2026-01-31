@@ -10,7 +10,7 @@ Complete installation and configuration guide for the Muni Metro project. This g
   - [Linux](#linux)
   - [Windows](#windows)
 - [Python Environment Setup](#python-environment-setup)
-- [Accessing Training Data](#accessing-training-data)
+- [Accessing Reference Data](#accessing-training-data)
 - [Troubleshooting](#troubleshooting)
 
 ## First Time Setup
@@ -26,7 +26,7 @@ Before starting, you'll need to install these base dependencies:
 | **Python 3.13+** | Runtime for all Python scripts | All workflows |
 | **Git** | Version control | All workflows |
 | **tkinter** | GUI framework for image labeling | Training only |
-| **Google Cloud SDK** | Cloud deployment and GCS access | Cloud deployment, accessing training data |
+| **Google Cloud SDK** | Cloud deployment and GCS access | Cloud deployment, accessing reference data |
 | **Docker** | Containerization | Local/cloud deployment |
 
 ### Quick Start (Automated Installation)
@@ -75,7 +75,7 @@ Set-ExecutionPolicy RemoteSigned –Scope Process
 .\scripts\setup\setup-python-env.ps1
 ```
 
-After running the automated scripts, skip to [Accessing Training Data](#accessing-training-data).
+After running the automated scripts, skip to [Accessing Reference Data](#accessing-training-data).
 
 ### Manual Installation
 
@@ -265,7 +265,7 @@ After installing base dependencies, set up isolated Python virtual environments 
 
 The project has three separate Python environments:
 
-- **training/** - Data collection, image labeling, and model training
+- **scripts/** - Detection scripts and utilities
 - **api/** - Production web API and prediction service
 - **tests/** - Automated test suite
 
@@ -290,28 +290,6 @@ The script will prompt you to select which components to set up.
 ### Manual Setup
 
 If you prefer to set up environments manually:
-
-#### Training Environment
-
-```bash
-cd training
-
-# Create virtual environment
-python3 -m venv venv
-
-# Activate environment
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate   # Windows
-
-# Upgrade pip
-python -m pip install --upgrade pip
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Deactivate when done
-deactivate
-```
 
 #### API Environment
 
@@ -359,7 +337,7 @@ deactivate
 
 ## Google Cloud Authentication
 
-To access training data and models stored in Google Cloud Storage, you need to authenticate with gcloud.
+To access reference data and models stored in Google Cloud Storage, you need to authenticate with gcloud.
 
 ### Setup Google Cloud CLI
 
@@ -385,9 +363,9 @@ gcloud auth login
 gcloud config set project munimetro
 ```
 
-After authentication, you can use the sync scripts to download training data and models.
+After authentication, you can use the sync scripts to download reference data and models.
 
-## Accessing Training Data
+## Accessing Reference Data
 
 ### Option 1: Use Existing Data (Collaborators with GCS Access)
 
@@ -395,38 +373,29 @@ If you have access to the shared Google Cloud Storage bucket:
 
 1. Authenticate with Google Cloud (see [Google Cloud Authentication](#google-cloud-authentication) above)
 
-2. Download training data and models using sync scripts:
+2. Download reference data and models using sync scripts:
    ```bash
-   # Download both training data and models
+   # Download both reference data and models
    ./scripts/sync-artifacts.sh download    # macOS/Linux
    .\scripts\sync-artifacts.ps1 download   # Windows
 
-   # Or download individually:
-   ./scripts/sync-training-data.sh download  # Training data only (~270MB)
-   ./scripts/sync-models.sh download         # Models only (~856MB)
+   # Or download reference data only:
+   ./scripts/sync-reference-data.sh download  # Reference data only (~270MB)
    ```
 
 The sync scripts use `gsutil rsync` to efficiently download only changed files.
 
 ### Option 2: Collect Your Own Data (No GCS Access Required)
 
-Contributors can build their own training dataset:
+Contributors can collect their own reference images:
 
 ```bash
-cd training
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
 # Run data collector (downloads images periodically)
-python download_muni_image.py
+python scripts/download_muni_image.py
 
-# Label collected images
-python label_images.py
-
-# Train your own model
-python train_model.py
+# Label collected images (requires tkinter)
+python scripts/label_images.py
 ```
-
-See [training/README.md](training/README.md) for detailed training instructions.
 
 ## Verification
 
@@ -531,17 +500,17 @@ gcloud auth list
 gsutil ls gs://munimetro-annex/
 ```
 
-### Missing Model or Training Data Files
+### Missing Model or Reference Data Files
 
 **Symptom:** Files in `artifacts/` are missing or empty
 
 **Solution:**
 ```bash
-# Download training data (optional - for development/testing)
-./scripts/sync-training-data.sh download   # Training data (~270MB)
+# Download reference data (optional - for development/testing)
+./scripts/sync-reference-data.sh download   # Reference data (~270MB)
 
 # Verify files downloaded
-ls -lh artifacts/training_data/images/
+ls -lh artifacts/reference_data/images/
 ```
 
 ### tkinter Import Errors
@@ -595,14 +564,12 @@ chmod +x scripts/setup/*.sh
 
 After completing setup:
 
-1. **Download Data**: Use sync scripts to download models and training data (see [Accessing Training Data](#accessing-training-data))
+1. **Download Data**: Use sync scripts to download reference data (see [Accessing Reference Data](#accessing-reference-data))
 2. **Run Locally**: See [deploy/README.md](deploy/README.md) for deployment instructions
-3. **Train Custom Model**: See [training/README.md](training/README.md) for training workflow
 
 ## Related Documentation
 
 - **[Main README](README.md)** - Project overview and quick start
-- **[Training Guide](training/README.md)** - Data collection and model training
 - **[Deployment Guide](deploy/README.md)** - Local and cloud deployment
 - **[API Documentation](api/README.md)** - API endpoints and configuration
 - **[Testing Guide](tests/README.md)** - Running automated tests

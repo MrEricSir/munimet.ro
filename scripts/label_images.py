@@ -12,10 +12,11 @@ from PIL import Image, ImageTk
 from datetime import datetime
 from pathlib import Path
 
-# Configuration
-IMAGE_FOLDER = "../artifacts/training_data/images"
-LABELS_FILE = "../artifacts/training_data/labels.json"
-OUTLIER_REPORT_FILE = "../artifacts/models/v1/outlier_report.json"
+# Configuration - paths relative to project root
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+IMAGE_FOLDER = str(PROJECT_ROOT / "artifacts" / "reference_data" / "images")
+LABELS_FILE = str(PROJECT_ROOT / "artifacts" / "reference_data" / "labels.json")
 MAX_IMAGE_WIDTH = 1200
 MAX_IMAGE_HEIGHT = 800
 

@@ -18,7 +18,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.train_detector_v3 import TrainDetectorV3, TESSERACT_AVAILABLE
+from scripts.train_detector import TrainDetector, TESSERACT_AVAILABLE
 
 # Paths
 TESTS_DIR = Path(__file__).parent
@@ -65,7 +65,7 @@ TRAIN_FREE_IMAGES = [
 @pytest.fixture
 def detector():
     """Create a train detector instance."""
-    return TrainDetectorV3()
+    return TrainDetector()
 
 
 class TestTrainDetectionBaseline:
@@ -188,7 +188,7 @@ class TestDetectorRobustness:
 
     def test_detector_without_tesseract(self):
         """Ensure detector handles missing Tesseract gracefully."""
-        detector = TrainDetectorV3()
+        detector = TrainDetector()
         assert detector is not None
 
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
@@ -264,7 +264,7 @@ class TestConfidenceLevels:
 
 if __name__ == "__main__":
     # Print current detections for updating baseline
-    detector = TrainDetectorV3()
+    detector = TrainDetector()
     for img_path, baseline in IMAGES_WITH_TRAINS:
         print(f"\n=== {img_path.name} ===")
         img = cv2.imread(str(img_path))

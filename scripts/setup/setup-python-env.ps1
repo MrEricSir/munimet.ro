@@ -107,12 +107,10 @@ Write-Host "Python environment setup complete!" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "To activate an environment:" -ForegroundColor White
-Write-Host "  cd $projectRoot\training; .\venv\Scripts\Activate.ps1"
 Write-Host "  cd $projectRoot\api; .\venv\Scripts\Activate.ps1"
 Write-Host "  cd $projectRoot\tests; .\venv\Scripts\Activate.ps1"
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
-Write-Host "1. Download training data: .\scripts\sync-training-data.ps1 download"
-Write-Host "2. Download models: .\scripts\sync-models.ps1 download"
-Write-Host "3. Follow SETUP.md for project-specific configuration"
+Write-Host "1. Download reference data: .\scripts\sync-reference-data.ps1 download"
+Write-Host "2. Follow SETUP.md for project-specific configuration"
 Write-Host ""

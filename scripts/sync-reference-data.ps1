@@ -1,10 +1,10 @@
 # Sync training data with Google Cloud Storage (Windows PowerShell version)
 #
 # Usage:
-#   .\scripts\sync-training-data.ps1 upload            # Upload local changes to GCS
-#   .\scripts\sync-training-data.ps1 download          # Download changes from GCS
-#   .\scripts\sync-training-data.ps1 both              # Sync both directions (default)
-#   .\scripts\sync-training-data.ps1 delete <path>     # Delete file/directory from GCS
+#   .\scripts\sync-reference-data.ps1 upload            # Upload local changes to GCS
+#   .\scripts\sync-reference-data.ps1 download          # Download changes from GCS
+#   .\scripts\sync-reference-data.ps1 both              # Sync both directions (default)
+#   .\scripts\sync-reference-data.ps1 delete <path>     # Delete file/directory from GCS
 
 param(
     [Parameter(Position=0)]
@@ -41,7 +41,7 @@ foreach ($pattern in $EXCLUDE_PATTERNS) {
 }
 
 Write-Host "=========================================="
-Write-Host "Sync Training Data with GCS"
+Write-Host "Sync Reference Data with GCS"
 Write-Host "=========================================="
 Write-Host ""
 
@@ -61,36 +61,36 @@ $cmd = $Command.ToLower()
 if ($cmd -eq "upload") {
     Write-Host "Uploading training data to GCS..."
     Write-Host ""
-    $gsutilArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
+    $gsutilArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/reference_data", "$BUCKET/reference_data")
     & gsutil $gsutilArgs
     Write-Host ""
-    Write-Host "OK Training data uploaded to $BUCKET/training_data" -ForegroundColor Green
+    Write-Host "OK Reference data uploaded to $BUCKET/reference_data" -ForegroundColor Green
 }
 elseif ($cmd -eq "download") {
     Write-Host "Downloading training data from GCS (~270MB)..."
     Write-Host ""
-    New-Item -ItemType Directory -Force -Path "artifacts/training_data" | Out-Null
-    $gsutilArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
+    New-Item -ItemType Directory -Force -Path "artifacts/reference_data" | Out-Null
+    $gsutilArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/reference_data", "artifacts/reference_data")
     & gsutil $gsutilArgs
     Write-Host ""
-    Write-Host "OK Training data downloaded to artifacts/training_data" -ForegroundColor Green
+    Write-Host "OK Reference data downloaded to artifacts/reference_data" -ForegroundColor Green
 }
 elseif ($cmd -eq "both") {
     Write-Host "Syncing training data bidirectionally..."
     Write-Host ""
-    $uploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/training_data", "$BUCKET/training_data")
+    $uploadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("artifacts/reference_data", "$BUCKET/reference_data")
     & gsutil $uploadArgs
-    $downloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/training_data", "artifacts/training_data")
+    $downloadArgs = @("-m", "rsync", "-r") + $EXCLUDE_FLAGS + @("$BUCKET/reference_data", "artifacts/reference_data")
     & gsutil $downloadArgs
     Write-Host ""
-    Write-Host "OK Training data synced" -ForegroundColor Green
+    Write-Host "OK Reference data synced" -ForegroundColor Green
 }
 elseif ($cmd -eq "delete") {
     if ([string]::IsNullOrWhiteSpace($DeletePath)) {
         Write-Host "Error: delete command requires a path" -ForegroundColor Red
         Write-Host ""
-        Write-Host "Usage: .\scripts\sync-training-data.ps1 delete <path>"
-        Write-Host "Example: .\scripts\sync-training-data.ps1 delete training_data/2024-01/.DS_Store"
+        Write-Host "Usage: .\scripts\sync-reference-data.ps1 delete <path>"
+        Write-Host "Example: .\scripts\sync-reference-data.ps1 delete reference_data/2024-01/.DS_Store"
         exit 1
     }
     Write-Host "Deleting $BUCKET/$DeletePath from GCS..."
@@ -103,10 +103,10 @@ else {
     Write-Host "Error: Unknown command '$Command'" -ForegroundColor Red
     Write-Host ""
     Write-Host "Usage:"
-    Write-Host "  .\scripts\sync-training-data.ps1 upload            # Upload local changes to GCS"
-    Write-Host "  .\scripts\sync-training-data.ps1 download          # Download changes from GCS"
-    Write-Host "  .\scripts\sync-training-data.ps1 both              # Sync both directions"
-    Write-Host "  .\scripts\sync-training-data.ps1 delete <path>     # Delete file/directory from GCS"
+    Write-Host "  .\scripts\sync-reference-data.ps1 upload            # Upload local changes to GCS"
+    Write-Host "  .\scripts\sync-reference-data.ps1 download          # Download changes from GCS"
+    Write-Host "  .\scripts\sync-reference-data.ps1 both              # Sync both directions"
+    Write-Host "  .\scripts\sync-reference-data.ps1 delete <path>     # Delete file/directory from GCS"
     exit 1
 }
 

@@ -6,7 +6,7 @@ Real-time monitoring of San Francisco's Muni Metro subway using OpenCV-based com
 
 URL: https://munimet.ro
 
-This project was "vibe coded" using Anthropic's Claude Code. Uses deterministic computer vision analysis - no ML models or external AI services required.
+This project was "vibe coded" using Anthropic's Claude Code. Uses deterministic computer vision analysis; no ML models or external AI services required.
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ This project was "vibe coded" using Anthropic's Claude Code. Uses deterministic 
 Quick checklist:
 - Python 3.13+
 - Git
-- Google Cloud SDK with gsutil (for accessing training data and cloud deployment)
+- Google Cloud SDK with gsutil (for accessing reference data and cloud deployment)
 
 ### Installation
 
@@ -26,14 +26,14 @@ Quick checklist:
 git clone https://github.com/MrEricSir/munimet.ro.git
 cd munimet.ro
 
-# Download training data from GCS (optional - for development/testing)
+# Download reference data from GCS (optional - for development/testing)
 ./scripts/sync-artifacts.sh download    # macOS/Linux
 # or
 .\scripts\sync-artifacts.ps1 download   # Windows
 ```
 
 The sync script will download:
-- Training dataset (~270MB) - labeled images for testing
+- Reference dataset (~270MB) - labeled images for testing
 
 **Note:** Requires `gcloud` authentication. Run `gcloud auth login` first.
 
@@ -80,7 +80,7 @@ Credentials are optional - the app works without them, but won't post status upd
 
 ## Accessing Training Data
 
-The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are stored in Google Cloud Storage and synced via rsync scripts.
+The reference dataset (2,666 labeled images, ~270MB) is stored in Google Cloud Storage and synced via rsync scripts.
 
 ### For Collaborators with GCS Access
 
@@ -92,15 +92,13 @@ The training dataset (2,666 labeled images, ~270MB) and model files (856MB) are 
    gcloud config set project munimetro
    ```
 
-3. Download training data and models using sync scripts:
+3. Download reference data using sync scripts:
    ```bash
-   # Download both training data and models
    ./scripts/sync-artifacts.sh download    # macOS/Linux
    .\scripts\sync-artifacts.ps1 download   # Windows
 
-   # Or download individually:
-   ./scripts/sync-training-data.sh download  # Training data only (~270MB)
-   ./scripts/sync-models.sh download         # Models only (~856MB)
+   # Or download reference data only:
+   ./scripts/sync-reference-data.sh download  # Reference data only (~270MB)
    ```
 
 The sync scripts use `gsutil rsync` to efficiently download only changed files.
@@ -114,12 +112,19 @@ Contributors can collect their own test images:
    python scripts/download_muni_image.py  # Run periodically to build dataset
    ```
 
-2. Visualize detection:
+2. Analyze a single image:
+   ```bash
+   python scripts/analyze.py path/to/image.jpg           # Pretty output
+   python scripts/analyze.py path/to/image.jpg --json    # JSON output
+   python scripts/analyze.py path/to/image.jpg --verbose # Full details
+   ```
+
+3. Visualize detection interactively:
    ```bash
    python scripts/station_viewer.py  # Interactive detection viewer
    ```
 
-3. Run tests:
+4. Run tests:
    ```bash
    pytest tests/test_system_status.py -v  # Verify detection accuracy
    ```
@@ -133,8 +138,9 @@ munimet.ro/
 │   └── detection.py       # OpenCV-based status detection
 │
 ├── scripts/               # Detection and utility scripts
+│   ├── analyze.py              # CLI tool for image analysis
 │   ├── station_detector.py     # Station position detection
-│   ├── train_detector_v3.py    # Train ID detection (OCR)
+│   ├── train_detector.py       # Train ID detection (OCR)
 │   ├── detect_stations.py      # Station configuration
 │   └── station_viewer.py       # Debug visualization tool
 │
@@ -157,7 +163,7 @@ munimet.ro/
 │   └── test_train_detection.py # Train detection tests
 │
 └── artifacts/             # Generated data (synced via GCS)
-    ├── training_data/     # Reference images (~270MB)
+    ├── reference_data/     # Reference images (~270MB)
     │   ├── images/        # Labeled snapshots
     │   └── labels.json    # Training labels
     └── runtime/           # Transient runtime data (gitignored)
@@ -169,7 +175,6 @@ munimet.ro/
 
 - **[Setup Guide](SETUP.md)** - Comprehensive installation guide for macOS, Linux, and Windows
 - **[Deployment Guide](deploy/README.md)** - Local and cloud deployment instructions
-- **[Training Guide](training/README.md)** - Data collection, labeling, and model training
 - **[API Documentation](api/README.md)** - API endpoints and configuration
 - **[Testing](tests/README.md)** - Automated test suite
 
@@ -243,7 +248,7 @@ Users
 - **Web Framework**: Falcon (async-ready, production WSGI)
 - **Frontend**: Vanilla JavaScript (no build step)
 - **Deployment**: Docker, Google Cloud Run, Cloud Scheduler
-- **Storage**: Google Cloud Storage (training data, cache)
+- **Storage**: Google Cloud Storage (reference data, cache)
 
 ## Requirements
 
@@ -256,7 +261,7 @@ Users
 
 ### Development Tools
 - Docker & Docker Compose
-- Google Cloud SDK with gsutil (for accessing training data and cloud deployment)
+- Google Cloud SDK with gsutil (for accessing reference data and cloud deployment)
 - pytest for running tests
 
 ## License

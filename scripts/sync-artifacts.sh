@@ -1,8 +1,7 @@
 #!/bin/bash
-# Sync artifacts (training images) with Google Cloud Storage
+# Sync artifacts (reference images) with Google Cloud Storage
 #
-# This is an alias for sync-training-data.sh for convenience.
-# ML models are no longer used (replaced with OpenCV-based detection).
+# This is an alias for sync-reference-data.sh for convenience.
 #
 # Usage:
 #   ./scripts/sync-artifacts.sh upload    # Upload local changes to GCS
@@ -14,5 +13,5 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Just forward to sync-training-data.sh
-exec "$SCRIPT_DIR/sync-training-data.sh" "$@"
+# Just forward to sync-reference-data.sh
+exec "$SCRIPT_DIR/sync-reference-data.sh" "$@"

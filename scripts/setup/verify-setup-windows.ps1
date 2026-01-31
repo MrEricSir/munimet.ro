@@ -48,7 +48,7 @@ if ($gcloud) {
         Write-Host "    Run: gcloud auth login" -ForegroundColor Yellow
     }
 } else {
-    Write-Host "  WARNING gcloud not found (required for training data sync)" -ForegroundColor Yellow
+    Write-Host "  WARNING gcloud not found (required for reference data sync)" -ForegroundColor Yellow
     Write-Host "    Install with: scoop bucket add extras && scoop install gcloud" -ForegroundColor Yellow
 }
 Write-Host ""
@@ -65,13 +65,6 @@ Write-Host ""
 
 # Check Python virtual environment
 Write-Host "[5/5] Checking Python virtual environment..." -ForegroundColor White
-if (Test-Path "training/venv") {
-    Write-Host "  OK Training virtual environment exists" -ForegroundColor Green
-} else {
-    Write-Host "  WARNING Training virtual environment not found" -ForegroundColor Yellow
-    Write-Host "    Run: .\scripts\setup\setup-python-env.ps1" -ForegroundColor Yellow
-}
-
 if (Test-Path "api/venv") {
     Write-Host "  OK API virtual environment exists" -ForegroundColor Green
 } else {
@@ -93,8 +86,7 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "1. Run setup scripts if needed: .\scripts\setup\setup-python-env.ps1" -ForegroundColor White
 Write-Host "2. Authenticate with Google Cloud: gcloud auth login" -ForegroundColor White
-Write-Host "3. Download model files: .\scripts\sync-models.ps1 download" -ForegroundColor White
-Write-Host "4. Download training data: .\scripts\sync-training-data.ps1 download" -ForegroundColor White
+Write-Host "3. Download reference data: .\scripts\sync-reference-data.ps1 download" -ForegroundColor White
 Write-Host ""
 Write-Host "For detailed setup instructions, see SETUP.md" -ForegroundColor Cyan
 Write-Host ""

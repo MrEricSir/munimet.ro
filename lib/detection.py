@@ -34,9 +34,9 @@ from detect_stations import STATION_ORDER, INTERNAL_STATIONS
 
 # Try to import train detector (requires tesseract)
 try:
-    from train_detector_v3 import TrainDetectorV3, TESSERACT_AVAILABLE
+    from train_detector import TrainDetector, TESSERACT_AVAILABLE
 except ImportError:
-    TrainDetectorV3 = None
+    TrainDetector = None
     TESSERACT_AVAILABLE = False
 
 # Station full names for display
@@ -91,8 +91,8 @@ def _get_station_detector():
 def _get_train_detector():
     """Get or create train detector (singleton)."""
     global _train_detector
-    if _train_detector is None and TrainDetectorV3 is not None and TESSERACT_AVAILABLE:
-        _train_detector = TrainDetectorV3()
+    if _train_detector is None and TrainDetector is not None and TESSERACT_AVAILABLE:
+        _train_detector = TrainDetector()
     return _train_detector
 
 
@@ -177,8 +177,14 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
     Returns:
         list: List of bunching incidents [{station, track, direction, train_count}]
     """
-    # Stations to exclude (turnaround points and internal)
-    EXCLUDED_STATIONS = {'CT', 'EM', 'MN', 'FP', 'TT'}
+    # Internal stations to always exclude
+    INTERNAL_STATIONS = {'MN', 'FP', 'TT'}
+
+    # Track-specific exclusions for turnaround points where bunching is normal:
+    # - Upper track (Westbound/Northbound): CT is the northern terminus
+    # - Lower track (Eastbound/Southbound): EM is the eastern terminus, MO is adjacent
+    EXCLUDED_UPPER = INTERNAL_STATIONS | {'CT'}
+    EXCLUDED_LOWER = INTERNAL_STATIONS | {'EM', 'MO'}  # Eastbound trains bunch at Embarcadero turnaround
 
     def get_direction(station_code, track):
         if track == 'upper':
@@ -214,7 +220,7 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
         nearest_station = None
         min_distance = float('inf')
         for station_code, station_x in STATION_X_POSITIONS.items():
-            if station_code in EXCLUDED_STATIONS:
+            if station_code in EXCLUDED_UPPER:
                 continue
             if station_x <= cluster_left_x:
                 distance = cluster_left_x - station_x
@@ -234,7 +240,7 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
         nearest_station = None
         min_distance = float('inf')
         for station_code, station_x in STATION_X_POSITIONS.items():
-            if station_code in EXCLUDED_STATIONS:
+            if station_code in EXCLUDED_LOWER:
                 continue
             if station_x >= cluster_right_x:
                 distance = station_x - cluster_right_x
