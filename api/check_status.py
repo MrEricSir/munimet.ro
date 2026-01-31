@@ -110,21 +110,23 @@ def check_status(should_write_cache=False):
             'timestamp': datetime.now().isoformat()
         }
 
-        # Read existing cache to get previous status
+        # Read existing cache to get previous statuses
         statuses = []
         previous_status = None
         cache_data = read_cache()
         if cache_data:
-            # Get the current status from previous cache (becomes previous)
+            # Get previous statuses from cache
             if 'statuses' in cache_data and len(cache_data['statuses']) > 0:
                 previous_status = cache_data['statuses'][0]['status']
-                statuses.append(cache_data['statuses'][0])
+                # Keep existing statuses (will be trimmed below)
+                statuses = cache_data['statuses'][:]
 
         # Add new status at the front
         statuses.insert(0, new_status)
 
-        # Keep only last 2 statuses
-        statuses = statuses[:2]
+        # Keep only last 3 statuses (~1.5 min window at 30s intervals)
+        # This filters out brief transient issues
+        statuses = statuses[:3]
 
         # Determine best status (most optimistic)
         # Priority: green > yellow > red
@@ -153,7 +155,8 @@ def check_status(should_write_cache=False):
         if write_cache(cache_data):
             print(f"\nCache updated")
             if len(statuses) > 1:
-                print(f"  Current: {statuses[0]['status']}, Previous: {statuses[1]['status']}, Best: {best_status['status']}")
+                history = ' -> '.join(s['status'] for s in statuses)
+                print(f"  History: [{history}], Best: {best_status['status']}")
             # Also cache the image for the dashboard
             if write_cached_image(result['filepath']):
                 print(f"  Image cached")
