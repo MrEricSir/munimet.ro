@@ -216,6 +216,48 @@ def read_cached_image():
         return None
 
 
+# Status priority for "best of N" calculation
+# Higher number = more optimistic status
+STATUS_PRIORITY = {'green': 3, 'yellow': 2, 'red': 1}
+
+
+def calculate_best_status(statuses, window_size=3):
+    """
+    Calculate the best (most optimistic) status from a list of recent statuses.
+
+    This implements the "best of N" smoothing to filter out brief transient issues.
+    The webapp, RSS feed, and Bluesky all use this to ensure consistent status reporting.
+
+    Args:
+        statuses: List of status dicts, most recent first. Each must have 'status' key.
+        window_size: Number of recent statuses to consider (default 3)
+
+    Returns:
+        dict: The status entry with the most optimistic status within the window,
+              preferring the most recent if there are ties. Returns None if empty.
+    """
+    if not statuses:
+        return None
+
+    # Only consider the most recent N statuses
+    recent = statuses[:window_size]
+
+    # Find the best (most optimistic) status value
+    best_value = max(
+        [s['status'] for s in recent],
+        key=lambda x: STATUS_PRIORITY.get(x, 0)
+    )
+
+    # Return the most recent entry with that status
+    # This ensures we use the most recent delay info if status is yellow
+    for s in recent:
+        if s['status'] == best_value:
+            return s
+
+    # Fallback (shouldn't happen)
+    return recent[0]
+
+
 # Backward compatibility: import post_to_bluesky from notifiers module
 # This allows existing code to continue using: from lib.muni_lib import post_to_bluesky
 from lib.notifiers import post_to_bluesky

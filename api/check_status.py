@@ -20,7 +20,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image
+from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image, calculate_best_status
 from lib.notifiers import notify_status_change
 
 # Configuration
@@ -111,40 +111,25 @@ def check_status(should_write_cache=False):
             'timestamp': datetime.now().isoformat()
         }
 
-        # Read existing cache to get previous statuses
+        # Read existing cache to get previous statuses and best_status
         statuses = []
-        previous_status = None
+        previous_best_status = None
         cache_data = read_cache()
         if cache_data:
-            # Get previous statuses from cache
-            if 'statuses' in cache_data and len(cache_data['statuses']) > 0:
-                previous_status = cache_data['statuses'][0]['status']
-                # Keep existing statuses (will be trimmed below)
+            if 'statuses' in cache_data:
                 statuses = cache_data['statuses'][:]
+            if 'best_status' in cache_data:
+                previous_best_status = cache_data['best_status']
 
         # Add new status at the front
         statuses.insert(0, new_status)
 
+        # Calculate best status using shared function
+        # This ensures webapp, RSS, and Bluesky all show the same status
+        best_status = calculate_best_status(statuses, window_size=3)
+
         # Keep only last 3 statuses (~1.5 min window at 30s intervals)
-        # This filters out brief transient issues
         statuses = statuses[:3]
-
-        # Determine best status (most optimistic)
-        # Priority: green > yellow > red
-        status_priority = {'green': 3, 'yellow': 2, 'red': 1}
-        best_status_value = max([s['status'] for s in statuses], key=lambda x: status_priority.get(x, 0))
-
-        # Find the most recent entry with the best status
-        # This ensures we use the most recent delay info if status is yellow
-        best_status = None
-        for s in statuses:  # statuses[0] is most recent
-            if s['status'] == best_status_value:
-                best_status = s
-                break
-
-        # Fallback to most recent if somehow not found
-        if best_status is None:
-            best_status = statuses[0]
 
         # Write cache with status history
         cache_data = {
@@ -166,16 +151,18 @@ def check_status(should_write_cache=False):
         else:
             print(f"\nCache write failed")
 
-        # Notify all channels if status changed
-        current_status = detection['status']
-        if previous_status is not None and current_status != previous_status:
-            print(f"\nStatus changed: {previous_status} -> {current_status}")
-            delay_summaries = detection.get('detection', {}).get('delay_summaries', [])
+        # Notify all channels if BEST status changed
+        # This ensures notifications match what the webapp shows
+        current_best = best_status['status']
+        previous_best = previous_best_status['status'] if previous_best_status else None
+        if previous_best is not None and current_best != previous_best:
+            print(f"\nBest status changed: {previous_best} -> {current_best}")
+            delay_summaries = best_status.get('detection', {}).get('delay_summaries', [])
             notify_results = notify_status_change(
-                status=current_status,
-                previous_status=previous_status,
+                status=current_best,
+                previous_status=previous_best,
                 delay_summaries=delay_summaries,
-                timestamp=new_status['timestamp']
+                timestamp=best_status['timestamp']
             )
             for channel, result in notify_results.items():
                 if result['success']:
