@@ -1,2 +1,4 @@
 PIL = ["pillow"]
 google = ["google-cloud-storage"]
+cv2 = ["opencv-python-headless"]
+dotenv = ["python-dotenv"]

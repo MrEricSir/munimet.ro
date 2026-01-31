@@ -10,11 +10,14 @@ deps = ["requirements.txt"]
 
 # Ignore dependencies that are used but not imported
 ignore_unused = [
-    "gunicorn",             # WSGI server, invoked as CLI tool
-    "numpy",                # Imported lazily inside lib functions
-    "pillow",               # Imported as PIL
-    "google-cloud-storage", # Imported as google
-    "pytesseract",          # Used by train_detector.py (in scripts/)
+    "gunicorn",                  # WSGI server, invoked as CLI tool
+    "numpy",                     # Imported lazily inside lib functions
+    "pillow",                    # Imported as PIL
+    "google-cloud-storage",      # Imported as google
+    "google-cloud-secret-manager", # Used at runtime for Cloud Run secrets
+    "pytesseract",               # Used by train_detector.py (in scripts/)
+    "opencv-python-headless",    # Imported as cv2
+    "python-dotenv",             # Imported as dotenv
 ]
 
 # Ignore imports that aren't in requirements.txt (local modules)
