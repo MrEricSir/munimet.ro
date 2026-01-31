@@ -4,6 +4,8 @@ Muni Status API - Web service for checking SF Muni subway status.
 
 Endpoints:
     GET /status - Return current status (from cache or live detection)
+    GET /feed.xml - RSS feed of status updates
+    GET /health - Health check
 
 Usage:
     gunicorn api:app --bind 0.0.0.0:8000
@@ -232,6 +234,29 @@ class LatestImageResource:
         resp.media = {'error': 'No image available'}
 
 
+class RSSFeedResource:
+    """Serve the RSS feed of status updates."""
+
+    def on_get(self, req, resp):
+        """Handle GET request to /feed.xml"""
+        from lib.notifiers import read_rss_feed, generate_empty_feed
+
+        feed_content = read_rss_feed()
+
+        if feed_content:
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/rss+xml; charset=utf-8'
+            resp.text = feed_content
+        else:
+            # Return empty feed if no history yet
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'application/rss+xml; charset=utf-8'
+            resp.text = generate_empty_feed()
+
+        # Cache for 1 minute - feeds update when status changes
+        resp.set_header('Cache-Control', 'public, max-age=60')
+
+
 class StaticResource:
     """Serve the frontend HTML files with proper caching."""
     def __init__(self, filename):
@@ -271,6 +296,7 @@ falcon_app.add_route('/about', StaticResource('about.html'))
 falcon_app.add_route('/status', StatusResource())
 falcon_app.add_route('/health', HealthResource())
 falcon_app.add_route('/latest-image', LatestImageResource())
+falcon_app.add_route('/feed.xml', RSSFeedResource())
 
 # Wrap with WhiteNoise for efficient static file serving with compression and caching
 # WhiteNoise automatically compresses files (gzip/brotli) and adds proper headers

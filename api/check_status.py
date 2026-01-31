@@ -20,7 +20,8 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image, post_to_bluesky
+from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image
+from lib.notifiers import notify_status_change
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
@@ -165,16 +166,22 @@ def check_status(should_write_cache=False):
         else:
             print(f"\nCache write failed")
 
-        # Post to Bluesky if status changed
+        # Notify all channels if status changed
         current_status = detection['status']
         if previous_status is not None and current_status != previous_status:
             print(f"\nStatus changed: {previous_status} -> {current_status}")
             delay_summaries = detection.get('detection', {}).get('delay_summaries', [])
-            bluesky_result = post_to_bluesky(current_status, previous_status, delay_summaries)
-            if bluesky_result['success']:
-                print(f"Posted to Bluesky: {bluesky_result['uri']}")
-            else:
-                print(f"Bluesky post failed: {bluesky_result['error']}")
+            notify_results = notify_status_change(
+                status=current_status,
+                previous_status=previous_status,
+                delay_summaries=delay_summaries,
+                timestamp=new_status['timestamp']
+            )
+            for channel, result in notify_results.items():
+                if result['success']:
+                    print(f"  {channel}: OK")
+                else:
+                    print(f"  {channel}: Failed - {result.get('error', 'Unknown error')}")
 
     return True
 
