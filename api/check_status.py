@@ -20,7 +20,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, post_to_bluesky
+from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image, post_to_bluesky
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
@@ -154,6 +154,11 @@ def check_status(should_write_cache=False):
             print(f"\nCache updated")
             if len(statuses) > 1:
                 print(f"  Current: {statuses[0]['status']}, Previous: {statuses[1]['status']}, Best: {best_status['status']}")
+            # Also cache the image for the dashboard
+            if write_cached_image(result['filepath']):
+                print(f"  Image cached")
+            else:
+                print(f"  Image cache failed")
         else:
             print(f"\nCache write failed")
 

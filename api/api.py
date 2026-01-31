@@ -23,7 +23,7 @@ PROJECT_ROOT = API_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, detect_muni_status, read_cache
+from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, read_cached_image
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
@@ -188,36 +188,48 @@ class LatestImageResource:
 
     def on_get(self, req, resp):
         """Handle GET request to /latest-image"""
-        # Try to get image path from cache
-        cache_data = read_cache()
         image_path = None
 
+        # Try to get image path from cache (works for local development)
+        cache_data = read_cache()
         if cache_data:
-            # Get image path from most recent status
             statuses = cache_data.get('statuses', [])
             if statuses and 'image_path' in statuses[0]:
                 image_path = statuses[0]['image_path']
 
-        # Fallback: find most recent image in downloads directory
-        if not image_path or not os.path.exists(image_path):
-            downloads_dir = Path(SNAPSHOT_DIR)
-            if downloads_dir.exists():
-                images = sorted(downloads_dir.glob('muni_snapshot_*.jpg'), reverse=True)
-                if images:
-                    image_path = str(images[0])
-
-        if not image_path or not os.path.exists(image_path):
-            resp.status = falcon.HTTP_404
-            resp.media = {'error': 'No image available'}
+        # Check if cached path exists locally
+        if image_path and os.path.exists(image_path):
+            with open(image_path, 'rb') as f:
+                resp.data = f.read()
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'image/jpeg'
+            resp.set_header('Cache-Control', 'public, max-age=30')
             return
 
-        # Serve the image
-        with open(image_path, 'rb') as f:
-            resp.data = f.read()
+        # Fallback: find most recent image in downloads directory (local dev)
+        downloads_dir = Path(SNAPSHOT_DIR)
+        if downloads_dir.exists():
+            images = sorted(downloads_dir.glob('muni_snapshot_*.jpg'), reverse=True)
+            if images:
+                with open(images[0], 'rb') as f:
+                    resp.data = f.read()
+                resp.status = falcon.HTTP_200
+                resp.content_type = 'image/jpeg'
+                resp.set_header('Cache-Control', 'public, max-age=30')
+                return
 
-        resp.status = falcon.HTTP_200
-        resp.content_type = 'image/jpeg'
-        resp.set_header('Cache-Control', 'public, max-age=30')
+        # Cloud Run: read cached image from GCS
+        # (The checker job uploads analyzed images to GCS)
+        cached_image = read_cached_image()
+        if cached_image:
+            resp.data = cached_image
+            resp.status = falcon.HTTP_200
+            resp.content_type = 'image/jpeg'
+            resp.set_header('Cache-Control', 'public, max-age=30')
+            return
+
+        resp.status = falcon.HTTP_404
+        resp.media = {'error': 'No image available'}
 
 
 class StaticResource:

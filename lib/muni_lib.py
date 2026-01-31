@@ -141,6 +141,81 @@ def write_cache(data):
         return False
 
 
+def write_cached_image(image_path):
+    """
+    Write the analyzed image to cache (local file or Cloud Storage).
+
+    Args:
+        image_path: Path to the local image file
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    cache_path = get_cache_path()
+
+    try:
+        if cache_path.startswith('gs://'):
+            # Write to Cloud Storage
+            from google.cloud import storage
+
+            # Parse gs://bucket/path to get bucket name
+            parts = cache_path[5:].split('/', 1)
+            bucket_name = parts[0]
+
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob('latest_image.jpg')
+
+            # Upload image
+            blob.upload_from_filename(image_path, content_type='image/jpeg')
+            return True
+        else:
+            # Local development - just keep the file where it is
+            return True
+    except Exception as e:
+        print(f"Error writing cached image: {e}")
+        return False
+
+
+def read_cached_image():
+    """
+    Read the cached image from local file or Cloud Storage.
+
+    Returns:
+        bytes: Image data, or None if not found
+    """
+    cache_path = get_cache_path()
+
+    try:
+        if cache_path.startswith('gs://'):
+            # Read from Cloud Storage
+            from google.cloud import storage
+
+            # Parse gs://bucket/path to get bucket name
+            parts = cache_path[5:].split('/', 1)
+            bucket_name = parts[0]
+
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob('latest_image.jpg')
+
+            if not blob.exists():
+                return None
+
+            return blob.download_as_bytes()
+        else:
+            # Local development - read from cache directory
+            cache_dir = os.path.dirname(cache_path)
+            image_path = os.path.join(cache_dir, 'latest_image.jpg')
+            if os.path.exists(image_path):
+                with open(image_path, 'rb') as f:
+                    return f.read()
+            return None
+    except Exception as e:
+        print(f"Error reading cached image: {e}")
+        return None
+
+
 # Status messages matching the frontend (api/html/index.html)
 STATUS_MESSAGES = {
     'green': '🟢 All aboard: Muni is on track',
