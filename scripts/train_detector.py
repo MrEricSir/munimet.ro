@@ -395,6 +395,10 @@ class TrainDetector:
         lines = [c.strip() for c in text.split('\n') if c.strip()]
         combined = ''.join(lines).upper()
 
+        # Remove station labels FIRST (before O→0 conversion changes them)
+        for label in self.station_labels:
+            combined = combined.replace(label, '')
+
         # OCR corrections
         combined = combined.replace('{', '7').replace('}', '7')
         combined = combined.replace('[', '7').replace(']', '7')
@@ -410,9 +414,6 @@ class TrainDetector:
 
         if combined and combined[0].isdigit():
             combined = combined.replace('L', '1').replace('S', '5').replace('B', '8')
-
-        for label in self.station_labels:
-            combined = combined.replace(label, '')
 
         matches = TRAIN_ID_PATTERN.findall(combined)
         if matches:
