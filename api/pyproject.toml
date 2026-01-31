@@ -25,6 +25,8 @@ ignore_undeclared = [
     "lib",               # Local shared library (../lib/muni_lib.py)
     "PIL",               # Import name for pillow package
     "google",            # Import name for google-cloud-storage package
+    "cv2",               # Import name for opencv-python-headless package
+    "dotenv",            # Import name for python-dotenv package
     "detect_stations",   # Local module (../scripts/detect_stations.py)
     "station_detector",  # Local module (../scripts/station_detector.py)
     "train_detector",    # Local module (../scripts/train_detector.py)
