@@ -22,6 +22,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image, calculate_best_status
 from lib.notifiers import notify_status_change
+from lib.analytics import log_status_check
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
@@ -150,6 +151,18 @@ def check_status(should_write_cache=False):
                 print(f"  Image cache failed")
         else:
             print(f"\nCache write failed")
+
+        # Log to analytics database
+        try:
+            log_status_check(
+                status=detection['status'],
+                best_status=best_status['status'],
+                detection_data=detection.get('detection', {}),
+                timestamp=new_status['timestamp']
+            )
+            print(f"  Analytics logged")
+        except Exception as e:
+            print(f"  Analytics log failed: {e}")
 
         # Notify all channels if BEST status changed
         # This ensures notifications match what the webapp shows

@@ -82,7 +82,7 @@ Health check endpoint for monitoring.
 
 ### GET /status
 
-Current Muni Metro status with best-of-two logic.
+Current Muni Metro status with best-of-three smoothing logic.
 
 **Response** (200 OK):
 ```json
@@ -124,8 +124,8 @@ Current Muni Metro status with best-of-two logic.
 - `probabilities`: Per-class probabilities
 - `cached`: Whether response served from cache
 - `cache_age`: Seconds since cache update
-- `status_history`: Last 2 status checks
-- `is_best_of_two`: Whether best-of-two logic applied
+- `status_history`: Last 3 status checks
+- `is_best_of_two`: Whether best-of-three smoothing applied
 
 **Caching Behavior**:
 - Maintains last 2 status checks
@@ -136,8 +136,63 @@ Current Muni Metro status with best-of-two logic.
 
 **Performance**:
 - Cached response: ~30ms
-- Live prediction: ~11s (download + ML inference)
+- Live detection: ~11s (download + OpenCV analysis)
 - Cache-only mode: ~30ms cached, 503 on miss
+
+### GET /feed.xml
+
+RSS feed of status updates. Updates when status changes.
+
+**Response** (200 OK): RSS 2.0 XML feed with recent status changes.
+
+**Caching**: 1 minute (`Cache-Control: public, max-age=60`)
+
+### GET /analytics
+
+Analytics dashboard showing delay statistics.
+
+**Response**: HTML page with charts for:
+- Status distribution (pie chart)
+- Delays by station (bar chart)
+- Delays by hour of day (bar chart)
+- Delays by day of week (bar chart)
+
+### GET /analytics-data
+
+JSON API for delay analytics.
+
+**Query Parameters**:
+- `days`: Number of days to analyze (default: 7, max: 365)
+
+**Response** (200 OK):
+```json
+{
+  "period_days": 7,
+  "frequency": {
+    "total_checks": 20160,
+    "delayed_checks": 245,
+    "delay_rate": 0.0122,
+    "by_status": {"green": 19800, "yellow": 245, "red": 115}
+  },
+  "by_station": [
+    {"station": "PO", "name": "Powell", "count": 45, "types": {"platform_hold": 40, "bunching": 5}}
+  ],
+  "by_time": {
+    "by_hour": {"0": 0, "1": 0, ..., "17": 45, "18": 38, ...},
+    "by_day": {"0": 50, "1": 48, ..., "6": 12}
+  },
+  "generated_at": "2026-01-31T14:30:00",
+  "from_cache": true,
+  "cache_age": 120.5
+}
+```
+
+**Notes**:
+- Reports are cached for 24 hours to reduce database load
+- Only yellow status counts as "delayed" (red = maintenance)
+- `by_day`: 0=Monday, 6=Sunday
+
+**Caching**: 24 hours (`Cache-Control: public, max-age=86400`)
 
 ## Web Dashboard
 
@@ -165,7 +220,7 @@ Lightweight single-page application (`dashboard.html`, 8.6KB).
 ```
 Cache Writer Process (background)
   ↓ downloads image every 60s
-  ↓ runs ML prediction
+  ↓ runs OpenCV detection
   ↓ writes JSON to disk
 Local Cache File
   ↑ reads JSON (~30ms)
@@ -180,7 +235,7 @@ Client Browser
 Cloud Scheduler (every 3 min)
   ↓ triggers via OAuth
 Cloud Run Job (munimetro-checker)
-  ↓ downloads image + predicts
+  ↓ downloads image + detects status
   ↓ writes JSON to GCS
 Cloud Storage (gs://munimetro-cache/)
   ↑ reads JSON (~100-200ms)

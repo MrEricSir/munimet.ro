@@ -135,7 +135,9 @@ Contributors can collect their own test images:
 munimet.ro/
 ├── lib/                    # Shared library code
 │   ├── muni_lib.py        # Core download & detection functions
-│   └── detection.py       # OpenCV-based status detection
+│   ├── detection.py       # OpenCV-based status detection
+│   ├── analytics.py       # SQLite-based delay analytics
+│   └── notifiers/         # Notification channels (Bluesky, RSS)
 │
 ├── scripts/               # Detection and utility scripts
 │   ├── analyze.py              # CLI tool for image analysis
@@ -229,9 +231,11 @@ Users
 - **Production API** - Falcon web framework with health checks, caching, and graceful degradation
 - **Lightweight Frontend** - Vanilla JavaScript with zero runtime dependencies
 - **Containerized Deployment** - Multi-stage Docker builds with security best practices
-- **Smart Caching** - Best-of-two logic reduces false positives (~30ms local response time)
+- **Smart Caching** - Best-of-three smoothing reduces false positives (~30ms local response time)
 - **Cloud Native** - Serverless deployment on Google Cloud Run with automatic scaling
 - **No ML Dependencies** - No PyTorch or large model files required
+- **Multi-Channel Notifications** - Status updates via Bluesky and RSS feed
+- **Delay Analytics** - SQLite-based tracking with visual dashboard for delay patterns
 
 ## Development Workflow
 

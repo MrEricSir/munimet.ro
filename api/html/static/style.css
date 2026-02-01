@@ -181,6 +181,18 @@ p.sub-credits {
     color: #a0aec0;
 }
 
+.back-link {
+    display: block;
+    margin-bottom: 20px;
+    color: #4299e1;
+    text-decoration: none;
+    text-align: left;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
 .details {
     flex-shrink: 0;
     margin-bottom: 15px;

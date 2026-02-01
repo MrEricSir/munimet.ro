@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <title>Delay Analytics - MuniMet.ro</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        .analytics-container {
+            text-align: left;
+            padding: 20px;
+        }
+
+        .stats-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 30px;
+            justify-content: center;
+        }
+
+        .stat-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            min-width: 150px;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #718096;
+            margin-top: 5px;
+        }
+
+        .stat-card.green .stat-value { color: #38a169; }
+        .stat-card.yellow .stat-value { color: #d69e2e; }
+        .stat-card.red .stat-value { color: #e53e3e; }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .chart-card h3 {
+            font-family: "handodle";
+            font-size: 1.5em;
+            color: #2d3748;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .loading .spinner {
+            font-size: 3em;
+            display: inline-block;
+        }
+
+        .period-selector {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .period-selector button {
+            background: #fff;
+            border: 2px solid #e2e8f0;
+            padding: 8px 20px;
+            margin: 0 5px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.2s;
+        }
+
+        .period-selector button:hover {
+            border-color: #4299e1;
+        }
+
+        .period-selector button.active {
+            background: #4299e1;
+            border-color: #4299e1;
+            color: #fff;
+        }
+
+        .cache-info {
+            text-align: center;
+            font-size: 0.85em;
+            color: #a0aec0;
+            margin-top: 20px;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-wrapper {
+                height: 250px;
+            }
+
+            .stats-summary {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .stat-card {
+                width: 100%;
+                max-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body class="status-green">
+    <div class="container">
+        <div id="app">
+            <div class="header">
+                <h1>Muni Metro</h1>
+                <h2>Delay Analytics</h2>
+            </div>
+
+            <div class="main">
+                <div class="analytics-container">
+                    <a href="/" class="back-link">&larr; Back to Status</a>
+
+                    <div class="period-selector">
+                        <button data-days="1">24 Hours</button>
+                        <button data-days="7" class="active">7 Days</button>
+                        <button data-days="30">30 Days</button>
+                        <button data-days="365">1 Year</button>
+                    </div>
+
+                    <div id="content">
+                        <div class="loading">
+                            <div class="spinner">⎈</div>
+                            <p>Loading analytics...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer">
+                <div class="about-info">
+                    <p><a href="/about">About</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let charts = {};
+        let currentDays = 7;
+
+        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+        async function fetchAnalytics(days) {
+            try {
+                const response = await fetch(`/analytics-data?days=${days}`);
+                if (!response.ok) throw new Error('Failed to fetch');
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching analytics:', error);
+                return null;
+            }
+        }
+
+        function destroyCharts() {
+            Object.values(charts).forEach(chart => chart.destroy());
+            charts = {};
+        }
+
+        function renderAnalytics(data) {
+            if (!data) {
+                document.getElementById('content').innerHTML = `
+                    <div class="no-data">
+                        <p>Unable to load analytics data.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const freq = data.frequency;
+            const hasData = freq.total_checks > 0;
+
+            if (!hasData) {
+                document.getElementById('content').innerHTML = `
+                    <div class="no-data">
+                        <p>No data available for this time period.</p>
+                        <p>Analytics will populate as status checks run.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Calculate percentages
+            const greenPct = ((freq.by_status.green / freq.total_checks) * 100).toFixed(1);
+            const yellowPct = ((freq.by_status.yellow / freq.total_checks) * 100).toFixed(1);
+            const redPct = ((freq.by_status.red / freq.total_checks) * 100).toFixed(1);
+
+            const cacheInfo = data.from_cache
+                ? `Data cached ${Math.round(data.cache_age / 60)} min ago`
+                : `Generated ${new Date(data.generated_at).toLocaleTimeString()}`;
+
+            document.getElementById('content').innerHTML = `
+                <div class="stats-summary">
+                    <div class="stat-card">
+                        <div class="stat-value">${freq.total_checks.toLocaleString()}</div>
+                        <div class="stat-label">Total Checks</div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-value">${greenPct}%</div>
+                        <div class="stat-label">Normal</div>
+                    </div>
+                    <div class="stat-card yellow">
+                        <div class="stat-value">${yellowPct}%</div>
+                        <div class="stat-label">Delayed</div>
+                    </div>
+                    <div class="stat-card red">
+                        <div class="stat-value">${redPct}%</div>
+                        <div class="stat-label">Maintenance</div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Status Distribution</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Delays by Station</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="stationChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Delays by Hour</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="hourChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Delays by Day of Week</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="dayChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cache-info">${cacheInfo}</div>
+            `;
+
+            // Destroy existing charts
+            destroyCharts();
+
+            // Status distribution pie chart
+            charts.status = new Chart(document.getElementById('statusChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Normal', 'Delayed', 'Maintenance'],
+                    datasets: [{
+                        data: [freq.by_status.green, freq.by_status.yellow, freq.by_status.red],
+                        backgroundColor: ['#48bb78', '#ecc94b', '#fc8181'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Delays by station bar chart (vertical)
+            const stations = (data.by_station || []).slice(0, 10); // Top 10
+            const stationLabels = stations.map(s => s.name || s.station);
+            const stationCounts = stations.map(s => s.count);
+            charts.station = new Chart(document.getElementById('stationChart'), {
+                type: 'bar',
+                data: {
+                    labels: stationLabels,
+                    datasets: [{
+                        label: 'Delay Incidents',
+                        data: stationCounts,
+                        backgroundColor: '#ecc94b'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                display: true,
+                                autoSkip: false
+                            }
+                        },
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            // Delays by hour bar chart
+            const hourData = data.by_time.by_hour;
+            charts.hour = new Chart(document.getElementById('hourChart'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(hourData).map(h => `${h}:00`),
+                    datasets: [{
+                        label: 'Delay Incidents',
+                        data: Object.values(hourData),
+                        backgroundColor: '#4299e1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            // Delays by day of week bar chart
+            const dayData = data.by_time.by_day;
+            charts.day = new Chart(document.getElementById('dayChart'), {
+                type: 'bar',
+                data: {
+                    labels: dayNames,
+                    datasets: [{
+                        label: 'Delay Incidents',
+                        data: Object.values(dayData),
+                        backgroundColor: '#9f7aea'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        async function loadData(days) {
+            currentDays = days;
+
+            // Update active button
+            document.querySelectorAll('.period-selector button').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.days) === days);
+            });
+
+            // Show loading
+            document.getElementById('content').innerHTML = `
+                <div class="loading">
+                    <div class="spinner">⎈</div>
+                    <p>Loading analytics...</p>
+                </div>
+            `;
+
+            const data = await fetchAnalytics(days);
+            renderAnalytics(data);
+        }
+
+        // Period selector buttons
+        document.querySelectorAll('.period-selector button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                loadData(parseInt(btn.dataset.days));
+            });
+        });
+
+        // Initial load
+        loadData(7);
+    </script>
+</body>
+</html>

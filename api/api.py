@@ -257,6 +257,40 @@ class RSSFeedResource:
         resp.set_header('Cache-Control', 'public, max-age=60')
 
 
+class AnalyticsResource:
+    """API endpoint for delay analytics data."""
+
+    def on_get(self, req, resp):
+        """
+        Handle GET request to /analytics
+
+        Query parameters:
+            days: Number of days to analyze (default 7)
+
+        Returns JSON with:
+            - period_days: number of days analyzed
+            - frequency: delay frequency stats
+            - by_station: delays grouped by station
+            - by_time: delays by hour and day of week
+            - generated_at: timestamp
+            - from_cache: whether result came from cache
+        """
+        from lib.analytics import get_analytics_report
+
+        # Parse days parameter (default 7, max 365)
+        try:
+            days = int(req.get_param('days') or 7)
+            days = min(max(days, 1), 365)
+        except (ValueError, TypeError):
+            days = 7
+
+        resp.status = falcon.HTTP_200
+        resp.media = get_analytics_report(days)
+
+        # Cache for 24 hours (matches internal report cache)
+        resp.set_header('Cache-Control', 'public, max-age=86400')
+
+
 class StaticResource:
     """Serve the frontend HTML files with proper caching."""
     def __init__(self, filename, content_type):
@@ -309,6 +343,8 @@ falcon_app.add_route('/status', StatusResource())
 falcon_app.add_route('/health', HealthResource())
 falcon_app.add_route('/latest-image', LatestImageResource())
 falcon_app.add_route('/feed.xml', RSSFeedResource())
+falcon_app.add_route('/analytics-data', AnalyticsResource())
+falcon_app.add_route('/analytics', TextResource('analytics.html'))
 
 # Wrap with WhiteNoise for efficient static file serving with compression and caching
 # WhiteNoise automatically compresses files (gzip/brotli) and adds proper headers
