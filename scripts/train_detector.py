@@ -92,25 +92,34 @@ class TrainDetector:
                     if width < 6:
                         continue
 
-                    # Sub-column splitting for very wide groups only
-                    # Train IDs are typically 15-25 pixels wide
-                    if width > 35:
-                        sub_cols = [(sub_x, min(sub_x + 20, x2))
-                                    for sub_x in range(x1, x2, 18)]
+                    # Sub-column splitting for groups wider than a single train ID
+                    # A typical train ID is 10-18 pixels wide
+                    # Groups 20+ pixels wide may contain multiple trains
+                    if width > 20:
+                        # Try to find the best split point (largest internal gap)
+                        sub_cols = self._split_wide_group(x1, x2, col_sums)
                     else:
                         sub_cols = [(x1, x2)]
 
                     for sub_x1, sub_x2 in sub_cols:
-                        train_id = self._ocr_column(band, dark_mask, sub_x1, sub_x2, band_h, track)
-                        if train_id:
-                            center_x = (sub_x1 + sub_x2) // 2
-                            trains.append({
-                                'id': train_id,
-                                'x': center_x,
-                                'y': y_min + band_h // 2,
-                                'track': track,
-                                'confidence': 'high'
-                            })
+                        train_ids = self._ocr_column(band, dark_mask, sub_x1, sub_x2, band_h, track)
+                        if train_ids:
+                            # Distribute multiple train IDs across the column width
+                            sub_width = sub_x2 - sub_x1
+                            n_trains = len(train_ids)
+                            for i, train_id in enumerate(train_ids):
+                                if n_trains == 1:
+                                    center_x = (sub_x1 + sub_x2) // 2
+                                else:
+                                    # Space trains evenly across the column
+                                    center_x = sub_x1 + int(sub_width * (i + 0.5) / n_trains)
+                                trains.append({
+                                    'id': train_id,
+                                    'x': center_x,
+                                    'y': y_min + band_h // 2,
+                                    'track': track,
+                                    'confidence': 'high'
+                                })
 
             # Also detect colored text labels (yellow, green)
             colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
@@ -118,15 +127,50 @@ class TrainDetector:
 
         return self._deduplicate(trains)
 
-    def _group_columns(self, columns):
-        """Group adjacent columns."""
+    def _split_wide_group(self, x1, x2, col_sums):
+        """Split a wide column group at the best split point.
+
+        For groups that may contain multiple trains, find the column with
+        the minimum sum (gap between trains) and split there.
+        """
+        width = x2 - x1
+        if width <= 20:
+            return [(x1, x2)]
+
+        # Find the minimum column sum in the middle portion of the group
+        # (don't split at the edges)
+        margin = max(6, width // 5)
+        mid_start = x1 + margin
+        mid_end = x2 - margin
+
+        if mid_start >= mid_end:
+            return [(x1, x2)]
+
+        # Find the column with minimum sum (likely a gap between trains)
+        min_sum = float('inf')
+        split_x = None
+        for x in range(mid_start, mid_end):
+            if col_sums[x] < min_sum:
+                min_sum = col_sums[x]
+                split_x = x
+
+        # Only split if we found a true gap (zero column sum)
+        # Gaps within train IDs typically have sum > 0
+        # Gaps between adjacent trains typically have sum = 0
+        if split_x and min_sum == 0:
+            return [(x1, split_x), (split_x + 1, x2)]
+        else:
+            return [(x1, x2)]
+
+    def _group_columns(self, columns, gap_threshold=10):
+        """Group adjacent columns. Gap threshold determines when to split groups."""
         if len(columns) == 0:
             return []
         groups = []
         start = columns[0]
         prev = start
         for x in columns[1:]:
-            if x - prev > 10:
+            if x - prev > gap_threshold:
                 groups.append((start, prev))
                 start = x
             prev = x
@@ -134,7 +178,7 @@ class TrainDetector:
         return groups
 
     def _ocr_column(self, band, dark_mask, x1, x2, band_h, track):
-        """OCR a single column - ONE preprocessing pass."""
+        """OCR a single column - returns list of train IDs found."""
         pad = 3
         roi_x1 = max(0, x1 - pad)
         roi_x2 = min(band.shape[1], x2 + pad)
@@ -144,25 +188,36 @@ class TrainDetector:
         row_sums = col_mask.sum(axis=1)
         text_rows = np.where(row_sums > 0)[0]
         if len(text_rows) < 5:
-            return None
+            return []
 
         y1 = max(0, text_rows[0] - 2)
         y2 = min(band_h, text_rows[-1] + 2)
 
         # Skip station label regions
         if track == 'lower':
+            # Lower track: station labels are at top of band
             station_cutoff = int(band_h * 0.15)
             if y1 < station_cutoff:
                 y1 = station_cutoff
-        elif track == 'upper':
-            # Allow more of the band - station labels are filtered by name matching
-            station_cutoff = int(band_h * 0.95)
-            if y2 > station_cutoff:
-                y2 = station_cutoff
+        else:
+            # Upper track: station labels are at bottom of band (e.g., "Embarcadero")
+            # Look for a gap of 8+ rows with no text - station labels are after such gaps
+            gap_start = None
+            for y in range(int(band_h * 0.70), y2):
+                if row_sums[y] == 0:
+                    if gap_start is None:
+                        gap_start = y
+                elif gap_start is not None:
+                    gap_len = y - gap_start
+                    if gap_len >= 8:
+                        # Found significant gap - clip before it
+                        y2 = gap_start
+                        break
+                    gap_start = None
 
         roi = band[y1:y2, roi_x1:roi_x2]
         if roi.size == 0 or roi.shape[0] < 20:
-            return None
+            return []
 
         # Single OCR pass with Otsu
         scale = 4
@@ -171,9 +226,9 @@ class TrainDetector:
 
         try:
             text = pytesseract.image_to_string(roi_bin, config='--psm 6')
-            return self._extract_train_id(text)
+            return self._extract_train_ids(text)
         except Exception:
-            return None
+            return []
 
     def _detect_colored_labels(self, band_gray, band_hsv, band_h, y_offset, track):
         """Detect colored text labels (yellow, green train IDs)."""
@@ -211,15 +266,12 @@ class TrainDetector:
             y1 = max(0, text_rows[0] - 2)
             y2 = min(band_h, text_rows[-1] + 2)
 
-            # Skip station label areas
+            # Skip station label areas (lower track only)
+            # Upper track relies on station label filtering in _extract_train_id()
             if track == 'lower':
                 station_cutoff = int(band_h * 0.15)
                 if y1 < station_cutoff:
                     y1 = station_cutoff
-            elif track == 'upper':
-                station_cutoff = int(band_h * 0.80)
-                if y2 > station_cutoff:
-                    y2 = station_cutoff
 
             if y2 - y1 < 20:
                 continue
@@ -390,8 +442,8 @@ class TrainDetector:
 
         return trains
 
-    def _extract_train_id(self, text):
-        """Extract train ID from OCR text."""
+    def _extract_train_ids(self, text):
+        """Extract all train IDs from OCR text. Returns list of train IDs."""
         lines = [c.strip() for c in text.split('\n') if c.strip()]
         combined = ''.join(lines).upper()
 
@@ -408,6 +460,23 @@ class TrainDetector:
         combined = combined.replace('Z', '7')
         combined = combined.replace('(', '').replace(')', '').replace(' ', '')
 
+        # OCR sometimes reads digits as 'RE' - could be 5 or 7
+        # Try both interpretations and return all unique valid train IDs
+        # Prefer 5 over 7 since RE is more commonly a misread 5
+        if 'RE' in combined:
+            combined_5 = combined.replace('RE', '5')
+            combined_7 = combined.replace('RE', '7')
+            matches_5 = TRAIN_ID_PATTERN.findall(combined_5)
+            matches_7 = TRAIN_ID_PATTERN.findall(combined_7)
+            # Return 5-versions first, then any unique 7-versions
+            result = list(matches_5)
+            for m in matches_7:
+                if m not in result:
+                    result.append(m)
+            if result:
+                return result
+            combined = combined_5  # Fall through if neither worked
+
         # Fix duplicate leading letters (OCR sometimes doubles them in vertical text)
         if len(combined) >= 2 and combined[0].isalpha() and combined[0] == combined[1]:
             combined = combined[1:]
@@ -417,7 +486,7 @@ class TrainDetector:
 
         matches = TRAIN_ID_PATTERN.findall(combined)
         if matches:
-            return matches[0]
+            return matches  # Return ALL matches
 
         # Position-based 7/T fix for vertical text where 7 is often read as T
         if len(combined) >= 5:
@@ -444,12 +513,17 @@ class TrainDetector:
                         fixed[i] = 'O'
             matches = TRAIN_ID_PATTERN.findall(''.join(fixed))
             if matches:
-                return matches[0]
+                return matches  # Return ALL matches
 
-        return None
+        return []
+
+    def _extract_train_id(self, text):
+        """Extract first train ID from OCR text (for backward compatibility)."""
+        matches = self._extract_train_ids(text)
+        return matches[0] if matches else None
 
     def _deduplicate(self, trains):
-        """Remove duplicates."""
+        """Remove duplicates (same train detected twice), but keep bunched trains."""
         if not trains:
             return trains
         trains = sorted(trains, key=lambda t: (t['track'], t['x']))
@@ -459,11 +533,26 @@ class TrainDetector:
             for existing in unique:
                 if (existing['track'] == train['track'] and
                         abs(existing['x'] - train['x']) < 30):
-                    if len(train['id']) > len(existing['id']):
-                        unique.remove(existing)
-                        unique.append(train)
-                    is_dup = True
-                    break
+                    # Only consider duplicates if IDs are similar
+                    # (one is prefix of other, or differ by at most 2 chars)
+                    if self._ids_are_similar(existing['id'], train['id']):
+                        if len(train['id']) > len(existing['id']):
+                            unique.remove(existing)
+                            unique.append(train)
+                        is_dup = True
+                        break
             if not is_dup:
                 unique.append(train)
         return unique
+
+    def _ids_are_similar(self, id1, id2):
+        """Check if two train IDs are likely the same train detected twice."""
+        # One is a prefix of the other (e.g., "M2034L" and "M2034LL")
+        if id1.startswith(id2) or id2.startswith(id1):
+            return True
+        # Same length and differ by at most 2 characters
+        if len(id1) == len(id2):
+            diff = sum(c1 != c2 for c1, c2 in zip(id1, id2))
+            if diff <= 2:
+                return True
+        return False
