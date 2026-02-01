@@ -173,15 +173,76 @@ class StatusResource:
 
 
 class HealthResource:
-    """Health check endpoint."""
+    """Health check endpoint with component status."""
 
     def on_get(self, req, resp):
-        """Handle GET request to /health"""
+        """
+        Handle GET request to /health
+
+        Returns component-level health status:
+        - cache: Status cache freshness
+        - analytics: Analytics database status
+        - overall: Aggregated health (healthy/degraded/unhealthy)
+        """
+        components = {}
+        overall_status = 'healthy'
+
+        # Check status cache
+        try:
+            cache_data = read_cache()
+            if cache_data:
+                cached_at = datetime.fromisoformat(cache_data.get('cached_at', ''))
+                cache_age = (datetime.now() - cached_at).total_seconds()
+                is_stale = cache_age > CACHE_MAX_AGE
+
+                components['cache'] = {
+                    'status': 'degraded' if is_stale else 'healthy',
+                    'cache_age_seconds': round(cache_age, 1),
+                    'is_stale': is_stale,
+                    'last_status': cache_data.get('best_status', {}).get('status')
+                }
+                if is_stale:
+                    overall_status = 'degraded'
+            else:
+                components['cache'] = {
+                    'status': 'unhealthy',
+                    'error': 'No cache data available'
+                }
+                overall_status = 'degraded'
+        except Exception as e:
+            components['cache'] = {
+                'status': 'unhealthy',
+                'error': str(e)
+            }
+            overall_status = 'degraded'
+
+        # Check analytics database
+        try:
+            from lib.analytics import get_db_connection, init_db
+            init_db()  # Ensure tables exist
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) as count FROM status_checks')
+            count = cursor.fetchone()['count']
+            conn.close()
+
+            components['analytics'] = {
+                'status': 'healthy',
+                'total_checks': count
+            }
+        except Exception as e:
+            components['analytics'] = {
+                'status': 'degraded',
+                'error': str(e)
+            }
+            # Analytics failure doesn't affect overall health critically
+
         resp.status = falcon.HTTP_200
         resp.media = {
-            'status': 'ok',
+            'status': overall_status,
             'service': 'muni-status-api',
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'components': components
         }
 
 

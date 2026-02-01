@@ -7,6 +7,9 @@ Usage:
     python check_status.py --continuous       # Keep checking every 30 seconds
     python check_status.py --write-cache      # Single check, write to cache
     python check_status.py --continuous --write-cache --interval 60  # Cache mode with custom interval
+    python check_status.py --generate-reports # Generate analytics reports only
+
+In continuous mode with --write-cache, analytics reports are auto-generated at midnight.
 """
 
 import sys
@@ -186,10 +189,37 @@ def check_status(should_write_cache=False):
     return True
 
 
+def generate_analytics_reports():
+    """Generate all analytics reports."""
+    from lib.analytics import generate_all_reports
+
+    print("\nGenerating analytics reports...")
+    try:
+        results = generate_all_reports()
+        for days, result in results.items():
+            if result['success']:
+                print(f"  {days}-day report: {result['total_checks']} checks, {result['delayed_checks']} delays")
+            else:
+                print(f"  {days}-day report: FAILED")
+        return True
+    except Exception as e:
+        print(f"  Error generating reports: {e}")
+        return False
+
+
 def main():
     # Parse arguments
     continuous = '--continuous' in sys.argv or '-c' in sys.argv
     should_write_cache = '--write-cache' in sys.argv
+    generate_reports_only = '--generate-reports' in sys.argv
+
+    # Handle report generation mode
+    if generate_reports_only:
+        print("=" * 60)
+        print("Analytics Report Generator")
+        print("=" * 60)
+        generate_analytics_reports()
+        return
 
     # Parse interval
     interval = DEFAULT_INTERVAL
@@ -220,6 +250,7 @@ def main():
         count = 0
         successful = 0
         failed = 0
+        last_report_hour = -1  # Track when we last generated reports
 
         try:
             while True:
@@ -234,6 +265,12 @@ def main():
                     failed += 1
 
                 print(f"\nStats: {successful} successful, {failed} failed")
+
+                # Generate analytics reports at midnight (hour 0)
+                current_hour = datetime.now().hour
+                if current_hour == 0 and last_report_hour != 0:
+                    generate_analytics_reports()
+                last_report_hour = current_hour
 
                 if count > 1:
                     print(f"\nWaiting {interval} seconds until next check...")

@@ -69,16 +69,37 @@ Web dashboard interface.
 
 ### GET /health
 
-Health check endpoint for monitoring.
+Health check endpoint with component-level status.
 
 **Response** (200 OK):
 ```json
 {
-  "status": "ok",
+  "status": "healthy",
   "service": "muni-status-api",
-  "timestamp": "2025-12-11T23:00:00.000000"
+  "timestamp": "2025-12-11T23:00:00.000000",
+  "components": {
+    "cache": {
+      "status": "healthy",
+      "cache_age_seconds": 45.2,
+      "is_stale": false,
+      "last_status": "green"
+    },
+    "analytics": {
+      "status": "healthy",
+      "total_checks": 20160
+    }
+  }
 }
 ```
+
+**Overall Status Values**:
+- `healthy`: All components working normally
+- `degraded`: Some components have issues but service is functional
+- `unhealthy`: Critical failure (not currently returned as 200)
+
+**Component Status**:
+- `cache`: Status cache freshness (stale if > 5 minutes old)
+- `analytics`: SQLite database connectivity
 
 ### GET /status
 

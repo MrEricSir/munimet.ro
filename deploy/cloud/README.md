@@ -7,14 +7,15 @@ See [../../CONFIGURATION.md](../../CONFIGURATION.md) for actual deployment confi
 ## Architecture
 
 ```
-Cloud Scheduler (every 3 min)
-  ↓ triggers
-Checker (Cloud Run Job)
-  ↓ downloads image + predicts status
-  ↓ writes JSON + exits
-Cloud Storage (cache file)
-  ↑ reads JSON
-API (Cloud Run Service)
+Cloud Scheduler (every 3 min)          Cloud Scheduler (daily midnight)
+  ↓ triggers                             ↓ triggers
+Checker Job                            Reports Job
+  ↓ downloads image                      ↓ generates analytics
+  ↓ detects status                       ↓ caches reports
+  ↓ writes JSON                          ↓ exits
+Cloud Storage (cache)                  Cloud Storage (reports cache)
+  ↑ reads                                ↑ reads
+API Service  ←───────────────────────────┘
   ↓ serves to users
 Users
 ```
@@ -83,16 +84,17 @@ export MODEL_VERSION=20251223_224331
 
 **Subsequent deploys**: The script automatically uses the currently deployed model version.
 
-### 3. Setup Scheduler
+### 3. Setup Schedulers
 
 ```bash
 ./deploy/cloud/setup-scheduler.sh
 ```
 
-This script:
-- Creates Cloud Scheduler job
-- Configures 3-minute interval
-- Runs test execution
+This script creates two Cloud Scheduler jobs:
+- **Status checker** - Runs every 3 minutes, triggers status detection
+- **Analytics reports** - Runs daily at midnight UTC, generates cached reports
+
+The analytics reports job is isolated from user requests to prevent report generation issues from affecting the main API.
 
 ### 4. Setup Monitoring (Optional but Recommended)
 
@@ -158,15 +160,16 @@ gcloud logging read 'resource.type="cloud_scheduler_job"' --limit 20
 
 ## Cost Estimate
 
-Typical usage costs approximately $1.17/month:
+Typical usage costs approximately $1.20/month:
 
 | Service | Usage | Cost |
 |---------|-------|------|
 | Cloud Run Service (API) | ~1000 requests/day | $0 (free tier) |
-| Cloud Run Jobs (Checker) | 21,600 executions/month @ ~10s each | $1.04 |
-| Cloud Storage | 1KB file, 75K reads/month | $0.016 |
-| Cloud Scheduler | 1 job | $0.10 |
-| **Total** | | **~$1.17/month** |
+| Cloud Run Jobs (Checker) | 14,400 executions/month @ ~10s each | $0.70 |
+| Cloud Run Jobs (Reports) | 30 executions/month @ ~5s each | $0.01 |
+| Cloud Storage | Cache files, ~100K reads/month | $0.02 |
+| Cloud Scheduler | 2 jobs | $0.20 |
+| **Total** | | **~$1.00/month** |
 
 Cloud Run Jobs are more cost-effective than Services for scheduled tasks since execution time is billed without idle costs.
 

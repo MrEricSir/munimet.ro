@@ -14,6 +14,7 @@ SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount
 # Service and job names
 API_SERVICE="munimetro-api"
 CHECKER_JOB="munimetro-checker"
+REPORTS_JOB="munimetro-reports"
 
 # Image names
 IMAGE_NAME="munimetro"
@@ -53,7 +54,7 @@ echo "✓ Image built and pushed: $API_IMAGE"
 echo ""
 
 # Deploy services
-echo "[2/3] Deploying services..."
+echo "[2/4] Deploying services..."
 echo ""
 echo "  Deploying API service..."
 gcloud run deploy "$API_SERVICE" \
@@ -83,7 +84,7 @@ echo "✓ API service deployed: $API_URL"
 echo ""
 
 # Deploy status checker job
-echo "[3/3] Deploying status checker job..."
+echo "[3/4] Deploying status checker job..."
 
 # Build secrets flag if secrets exist in Secret Manager
 SECRETS_FLAG=""
@@ -109,15 +110,40 @@ gcloud run jobs deploy "$CHECKER_JOB" \
 echo "✓ Checker job deployed: $CHECKER_JOB"
 echo ""
 
-# Grant service account permission to invoke the job (for Cloud Scheduler)
-echo "  Granting job execution permission to service account..."
+# Deploy analytics reports job
+echo "[4/4] Deploying analytics reports job..."
+
+gcloud run jobs deploy "$REPORTS_JOB" \
+    --image "$API_IMAGE" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --service-account "$SERVICE_ACCOUNT_EMAIL" \
+    --memory 512Mi \
+    --cpu 1 \
+    --task-timeout 300s \
+    --max-retries 2 \
+    --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME}" \
+    --command="python" \
+    --args="-m,api.generate_reports_job"
+
+echo "✓ Reports job deployed: $REPORTS_JOB"
+echo ""
+
+# Grant service account permission to invoke jobs (for Cloud Scheduler)
+echo "  Granting job execution permissions to service account..."
 gcloud run jobs add-iam-policy-binding "$CHECKER_JOB" \
     --region="$REGION" \
     --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
     --role="roles/run.invoker" \
     --project="$PROJECT_ID" > /dev/null
 
-echo "✓ Job invoker permission granted"
+gcloud run jobs add-iam-policy-binding "$REPORTS_JOB" \
+    --region="$REGION" \
+    --member="serviceAccount:$SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/run.invoker" \
+    --project="$PROJECT_ID" > /dev/null
+
+echo "✓ Job invoker permissions granted"
 echo ""
 
 echo "=========================================="
@@ -125,13 +151,16 @@ echo "✓ Deployment complete!"
 echo "=========================================="
 echo ""
 echo "Deployed components:"
-echo "  API Service:  $API_URL"
-echo "  Checker Job:  $CHECKER_JOB (in region $REGION)"
+echo "  API Service:   $API_URL"
+echo "  Checker Job:   $CHECKER_JOB (every 3 min)"
+echo "  Reports Job:   $REPORTS_JOB (daily at midnight)"
 echo ""
 echo "Next steps:"
 echo "1. Test API: curl $API_URL/status"
-echo "2. Setup scheduler: ./deploy/cloud/setup-scheduler.sh"
-echo "3. Test job manually: gcloud run jobs execute $CHECKER_JOB --region=$REGION"
+echo "2. Setup schedulers: ./deploy/cloud/setup-scheduler.sh"
+echo "3. Test jobs manually:"
+echo "   gcloud run jobs execute $CHECKER_JOB --region=$REGION"
+echo "   gcloud run jobs execute $REPORTS_JOB --region=$REGION"
 echo ""
 echo "Environment info:"
 echo "  Cache: gs://$BUCKET_NAME/latest_status.json"
