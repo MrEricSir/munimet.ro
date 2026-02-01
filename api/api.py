@@ -259,8 +259,9 @@ class RSSFeedResource:
 
 class StaticResource:
     """Serve the frontend HTML files with proper caching."""
-    def __init__(self, filename):
+    def __init__(self, filename, content_type):
         self.filename = filename
+        self.content_type = content_type
 
     def on_get(self, req, resp):
         """Handle GET request with cache headers"""
@@ -270,7 +271,7 @@ class StaticResource:
                 content = f.read()
 
             resp.status = falcon.HTTP_200
-            resp.content_type = 'text/html; charset=utf-8'
+            resp.content_type = self.content_type
             resp.text = content
 
             # Add cache headers for HTML files (shorter cache than static assets)
@@ -286,13 +287,24 @@ class StaticResource:
             resp.text = '<h1>Not found</h1><p>Something\'s missing</p>'
 
 
+class TextResource(StaticResource):
+    def __init__(self, filename):
+        super().__init__(filename, 'text/html; charset=utf-8')
+
+
+class IconResource(StaticResource):
+    def __init__(self, filename):
+        super().__init__(filename, 'image/x-icon')
+
+
 # Create Falcon app
 falcon_app = falcon.App()
 
 # Add routes
-falcon_app.add_route('/', StaticResource('index.html'))
-falcon_app.add_route('/dashboard', StaticResource('dashboard.html'))
-falcon_app.add_route('/about', StaticResource('about.html'))
+falcon_app.add_route('/', TextResource('index.html'))
+falcon_app.add_route('/dashboard', TextResource('dashboard.html'))
+falcon_app.add_route('/about', TextResource('about.html'))
+falcon_app.add_route('/favicon.ico', IconResource('static/favicon.ico'))
 falcon_app.add_route('/status', StatusResource())
 falcon_app.add_route('/health', HealthResource())
 falcon_app.add_route('/latest-image', LatestImageResource())
