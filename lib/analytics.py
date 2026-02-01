@@ -438,6 +438,9 @@ def get_analytics_report(days=7):
     Returns:
         dict: Full analytics report with frequency, by_station, by_time, etc.
     """
+    # Ensure database and tables exist
+    init_db()
+
     cache_path = _get_report_cache_path(days)
 
     # Check for cached report
