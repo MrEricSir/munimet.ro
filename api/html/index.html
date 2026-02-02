@@ -177,14 +177,12 @@
             const statusChanged = previousStatus !== null && previousStatus !== status;
             const stalenessChanged = previousStaleness !== null && previousStaleness !== staleness;
 
-            const html = `
-                ${stalenessHtml}
-                <div class="status-icon">
-                    <img src="/static/${image}">
-                </div>
-                <div class="description">${message}</div>
-                ${detailsHtml}
-            `;
+            const html = stalenessHtml +
+                '<div class="status-icon">' +
+                    '<img src="/static/' + image + '">' +
+                '</div>' +
+                '<div class="description">' + message + '</div>' +
+                detailsHtml;
 
             const statusElement = document.getElementById('status');
 
