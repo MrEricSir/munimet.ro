@@ -443,6 +443,16 @@ class IconResource(StaticResource):
         super().__init__(filename, 'image/x-icon')
 
 
+class XMLResource(StaticResource):
+    def __init__(self, filename):
+        super().__init__(filename, 'application/xml; charset=utf-8')
+
+
+class TextPlainResource(StaticResource):
+    def __init__(self, filename):
+        super().__init__(filename, 'text/plain; charset=utf-8')
+
+
 # Create Falcon app
 falcon_app = falcon.App()
 
@@ -451,6 +461,8 @@ falcon_app.add_route('/', TextResource('index.html'))
 falcon_app.add_route('/dashboard', TextResource('dashboard.html'))
 falcon_app.add_route('/about', TextResource('about.html'))
 falcon_app.add_route('/favicon.ico', IconResource('static/favicon.ico'))
+falcon_app.add_route('/sitemap.xml', XMLResource('sitemap.xml'))
+falcon_app.add_route('/robots.txt', TextPlainResource('robots.txt'))
 falcon_app.add_route('/status', StatusResource())
 falcon_app.add_route('/health', HealthResource())
 falcon_app.add_route('/latest-image', LatestImageResource())

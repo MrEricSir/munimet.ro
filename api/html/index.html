@@ -4,14 +4,77 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Real-time SF Muni Metro subway status. Check if the San Francisco subway is running on time, experiencing delays, or not operating.">
+    <meta name="keywords" content="Muni, Metro, SF, San Francisco, subway, transit, status, delays, SFMTA">
+    <meta name="author" content="Eric Gregory">
+    <link rel="canonical" href="https://munimet.ro/">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://munimet.ro/">
+    <meta property="og:title" content="MuniMet.ro - SF Muni Metro Status">
+    <meta property="og:description" content="Real-time SF Muni Metro subway status. Check if the San Francisco subway is running on time, experiencing delays, or not operating.">
+    <meta property="og:image" content="https://munimet.ro/static/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:site_name" content="MuniMet.ro">
+    <meta property="og:locale" content="en_US">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://munimet.ro/">
+    <meta name="twitter:title" content="MuniMet.ro - SF Muni Metro Status">
+    <meta name="twitter:description" content="Real-time SF Muni Metro subway status. Check if the San Francisco subway is running on time, experiencing delays, or not operating.">
+    <meta name="twitter:image" content="https://munimet.ro/static/og-image.png">
+
+    <!-- Favicons -->
     <link rel="icon" href="/static/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
     <link rel="manifest" href="/static/site.webmanifest">
+    <meta name="theme-color" content="#9f9">
+
+    <!-- RSS Feed -->
     <link rel="alternate" type="application/rss+xml" title="SF Muni Metro Status" href="https://munimet.ro/feed.xml">
+
     <title>MuniMet.ro</title>
-        <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css">
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "MuniMet.ro",
+        "description": "Real-time SF Muni Metro subway status tracker",
+        "url": "https://munimet.ro",
+        "applicationCategory": "Transportation",
+        "operatingSystem": "Any",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "author": {
+            "@type": "Person",
+            "name": "Eric Gregory",
+            "url": "https://mrericsir.github.io/"
+        },
+        "sourceOrganization": {
+            "@type": "Organization",
+            "name": "MuniMet.ro",
+            "url": "https://munimet.ro"
+        },
+        "about": {
+            "@type": "Thing",
+            "name": "San Francisco Muni Metro",
+            "description": "San Francisco's light rail and subway system"
+        }
+    }
+    </script>
 </head>
 <body>
     <div class="container">

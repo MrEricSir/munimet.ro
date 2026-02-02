@@ -1,0 +1,67 @@
+# robots.txt for munimet.ro
+
+# Allow regular search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://munimet.ro/sitemap.xml
+
+# Disallow internal/debug endpoints
+Disallow: /status
+Disallow: /health
+Disallow: /latest-image
+Disallow: /analytics-data
+Disallow: /dashboard
+
+# Block AI training crawlers
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: Omgilibot
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+User-agent: ImagesiftBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /

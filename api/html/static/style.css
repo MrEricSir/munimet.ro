@@ -193,6 +193,23 @@ p.sub-credits {
     text-decoration: underline;
 }
 
+/* Easter egg link */
+.easter-egg {
+    position: fixed;
+    bottom: 8px;
+    right: 20px;
+    font-size: 14px;
+    color: rgb(221, 216, 216);
+    text-decoration: none;
+    font-family: serif;
+    transition: color 0.3s ease;
+    z-index: 1000;
+}
+
+.easter-egg:hover {
+    color: rgba(128, 128, 128, 0.6);
+}
+
 .details {
     flex-shrink: 0;
     margin-bottom: 15px;

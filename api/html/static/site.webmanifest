@@ -1,1 +1,21 @@
-{"name":"","short_name":"","icons":[{"src":"/static/android-chrome-192x192.png","sizes":"192x192","type":"image/png"},{"src":"/static/android-chrome-512x512.png","sizes":"512x512","type":"image/png"}],"theme_color":"#ffffff","background_color":"#ffffff","display":"standalone"}
+{
+    "name": "MuniMet.ro - SF Muni Metro Status",
+    "short_name": "MuniMet.ro",
+    "description": "Real-time SF Muni Metro subway status",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#f7fafc",
+    "theme_color": "#9f9",
+    "icons": [
+        {
+            "src": "/static/android-chrome-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/static/android-chrome-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

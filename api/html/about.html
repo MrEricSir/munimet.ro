@@ -3,29 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Learn how MuniMet.ro uses computer vision to track SF Muni Metro subway status in real-time.">
+    <link rel="canonical" href="https://munimet.ro/about">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://munimet.ro/about">
+    <meta property="og:title" content="About MuniMet.ro - SF Muni Metro Status">
+    <meta property="og:description" content="Learn how MuniMet.ro uses computer vision to track SF Muni Metro subway status in real-time.">
+    <meta property="og:image" content="https://munimet.ro/static/og-image.png">
+    <meta property="og:site_name" content="MuniMet.ro">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="About MuniMet.ro - SF Muni Metro Status">
+    <meta name="twitter:description" content="Learn how MuniMet.ro uses computer vision to track SF Muni Metro subway status in real-time.">
+    <meta name="twitter:image" content="https://munimet.ro/static/og-image.png">
+
+    <!-- Favicons -->
     <link rel="icon" href="/static/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
     <link rel="manifest" href="/static/site.webmanifest">
-    <title>MuniMet.ro</title>
-        <link rel="stylesheet" href="/static/style.css">
-    <style>
-        .pi-easter-egg {
-            position: fixed;
-            bottom: 8px;
-            right: 20px;
-            font-size: 14px;
-            color: rgb(221, 216, 216);
-            text-decoration: none;
-            font-family: serif;
-            transition: color 0.3s ease;
-            z-index: 1000;
-        }
-        .pi-easter-egg:hover {
-            color: rgba(128, 128, 128, 0.6);
-        }
-    </style>
+    <meta name="theme-color" content="#9f9">
+
+    <title>About MuniMet.ro</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
@@ -58,8 +64,8 @@
                         <b>🕶️ 1. Computer Vision</b>
                     </p>
                     <p>
-                        A program automatically downloads images from Muni's subway screen
-                        every few minutes and scans them for data including tracks, 
+                        A program automatically downloads an image from Muni's subway
+                        screen every few minutes and scans it for data including tracks, 
                         stations, and trains.
                     </p>
                     <p>
@@ -113,6 +119,6 @@
     </div>
 
     <!-- This link is for Sandra Bullock only. -->
-    <a href="/dashboard" class="pi-easter-egg" title="π">π</a>
+    <a href="/dashboard" class="easter-egg" title="π">π</a>
 </body>
 </html>
