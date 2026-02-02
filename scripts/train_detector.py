@@ -18,6 +18,10 @@ except ImportError:
 # Train ID pattern
 TRAIN_ID_PATTERN = re.compile(r'[A-Z]?\d{4}[A-Z*X]{1,2}')
 
+# Pattern to detect invalid train IDs with all identical digits (e.g., 1111, 0000)
+# Real Muni train numbers never have 4 identical digits
+INVALID_REPEATED_DIGITS = re.compile(r'(\d)\1{3}')
+
 # Y-bands for text labels
 UPPER_TRAIN_BAND = (0.25, 0.48)
 LOWER_TRAIN_BAND = (0.56, 0.80)
@@ -478,7 +482,10 @@ class TrainDetector:
 
         matches = TRAIN_ID_PATTERN.findall(combined)
         if matches:
-            return matches  # Return ALL matches
+            # Filter out invalid train IDs with repeated digits (e.g., 1111II, 0000MM)
+            matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)]
+            if matches:
+                return matches
 
         # Position-based 7/T fix for vertical text where 7 is often read as T
         if len(combined) >= 5:
@@ -505,7 +512,10 @@ class TrainDetector:
                         fixed[i] = 'O'
             matches = TRAIN_ID_PATTERN.findall(''.join(fixed))
             if matches:
-                return matches  # Return ALL matches
+                # Filter out invalid train IDs with repeated digits
+                matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)]
+                if matches:
+                    return matches
 
         return []
 
