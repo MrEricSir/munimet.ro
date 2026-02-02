@@ -688,3 +688,63 @@ def generate_all_reports():
             results[days] = {'success': False}
 
     return results
+
+
+def check_database_health():
+    """
+    Check if the analytics database exists and has data.
+
+    Returns:
+        dict: {
+            'exists': bool,           # Database file exists locally
+            'restored_from_gcs': bool,  # Was restored from GCS (Cloud Run only)
+            'has_data': bool,         # Has any status checks recorded
+            'check_count': int,       # Number of status checks
+            'error': str or None      # Error message if any
+        }
+    """
+    result = {
+        'exists': False,
+        'restored_from_gcs': False,
+        'has_data': False,
+        'check_count': 0,
+        'error': None
+    }
+
+    try:
+        # On Cloud Run, try to restore from GCS first
+        if _is_cloud_run():
+            result['restored_from_gcs'] = restore_db_from_gcs()
+
+        # Check if database file exists
+        result['exists'] = LOCAL_DB_PATH.exists()
+
+        if not result['exists']:
+            return result
+
+        # Check if database has any data
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if tables exist
+        cursor.execute('''
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name='status_checks'
+        ''')
+        if not cursor.fetchone():
+            conn.close()
+            result['error'] = 'status_checks table does not exist'
+            return result
+
+        # Count status checks
+        cursor.execute('SELECT COUNT(*) as count FROM status_checks')
+        count = cursor.fetchone()['count']
+        conn.close()
+
+        result['check_count'] = count
+        result['has_data'] = count > 0
+
+    except Exception as e:
+        result['error'] = str(e)
+
+    return result

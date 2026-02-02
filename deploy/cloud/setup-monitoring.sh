@@ -9,6 +9,7 @@ PROJECT_ID="${GCP_PROJECT_ID:-munimetro}"
 REGION="${GCP_REGION:-us-west1}"
 API_SERVICE="munimetro-api"
 CHECKER_JOB="munimetro-checker"
+REPORTS_JOB="munimetro-reports"
 ALERT_EMAIL="${ALERT_EMAIL:-}"
 
 echo "=========================================="
@@ -256,7 +257,64 @@ curl -s -X POST \
     -d "$JOB_ALERT_JSON" \
     "https://monitoring.googleapis.com/v3/projects/$PROJECT_ID/alertPolicies" > /dev/null
 rm /tmp/alert-job-failures.json
-echo "✓ Job failure alert policy created"
+echo "✓ Checker job failure alert policy created"
+
+# Create alert policy for Reports job failures (includes missing database errors)
+cat > /tmp/alert-reports-failures.json <<EOF
+{
+  "displayName": "MuniMetro Reports Job Failures",
+  "conditions": [{
+    "displayName": "Reports job failing",
+    "conditionThreshold": {
+      "filter": "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$REPORTS_JOB\" AND metric.type=\"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result=\"failed\"",
+      "comparison": "COMPARISON_GT",
+      "thresholdValue": 0,
+      "duration": "0s",
+      "aggregations": [{
+        "alignmentPeriod": "86400s",
+        "perSeriesAligner": "ALIGN_DELTA"
+      }]
+    }
+  }],
+  "alertStrategy": {
+    "autoClose": "86400s"
+  },
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": ["$CHANNEL_ID"],
+  "documentation": {
+    "content": "The MuniMetro analytics reports job has failed. This may indicate a missing or corrupted analytics database. Check Cloud Run logs for ANALYTICS_NO_DATABASE or ANALYTICS_ERROR messages.",
+    "mimeType": "text/markdown"
+  }
+}
+EOF
+
+EXISTING_REPORTS_ALERT=$(echo "$EXISTING_POLICIES" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for policy in data.get('alertPolicies', []):
+        if policy.get('displayName') == 'MuniMetro Reports Job Failures':
+            print(policy['name'])
+            sys.exit(0)
+except:
+    pass
+" 2>/dev/null)
+
+if [ -n "$EXISTING_REPORTS_ALERT" ]; then
+    echo "⚠️  Reports job failure alert policy already exists, updating..."
+    curl -s -X DELETE -H "Authorization: Bearer $ACCESS_TOKEN" \
+        "https://monitoring.googleapis.com/v3/$EXISTING_REPORTS_ALERT" > /dev/null
+fi
+
+REPORTS_ALERT_JSON=$(cat < /tmp/alert-reports-failures.json)
+curl -s -X POST \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$REPORTS_ALERT_JSON" \
+    "https://monitoring.googleapis.com/v3/projects/$PROJECT_ID/alertPolicies" > /dev/null
+rm /tmp/alert-reports-failures.json
+echo "✓ Reports job failure alert policy created"
 
 # Create alert policy for API error rate
 cat > /tmp/alert-error-rate.json <<EOF
@@ -323,8 +381,9 @@ echo "=========================================="
 echo ""
 echo "Configured alerts:"
 echo "  1. API Down - Health check failing for 5+ minutes"
-echo "  2. Job Failures - Checker job failing repeatedly"
-echo "  3. High Error Rate - API returning >10% errors"
+echo "  2. Checker Job Failures - Status checker job failing repeatedly"
+echo "  3. Reports Job Failures - Analytics reports job failing (includes missing database)"
+echo "  4. High Error Rate - API returning >10% errors"
 echo ""
 echo "Notifications will be sent to: $ALERT_EMAIL"
 echo ""
