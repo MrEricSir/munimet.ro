@@ -79,14 +79,25 @@ def main():
         for s in summaries:
             print(f"  • {s}")
 
-    # Show trains
+    # Show trains separated by track
     trains = result.get('trains', [])
+    upper_trains = sorted([t for t in trains if t.get('track') == 'upper'], key=lambda x: x['x'])
+    lower_trains = sorted([t for t in trains if t.get('track') == 'lower'], key=lambda x: x['x'])
+
     print()
     print(f"  Trains detected: {len(trains)}")
-    if trains:
-        for t in sorted(trains, key=lambda x: x['x']):
+
+    if upper_trains:
+        print(f"\n  Upper track ({len(upper_trains)}):")
+        for t in upper_trains:
             conf = f" [{t['confidence']}]" if t.get('confidence') != 'high' else ''
-            print(f"    {t['id']}{conf} - {t['track']} track @ x={t['x']}")
+            print(f"    {t['id']}{conf} @ x={t['x']}")
+
+    if lower_trains:
+        print(f"\n  Lower track ({len(lower_trains)}):")
+        for t in lower_trains:
+            conf = f" [{t['confidence']}]" if t.get('confidence') != 'high' else ''
+            print(f"    {t['id']}{conf} @ x={t['x']}")
 
     if args.verbose:
         # Show platform status

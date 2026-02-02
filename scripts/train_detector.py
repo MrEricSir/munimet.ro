@@ -78,8 +78,8 @@ class TrainDetector:
             band_hsv = hsv[y_min:y_max, :]
             band_h = y_max - y_min
 
-            # Find dark text columns
-            dark_mask = (band < 100).astype(np.uint8)
+            # Find dark text columns (threshold 120 to catch lighter text)
+            dark_mask = (band < 120).astype(np.uint8)
             col_sums = dark_mask.sum(axis=0)
             text_cols = np.where(col_sums > 3)[0]
 
@@ -162,7 +162,7 @@ class TrainDetector:
         else:
             return [(x1, x2)]
 
-    def _group_columns(self, columns, gap_threshold=10):
+    def _group_columns(self, columns, gap_threshold=7):
         """Group adjacent columns. Gap threshold determines when to split groups."""
         if len(columns) == 0:
             return []
@@ -200,20 +200,12 @@ class TrainDetector:
             if y1 < station_cutoff:
                 y1 = station_cutoff
         else:
-            # Upper track: station labels are at bottom of band (e.g., "Embarcadero")
-            # Look for a gap of 8+ rows with no text - station labels are after such gaps
-            gap_start = None
-            for y in range(int(band_h * 0.70), y2):
-                if row_sums[y] == 0:
-                    if gap_start is None:
-                        gap_start = y
-                elif gap_start is not None:
-                    gap_len = y - gap_start
-                    if gap_len >= 8:
-                        # Found significant gap - clip before it
-                        y2 = gap_start
-                        break
-                    gap_start = None
+            # Upper track: station labels are at bottom of band
+            # Use simple 95% cutoff - station name contamination is handled
+            # by filtering in _extract_train_ids
+            station_cutoff = int(band_h * 0.95)
+            if y2 > station_cutoff:
+                y2 = station_cutoff
 
         roi = band[y1:y2, roi_x1:roi_x2]
         if roi.size == 0 or roi.shape[0] < 20:
