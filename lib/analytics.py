@@ -5,9 +5,8 @@ Analytics module for tracking Muni delay data.
 Provides SQLite-based logging of status checks and delay incidents,
 with query functions for analytics display.
 
-Note: On Cloud Run, the filesystem is ephemeral so analytics data won't
-persist across container restarts. For production persistence, GCS backup
-would need to be implemented (download on startup, upload periodically).
+On Cloud Run, the SQLite database and cache files are backed up to GCS
+to persist across container restarts.
 """
 
 import json
@@ -20,18 +19,141 @@ from pathlib import Path
 LIB_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = LIB_DIR.parent
 
-# Database path
-DB_PATH = PROJECT_ROOT / "artifacts" / "runtime" / "analytics.db"
+# Local paths (used directly in development, as staging area in production)
+LOCAL_DB_PATH = PROJECT_ROOT / "artifacts" / "runtime" / "analytics.db"
+LOCAL_CACHE_DIR = PROJECT_ROOT / "artifacts" / "runtime" / "cache"
 
 # Cache configuration
-CACHE_DIR = PROJECT_ROOT / "artifacts" / "runtime" / "cache"
 REPORT_CACHE_MAX_AGE = 86400  # 24 hours - reports regenerate daily
+
+# Track if we've restored from GCS this session
+_gcs_restored = False
+
+
+def _is_cloud_run():
+    """Check if running on Cloud Run."""
+    return os.getenv('CLOUD_RUN') is not None
+
+
+def _get_gcs_bucket():
+    """Get the GCS bucket name."""
+    return os.getenv('GCS_BUCKET', 'munimetro-cache')
+
+
+def _get_gcs_client():
+    """Get a GCS client (lazy import to avoid issues in local dev)."""
+    from google.cloud import storage
+    return storage.Client()
+
+
+def restore_db_from_gcs():
+    """
+    Restore the analytics database from GCS if running on Cloud Run.
+    Called once at startup to restore persisted data.
+
+    Returns:
+        bool: True if restored, False if no backup exists or not on Cloud Run
+    """
+    global _gcs_restored
+
+    if not _is_cloud_run():
+        return False
+
+    if _gcs_restored:
+        return True  # Already restored this session
+
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(_get_gcs_bucket())
+        blob = bucket.blob('analytics/analytics.db')
+
+        if not blob.exists():
+            print("No analytics DB backup found in GCS")
+            _gcs_restored = True
+            return False
+
+        # Ensure local directory exists
+        os.makedirs(LOCAL_DB_PATH.parent, exist_ok=True)
+
+        # Download the database
+        blob.download_to_filename(str(LOCAL_DB_PATH))
+        print(f"Restored analytics DB from GCS ({blob.size} bytes)")
+        _gcs_restored = True
+        return True
+    except Exception as e:
+        print(f"Error restoring analytics DB from GCS: {e}")
+        _gcs_restored = True  # Don't retry on error
+        return False
+
+
+def backup_db_to_gcs():
+    """
+    Backup the analytics database to GCS if running on Cloud Run.
+    Should be called periodically (e.g., after each status check).
+
+    Returns:
+        bool: True if backed up successfully
+    """
+    if not _is_cloud_run():
+        return False
+
+    if not LOCAL_DB_PATH.exists():
+        return False
+
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(_get_gcs_bucket())
+        blob = bucket.blob('analytics/analytics.db')
+
+        blob.upload_from_filename(str(LOCAL_DB_PATH))
+        return True
+    except Exception as e:
+        print(f"Error backing up analytics DB to GCS: {e}")
+        return False
+
+
+def _read_gcs_json(blob_name):
+    """Read a JSON file from GCS."""
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(_get_gcs_bucket())
+        blob = bucket.blob(blob_name)
+
+        if not blob.exists():
+            return None
+
+        content = blob.download_as_string()
+        return json.loads(content)
+    except Exception as e:
+        print(f"Error reading {blob_name} from GCS: {e}")
+        return None
+
+
+def _write_gcs_json(blob_name, data):
+    """Write a JSON file to GCS."""
+    try:
+        client = _get_gcs_client()
+        bucket = client.bucket(_get_gcs_bucket())
+        blob = bucket.blob(blob_name)
+
+        blob.upload_from_string(
+            json.dumps(data),
+            content_type='application/json'
+        )
+        return True
+    except Exception as e:
+        print(f"Error writing {blob_name} to GCS: {e}")
+        return False
 
 
 def get_db_connection():
     """Get a connection to the analytics database."""
-    os.makedirs(DB_PATH.parent, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+    # On Cloud Run, restore from GCS if not already done
+    if _is_cloud_run():
+        restore_db_from_gcs()
+
+    os.makedirs(LOCAL_DB_PATH.parent, exist_ok=True)
+    conn = sqlite3.connect(str(LOCAL_DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -218,6 +340,9 @@ def log_status_check(status, best_status, detection_data, timestamp):
 
     conn.commit()
     conn.close()
+
+    # Backup to GCS after logging (if on Cloud Run)
+    backup_db_to_gcs()
 
     return check_id
 
@@ -421,8 +546,13 @@ def get_recent_incidents(limit=50):
 
 
 def _get_report_cache_path(days):
-    """Get the cache file path for a report with the given time period."""
-    return CACHE_DIR / f"analytics_report_{days}d.json"
+    """Get the local cache file path for a report with the given time period."""
+    return LOCAL_CACHE_DIR / f"analytics_report_{days}d.json"
+
+
+def _get_report_gcs_path(days):
+    """Get the GCS blob name for a report with the given time period."""
+    return f"analytics/analytics_report_{days}d.json"
 
 
 def get_analytics_report(days=7):
@@ -441,15 +571,23 @@ def get_analytics_report(days=7):
     # Ensure database and tables exist
     init_db()
 
-    cache_path = _get_report_cache_path(days)
+    cached = None
 
-    # Check for cached report
-    if cache_path.exists():
+    # Try to read from cache (GCS on Cloud Run, local file otherwise)
+    if _is_cloud_run():
+        cached = _read_gcs_json(_get_report_gcs_path(days))
+    else:
+        cache_path = _get_report_cache_path(days)
+        if cache_path.exists():
+            try:
+                with open(cache_path, 'r') as f:
+                    cached = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                cached = None
+
+    # Check if cache is fresh
+    if cached:
         try:
-            with open(cache_path, 'r') as f:
-                cached = json.load(f)
-
-            # Check if cache is still fresh
             cached_at = datetime.fromisoformat(cached.get('cached_at', ''))
             cache_age = (datetime.now() - cached_at).total_seconds()
 
@@ -458,8 +596,8 @@ def get_analytics_report(days=7):
                 cached['from_cache'] = True
                 cached['cache_age'] = round(cache_age, 1)
                 return cached
-        except (json.JSONDecodeError, ValueError, KeyError):
-            pass  # Cache corrupted, regenerate
+        except (ValueError, KeyError):
+            pass  # Cache corrupted or missing timestamp
 
     # No fresh cache - return empty report
     # Reports are generated by scheduled task, not on-demand
@@ -513,11 +651,14 @@ def generate_report(days):
             'from_cache': False
         }
 
-        # Cache the report
-        cache_path = _get_report_cache_path(days)
-        os.makedirs(CACHE_DIR, exist_ok=True)
-        with open(cache_path, 'w') as f:
-            json.dump(report, f)
+        # Cache the report (GCS on Cloud Run, local file otherwise)
+        if _is_cloud_run():
+            _write_gcs_json(_get_report_gcs_path(days), report)
+        else:
+            cache_path = _get_report_cache_path(days)
+            os.makedirs(LOCAL_CACHE_DIR, exist_ok=True)
+            with open(cache_path, 'w') as f:
+                json.dump(report, f)
 
         return report
     except Exception as e:
