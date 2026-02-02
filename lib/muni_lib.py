@@ -263,16 +263,20 @@ def calculate_best_status(statuses, window_size=3):
 from lib.notifiers import post_to_bluesky
 
 
-def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True):
+def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True, max_retries=3):
     """
-    Download a single Muni subway status image.
+    Download a single Muni subway status image with retry logic.
 
     The SF Muni Central page uses JavaScript to update the image every 5 seconds,
     but we can access the actual image URL directly.
 
+    Implements exponential backoff for transient errors (timeouts, connection errors,
+    server errors). Non-retryable errors (4xx, invalid dimensions) fail immediately.
+
     Args:
         output_folder: Directory to save the image
         validate_dimensions: If True, verify image is 1860x800 and delete if not
+        max_retries: Maximum number of retry attempts (default 3)
 
     Returns:
         dict: {
@@ -280,10 +284,13 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
             'filepath': str or None,
             'width': int or None,
             'height': int or None,
-            'error': str or None
+            'error': str or None,
+            'attempts': int (number of attempts made),
+            'retried': bool (whether retries were needed)
         }
     """
     import random
+    import time
 
     # Direct image URL (extracted from obfuscated JavaScript)
     IMAGE_URL = "http://sfmunicentral.com/sfmunicentral_Snapshot_Objects/Mimic1_A7SE582P.jpg"
@@ -291,51 +298,123 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
     # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
 
-    try:
-        # Download with cache-busting parameter (mimics JavaScript behavior)
-        params = {'nocache': random.randint(0, 999)}
-        response = requests.get(IMAGE_URL, params=params, timeout=10)
-        response.raise_for_status()
+    # Retryable exceptions
+    RETRYABLE_EXCEPTIONS = (
+        requests.exceptions.Timeout,
+        requests.exceptions.ConnectionError,
+        requests.exceptions.ChunkedEncodingError,
+    )
 
-        # Generate filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"muni_snapshot_{timestamp}.jpg"
-        filepath = os.path.join(output_folder, filename)
+    last_error = None
+    attempts = 0
 
-        # Save the image
-        with open(filepath, 'wb') as f:
-            f.write(response.content)
+    for attempt in range(max_retries):
+        attempts = attempt + 1
+        try:
+            # Download with cache-busting parameter (mimics JavaScript behavior)
+            params = {'nocache': random.randint(0, 999)}
+            response = requests.get(IMAGE_URL, params=params, timeout=10)
 
-        # Verify image dimensions if requested
-        img = Image.open(filepath)
-        width, height = img.size
+            # Check for server errors (5xx) - these are retryable
+            if response.status_code >= 500:
+                last_error = f"Server error: HTTP {response.status_code}"
+                if attempt < max_retries - 1:
+                    delay = 2 ** attempt  # 1s, 2s, 4s
+                    print(f"  Retry {attempt + 1}/{max_retries}: {last_error}, waiting {delay}s...")
+                    time.sleep(delay)
+                    continue
+                else:
+                    return {
+                        'success': False,
+                        'filepath': None,
+                        'width': None,
+                        'height': None,
+                        'error': last_error,
+                        'attempts': attempts,
+                        'retried': attempts > 1
+                    }
 
-        if validate_dimensions and (width != EXPECTED_WIDTH or height != EXPECTED_HEIGHT):
-            os.remove(filepath)
+            # Non-retryable HTTP errors (4xx)
+            response.raise_for_status()
+
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"muni_snapshot_{timestamp}.jpg"
+            filepath = os.path.join(output_folder, filename)
+
+            # Save the image
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+
+            # Verify image dimensions if requested
+            img = Image.open(filepath)
+            width, height = img.size
+
+            if validate_dimensions and (width != EXPECTED_WIDTH or height != EXPECTED_HEIGHT):
+                os.remove(filepath)
+                # Invalid dimensions are not retryable
+                return {
+                    'success': False,
+                    'filepath': None,
+                    'width': width,
+                    'height': height,
+                    'error': f"Invalid dimensions: {width}x{height}, expected {EXPECTED_WIDTH}x{EXPECTED_HEIGHT}",
+                    'attempts': attempts,
+                    'retried': attempts > 1
+                }
+
+            return {
+                'success': True,
+                'filepath': filepath,
+                'width': width,
+                'height': height,
+                'error': None,
+                'attempts': attempts,
+                'retried': attempts > 1
+            }
+
+        except RETRYABLE_EXCEPTIONS as e:
+            last_error = str(e)
+            if attempt < max_retries - 1:
+                delay = 2 ** attempt  # 1s, 2s, 4s
+                print(f"  Retry {attempt + 1}/{max_retries}: {last_error}, waiting {delay}s...")
+                time.sleep(delay)
+            continue
+
+        except requests.exceptions.HTTPError as e:
+            # Non-retryable HTTP errors (4xx)
             return {
                 'success': False,
                 'filepath': None,
-                'width': width,
-                'height': height,
-                'error': f"Invalid dimensions: {width}x{height}, expected {EXPECTED_WIDTH}x{EXPECTED_HEIGHT}"
+                'width': None,
+                'height': None,
+                'error': str(e),
+                'attempts': attempts,
+                'retried': attempts > 1
             }
 
-        return {
-            'success': True,
-            'filepath': filepath,
-            'width': width,
-            'height': height,
-            'error': None
-        }
+        except Exception as e:
+            # Other exceptions (file I/O, PIL errors) - not retryable
+            return {
+                'success': False,
+                'filepath': None,
+                'width': None,
+                'height': None,
+                'error': str(e),
+                'attempts': attempts,
+                'retried': attempts > 1
+            }
 
-    except Exception as e:
-        return {
-            'success': False,
-            'filepath': None,
-            'width': None,
-            'height': None,
-            'error': str(e)
-        }
+    # All retries exhausted
+    return {
+        'success': False,
+        'filepath': None,
+        'width': None,
+        'height': None,
+        'error': f"Failed after {max_retries} attempts: {last_error}",
+        'attempts': attempts,
+        'retried': True
+    }
 
 
 def detect_muni_status(image_path):

@@ -32,6 +32,37 @@ SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 CACHE_MAX_AGE = 300  # seconds (5 minutes) - fallback if cache is stale
 ENABLE_FALLBACK = os.getenv('ENABLE_FALLBACK', 'true').lower() == 'true'
 
+# Staleness thresholds (in seconds)
+# These define how we communicate data freshness to users
+STALENESS_FRESH = 300       # 0-5 min: fresh data
+STALENESS_AGING = 900       # 5-15 min: aging data (subtle warning)
+STALENESS_STALE = 1800      # 15-30 min: stale data (prominent warning)
+STALENESS_EXPIRED = 1800    # >30 min: expired data (error state)
+
+
+def _get_staleness_level(seconds):
+    """
+    Determine staleness level based on age in seconds.
+
+    Returns:
+        tuple: (level, message) where level is one of:
+            'fresh' - Data is current (0-5 min)
+            'aging' - Data is getting old (5-15 min)
+            'stale' - Data is stale (15-30 min)
+            'expired' - Data is too old to trust (>30 min)
+    """
+    if seconds < STALENESS_FRESH:
+        return ('fresh', None)
+    elif seconds < STALENESS_AGING:
+        minutes = int(seconds / 60)
+        return ('aging', f'Status data is {minutes} minutes old')
+    elif seconds < STALENESS_STALE:
+        minutes = int(seconds / 60)
+        return ('stale', f'Status may be outdated ({minutes} min since last update)')
+    else:
+        minutes = int(seconds / 60)
+        return ('expired', f'Status data is outdated ({minutes} min since last update). The source may be unavailable.')
+
 print("Muni Status API starting...")
 if ENABLE_FALLBACK:
     print("Fallback mode enabled - will perform live detection if cache is stale")
@@ -65,11 +96,19 @@ class StatusResource:
 
         if cache_data:
             try:
-                # Check cache age
+                # Check cache age based on last_successful_check (preferred) or cached_at
+                last_success = cache_data.get('last_successful_check', cache_data.get('cached_at'))
+                last_success_dt = datetime.fromisoformat(last_success)
+                data_age = (datetime.now() - last_success_dt).total_seconds()
+
+                # Also get cached_at for cache staleness check
                 cached_at = datetime.fromisoformat(cache_data['cached_at'])
                 cache_age = (datetime.now() - cached_at).total_seconds()
 
-                # Use cache if it's fresh enough
+                # Determine staleness level
+                staleness_level, staleness_message = _get_staleness_level(data_age)
+
+                # Use cache if it's fresh enough (based on cached_at for fallback decision)
                 if cache_age < CACHE_MAX_AGE:
                     # Get best status (most optimistic of last 2)
                     best = cache_data.get('best_status', cache_data.get('statuses', [{}])[0])
@@ -88,8 +127,20 @@ class StatusResource:
                         'image_dimensions': best.get('image_dimensions'),
                         'timestamp': best['timestamp'],
                         'cached': True,
-                        'cache_age': round(cache_age, 1)
+                        'cache_age': round(cache_age, 1),
+                        # Staleness info for frontend
+                        'data_age': round(data_age, 1),
+                        'staleness': staleness_level,
+                        'staleness_message': staleness_message
                     }
+
+                    # Add failure tracking info if present
+                    consecutive_failures = cache_data.get('consecutive_failures', 0)
+                    if consecutive_failures > 0:
+                        response_data['consecutive_failures'] = consecutive_failures
+                        last_error = cache_data.get('last_error')
+                        if last_error:
+                            response_data['last_error'] = last_error
 
                     # Add detection details if available
                     if 'detection' in best:

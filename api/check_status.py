@@ -32,6 +32,40 @@ SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
 DEFAULT_INTERVAL = 30  # seconds
 
 
+def _record_check_failure(error_message, failure_type):
+    """
+    Record a check failure in the cache without clearing existing status data.
+
+    This preserves the last known good status while tracking failure info
+    for staleness detection and monitoring.
+
+    Args:
+        error_message: Description of the error
+        failure_type: Type of failure ('download' or 'detection')
+    """
+    cache_data = read_cache()
+    if cache_data is None:
+        cache_data = {}
+
+    # Increment consecutive failures
+    consecutive_failures = cache_data.get('consecutive_failures', 0) + 1
+
+    # Update failure tracking fields (preserve existing status data)
+    cache_data['consecutive_failures'] = consecutive_failures
+    cache_data['last_error'] = {
+        'message': error_message,
+        'type': failure_type,
+        'timestamp': datetime.now().isoformat()
+    }
+    # Don't update cached_at - that tracks when we last had good data
+    # Don't update last_successful_check - that's the point
+
+    if write_cache(cache_data):
+        print(f"  Recorded failure #{consecutive_failures}: {failure_type}")
+    else:
+        print(f"  Failed to record failure in cache")
+
+
 def check_status(should_write_cache=False):
     """Download image and detect status.
 
@@ -50,10 +84,19 @@ def check_status(should_write_cache=False):
 
     if not result['success']:
         print(f"Download failed: {result['error']}")
+        if result.get('retried'):
+            print(f"  (failed after {result.get('attempts', 1)} attempts)")
+
+        # Update cache with failure info (increment consecutive_failures)
+        if should_write_cache:
+            _record_check_failure(result.get('error', 'Unknown error'), 'download')
+
         return False
 
     print(f"Downloaded: {result['filepath']}")
     print(f"  Dimensions: {result['width']} x {result['height']}")
+    if result.get('retried'):
+        print(f"  (succeeded after {result.get('attempts', 1)} attempts)")
     print()
 
     # Detect status using OpenCV
@@ -62,6 +105,9 @@ def check_status(should_write_cache=False):
         detection = detect_muni_status(result['filepath'])
     except Exception as e:
         print(f"Detection failed: {e}")
+        # Update cache with failure info
+        if should_write_cache:
+            _record_check_failure(str(e), 'detection')
         return False
 
     # Display results
@@ -101,6 +147,7 @@ def check_status(should_write_cache=False):
     # Write to cache if requested
     if should_write_cache:
         # Create new status entry
+        now = datetime.now()
         new_status = {
             'status': detection['status'],
             'description': detection['description'],
@@ -112,7 +159,7 @@ def check_status(should_write_cache=False):
                 'width': result['width'],
                 'height': result['height']
             },
-            'timestamp': datetime.now().isoformat()
+            'timestamp': now.isoformat()
         }
 
         # Read existing cache to get previous statuses and best_status
@@ -135,11 +182,16 @@ def check_status(should_write_cache=False):
         # Keep only last 3 statuses (~1.5 min window at 30s intervals)
         statuses = statuses[:3]
 
-        # Write cache with status history
+        # Write cache with status history and tracking fields
         cache_data = {
             'statuses': statuses,
             'best_status': best_status,
-            'cached_at': datetime.now().isoformat()
+            'cached_at': now.isoformat(),
+            # Track last successful check separately (for staleness detection)
+            'last_successful_check': now.isoformat(),
+            # Reset failure counter on success
+            'consecutive_failures': 0,
+            'last_error': None
         }
 
         if write_cache(cache_data):

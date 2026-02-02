@@ -58,10 +58,11 @@
             'green': 'All aboard: Muni is on track',
             'yellow': 'Uh oh: Muni\'s not feeling well',
             'red': 'Muni is taking a nap',
-            'error': 'Unknown error'
+            'error': 'Unable to check status'
         };
 
         let previousStatus = null;
+        let previousStaleness = null;
 
         async function fetchStatus() {
             try {
@@ -70,16 +71,24 @@
 
                 if (response.ok) {
                     const delaySummaries = data.detection?.delay_summaries || [];
-                    renderStatus(data.status, delaySummaries);
+                    const staleness = data.staleness || 'fresh';
+                    const stalenessMessage = data.staleness_message || null;
+
+                    // If data is expired, show error state instead
+                    if (staleness === 'expired') {
+                        renderStatus('error', [], staleness, stalenessMessage);
+                    } else {
+                        renderStatus(data.status, delaySummaries, staleness, stalenessMessage);
+                    }
                 } else {
-                    renderStatus('error', []);
+                    renderStatus('error', [], 'expired', 'Unable to retrieve status data');
                 }
             } catch (error) {
-                renderStatus('error', []);
+                renderStatus('error', [], 'expired', 'Unable to connect to status service');
             }
         }
 
-        function renderStatus(status, delaySummaries = []) {
+        function renderStatus(status, delaySummaries = [], staleness = 'fresh', stalenessMessage = null) {
             // Find the image filename, or default to the error image.
             const image = statusImage[status] || statusImage['error'];
 
@@ -93,10 +102,20 @@
                 detailsHtml = `<div class="details">${items}</div>`;
             }
 
-            // Check if status changed
+            // Build staleness warning banner if data is aging or stale
+            let stalenessHtml = '';
+            if (stalenessMessage && (staleness === 'aging' || staleness === 'stale' || staleness === 'expired')) {
+                const warningClass = staleness === 'aging' ? 'staleness-aging' :
+                                    staleness === 'stale' ? 'staleness-stale' : 'staleness-expired';
+                stalenessHtml = `<div class="staleness-warning ${warningClass}">${stalenessMessage}</div>`;
+            }
+
+            // Check if status or staleness changed
             const statusChanged = previousStatus !== null && previousStatus !== status;
+            const stalenessChanged = previousStaleness !== null && previousStaleness !== staleness;
 
             const html = `
+                ${stalenessHtml}
                 <div class="status-icon">
                     <img src="/static/${image}">
                 </div>
@@ -115,12 +134,14 @@
                     statusElement.innerHTML = html;
                     statusElement.classList.remove('fade-out');
                     previousStatus = status;
+                    previousStaleness = staleness;
                 }, 500);
             } else {
-                // First load - no animation
+                // First load or staleness change - no animation (or subtle update)
                 document.body.className = `status-${status}`;
                 statusElement.innerHTML = html;
                 previousStatus = status;
+                previousStaleness = staleness;
             }
         }
 
