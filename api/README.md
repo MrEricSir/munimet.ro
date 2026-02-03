@@ -416,6 +416,23 @@ gsutil stat gs://munimetro-cache/latest_status.json
 | Cache Only | ~30ms | 503 error |
 | Cloud Run | ~100-200ms | 503 error |
 
+## Linting
+
+The project uses [FawltyDeps](https://github.com/tweag/FawltyDeps) to check for dependency issues (undeclared or unused dependencies). This runs automatically on push via GitHub Actions.
+
+To run locally:
+
+```bash
+cd api
+pip install fawltydeps
+fawltydeps --detailed
+```
+
+Expected output when passing:
+```
+No undeclared or unused dependencies detected.
+```
+
 ## Related Documentation
 
 - **Deployment Guide**: [deploy/README.md](../deploy/README.md) - Local and cloud deployment

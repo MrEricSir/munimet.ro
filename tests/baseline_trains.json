@@ -28,7 +28,6 @@
       ["2234LM", 961, {"ocr_override": "W2023LL", "note": "OCR misreads significantly"}],
       ["4311M", 1052, {"ocr_override": "2043LL", "note": "OCR significantly different"}],
       ["2066KK", 1181],
-      ["B2175TT", 1559, {"ocr_override": "C0821RF", "note": "OCR misreads significantly"}],
       ["1091TT", 1855, {"ocr_override": "1091T", "note": "OCR drops trailing T"}]
     ],
     "IMG_9793.jpg": [
@@ -40,7 +39,6 @@
       ["9019K", 876],
       ["W2023LL", 968, {"ocr_override": "W2023L", "note": "OCR drops one L"}],
       ["2066KK", 1181],
-      ["B2175TT", 1559, {"ocr_override": "C0821RF", "note": "OCR misreads significantly"}],
       ["C2109TT", 1813, {"ocr_override": "C2109T", "note": "OCR drops trailing T"}]
     ],
     "IMG_9794.jpg": [
@@ -55,7 +53,6 @@
       ["9019K", 876],
       ["W2023LL", 968, {"ocr_override": "W2023L", "note": "OCR drops one L"}],
       ["2066KK", 1181],
-      ["B2175TT", 1559, {"ocr_override": "C0821RF", "note": "OCR misreads significantly"}],
       ["C2109TT", 1726]
     ],
     "latest-image-jan-31-083406.jpg": [
@@ -104,12 +101,32 @@
       ["M2114LL", 659],
       ["W2056M", 800],
       ["M2060M", 807],
-      ["F2179NN", 871],
+      ["F2179NN", 871, {"ocr_override": "2179NN", "note": "OCR drops leading F"}],
       ["D2004NN", 879],
       ["D2099J", 1054],
       ["7052KX", 1174, {"note": "Actually 2 bunched trains at Embarcadero - detection improvement needed"}],
       ["C2145TT", 1676],
       ["B2118TT", 1815]
+    ],
+    "muni_snapshot_20260202_122209.jpg": [
+      ["7217OK", 37, {"ocr_override": "M2017OK", "note": "OCR misreads M2 as 72"}],
+      ["M2187EM", 176, {"ocr_override": "W2187EM", "note": "OCR misreads W as M"}],
+      ["W2010MM", 233],
+      ["W2177LL", 482],
+      ["W2082KK", 625],
+      ["M2058J", 674],
+      ["M2025LL", 724],
+      ["D2050NN", 800],
+      ["2073NN", 811, {"ocr_override": "M2073NN", "note": "OCR drops leading M"}],
+      ["M2036KK", 875],
+      ["W2114MM", 878],
+      ["W2083KK", 922],
+      ["6011LN", 1180, {"ocr_override": "W2011LN", "note": "OCR misreads W2 as 60"}],
+      ["M2188LL", 1195],
+      ["W2027MM", 1275],
+      ["D2166J", 1425],
+      ["B2026TT", 1564],
+      ["C2094TT", 1726]
     ]
   },
   "train_free_images": {

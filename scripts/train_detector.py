@@ -22,6 +22,19 @@ TRAIN_ID_PATTERN = re.compile(r'[A-Z]?\d{4}[A-Z*X]{1,2}')
 # Real Muni train numbers never have 4 identical digits
 INVALID_REPEATED_DIGITS = re.compile(r'(\d)\1{3}')
 
+# Valid Muni train line prefixes (single letter before 4-digit car number)
+# Includes: line letters (M, W, B, C, D, F, I, J, K, L, N, S, T) and common OCR variants
+# 'E' is included as a common OCR misread of 'F'
+# 'A', 'G', 'H', 'O', 'P', 'Q', 'U', 'V', 'Y', 'Z' are NOT valid Muni prefixes
+VALID_TRAIN_PREFIXES = set('MBCDEFIJKLNRSTW')
+
+# Pattern to detect invalid prefix (letter + 4 digits where letter is not valid)
+def _has_invalid_prefix(train_id):
+    """Check if train ID has an invalid line prefix."""
+    if len(train_id) >= 5 and train_id[0].isalpha() and train_id[1].isdigit():
+        return train_id[0] not in VALID_TRAIN_PREFIXES
+    return False
+
 # Y-bands for text labels
 UPPER_TRAIN_BAND = (0.25, 0.48)
 LOWER_TRAIN_BAND = (0.56, 0.80)
@@ -58,9 +71,9 @@ class TrainDetector:
         # Step 1: OCR-based detection (primary method)
         ocr_trains = self._detect_by_ocr(gray, h, w, hsv)
 
-        # Step 2: Symbol detection only if OCR found very few trains
-        # This reduces false positives when OCR is working well
-        if len(ocr_trains) < 3:
+        # Step 2: Symbol detection only if OCR found no trains
+        # This reduces false positives from track signals and other visual elements
+        if len(ocr_trains) == 0:
             symbols = self._detect_symbols(hsv, h, w, gray)
             trains = self._merge(ocr_trains, symbols)
         else:
@@ -477,33 +490,42 @@ class TrainDetector:
         if len(combined) >= 2 and combined[0].isalpha() and combined[0] == combined[1]:
             combined = combined[1:]
 
-        if combined and combined[0].isdigit():
-            combined = combined.replace('L', '1').replace('S', '5').replace('B', '8')
-
+        # First try to match without aggressive corrections
         matches = TRAIN_ID_PATTERN.findall(combined)
         if matches:
             # Filter out invalid train IDs with repeated digits (e.g., 1111II, 0000MM)
-            matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)]
+            # and invalid prefixes (e.g., A4111I - 'A' is not a valid Muni line)
+            matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)
+                       and not _has_invalid_prefix(m)]
             if matches:
                 return matches
 
-        # Position-based 7/T fix for vertical text where 7 is often read as T
+        # Position-based corrections for vertical text OCR errors
+        # Find where digits likely start (first digit or letter that looks like a digit)
         if len(combined) >= 5:
             fixed = list(combined)
-            # Find where digits start
             digit_start = 0
             for i, c in enumerate(combined):
-                if c.isdigit() or c == 'T':  # T might be misread 7
+                if c.isdigit() or c in 'TIFLS':  # Characters that might be misread digits
                     digit_start = i
                     break
 
             for i in range(len(fixed)):
                 if digit_start <= i < digit_start + 4:
+                    # In digit positions: convert letters that look like digits
+                    # Note: B, M, W, etc. are valid train line prefixes, don't convert
                     if fixed[i] == 'T':
                         fixed[i] = '7'
                     elif fixed[i] == 'I':
                         fixed[i] = '1'
+                    elif fixed[i] == 'F':
+                        fixed[i] = '7'  # F and 7 look similar
+                    elif fixed[i] == 'L':
+                        fixed[i] = '1'
+                    elif fixed[i] == 'S':
+                        fixed[i] = '5'
                 elif i >= digit_start + 4:
+                    # In suffix positions: convert digits that look like letters
                     if fixed[i] == '7':
                         fixed[i] = 'T'
                     elif fixed[i] == '1':
@@ -512,8 +534,9 @@ class TrainDetector:
                         fixed[i] = 'O'
             matches = TRAIN_ID_PATTERN.findall(''.join(fixed))
             if matches:
-                # Filter out invalid train IDs with repeated digits
-                matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)]
+                # Filter out invalid train IDs with repeated digits and invalid prefixes
+                matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)
+                           and not _has_invalid_prefix(m)]
                 if matches:
                     return matches
 
