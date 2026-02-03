@@ -24,7 +24,7 @@ LOCAL_DB_PATH = PROJECT_ROOT / "artifacts" / "runtime" / "analytics.db"
 LOCAL_CACHE_DIR = PROJECT_ROOT / "artifacts" / "runtime" / "cache"
 
 # Cache configuration
-REPORT_CACHE_MAX_AGE = 86400  # 24 hours - reports regenerate daily
+REPORT_CACHE_MAX_AGE = 1800  # 30 minutes - reports regenerate frequently for fresh data
 
 # Station code to name mapping (for incidents that only have codes)
 STATION_NAMES = {

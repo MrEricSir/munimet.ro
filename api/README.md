@@ -209,11 +209,11 @@ JSON API for delay analytics.
 ```
 
 **Notes**:
-- Reports are cached for 24 hours to reduce database load
+- Reports are cached for 30 minutes to show recent data
 - Only yellow status counts as "delayed" (red = maintenance)
 - `by_day`: 0=Monday, 6=Sunday
 
-**Caching**: 24 hours (`Cache-Control: public, max-age=86400`)
+**Caching**: 30 minutes (`Cache-Control: public, max-age=1800`)
 
 ## Web Dashboard
 

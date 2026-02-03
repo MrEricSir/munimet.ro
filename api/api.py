@@ -399,8 +399,8 @@ class AnalyticsResource:
         resp.status = falcon.HTTP_200
         resp.media = get_analytics_report(days)
 
-        # Cache for 24 hours (matches internal report cache)
-        resp.set_header('Cache-Control', 'public, max-age=86400')
+        # Cache for 30 minutes (matches internal report cache)
+        resp.set_header('Cache-Control', 'public, max-age=1800')
 
 
 class StaticResource:
