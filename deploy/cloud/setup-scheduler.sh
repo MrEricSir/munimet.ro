@@ -16,8 +16,8 @@ CHECKER_SCHEDULE="${CHECKER_SCHEDULE:-*/3 * * * *}"  # Every 3 minutes
 
 # Analytics reports job
 REPORTS_JOB="munimetro-reports"
-REPORTS_SCHEDULER="munimetro-reports-daily"
-REPORTS_SCHEDULE="${REPORTS_SCHEDULE:-0 0 * * *}"  # Daily at midnight UTC
+REPORTS_SCHEDULER="munimetro-reports-periodic"
+REPORTS_SCHEDULE="${REPORTS_SCHEDULE:-*/30 * * * *}"  # Every 30 minutes
 
 echo "=========================================="
 echo "MuniMetro Cloud Scheduler Setup"
@@ -27,7 +27,7 @@ echo "Region: $REGION"
 echo ""
 echo "Schedules:"
 echo "  Status checker: $CHECKER_SCHEDULE (every 3 min)"
-echo "  Analytics reports: $REPORTS_SCHEDULE (daily midnight UTC)"
+echo "  Analytics reports: $REPORTS_SCHEDULE (every 30 min)"
 echo "=========================================="
 echo ""
 
@@ -100,7 +100,7 @@ gcloud scheduler jobs create http "$REPORTS_SCHEDULER" \
     --max-retry-attempts=2 \
     --max-backoff=3600s \
     --min-backoff=60s \
-    --description="Generates MuniMetro analytics reports daily at midnight UTC" \
+    --description="Generates MuniMetro analytics reports every 30 minutes" \
     --project="$PROJECT_ID"
 
 echo "✓ Analytics reports scheduler created: $REPORTS_SCHEDULER"
@@ -132,7 +132,7 @@ echo "    Target: $CHECKER_JOB"
 echo ""
 echo "  Analytics Reports:"
 echo "    Name: $REPORTS_SCHEDULER"
-echo "    Schedule: $REPORTS_SCHEDULE (daily midnight UTC)"
+echo "    Schedule: $REPORTS_SCHEDULE (every 30 min)"
 echo "    Target: $REPORTS_JOB"
 echo ""
 echo "View scheduler status:"
