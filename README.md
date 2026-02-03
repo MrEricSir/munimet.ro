@@ -121,7 +121,7 @@ Contributors can collect their own test images:
 
 3. Visualize detection interactively:
    ```bash
-   python scripts/station_viewer.py  # Interactive detection viewer
+   python scripts/detection_viewer.py  # Interactive detection viewer
    ```
 
 4. Run tests:
@@ -136,15 +136,18 @@ munimet.ro/
 ├── lib/                    # Shared library code
 │   ├── muni_lib.py        # Core download & detection functions
 │   ├── detection.py       # OpenCV-based status detection
+│   ├── station_detector.py # Station position detection
+│   ├── train_detector.py  # Train ID detection (OCR)
+│   ├── station_constants.py # Station definitions
 │   ├── analytics.py       # SQLite-based delay analytics
 │   └── notifiers/         # Notification channels (Bluesky, RSS)
 │
-├── scripts/               # Detection and utility scripts
-│   ├── analyze.py              # CLI tool for image analysis
-│   ├── station_detector.py     # Station position detection
-│   ├── train_detector.py       # Train ID detection (OCR)
-│   ├── detect_stations.py      # Station configuration
-│   └── station_viewer.py       # Debug visualization tool
+├── scripts/               # Development and utility scripts
+│   ├── analyze.py         # CLI tool for image analysis
+│   ├── detect_stations.py # Station detection CLI
+│   ├── detection_viewer.py # Interactive detection viewer
+│   ├── validate.sh        # Local validation (lint + tests)
+│   └── install-hooks.sh   # Git hooks installer
 │
 ├── api/                   # Production web API
 │   ├── api.py             # Falcon web server
@@ -240,7 +243,7 @@ Users
 ## Development Workflow
 
 1. **Collect Data** - Run `download_muni_image.py` periodically
-2. **Test Detection** - Use `scripts/station_viewer.py` to visualize detection
+2. **Test Detection** - Use `scripts/detection_viewer.py` to visualize detection
 3. **Run Tests** - Execute `pytest tests/` to verify detection accuracy
 4. **Test Locally** - Deploy with `./deploy/local/setup.sh && ./deploy/local/start.sh`
 5. **Deploy Cloud** - Deploy to Cloud Run with `./deploy/cloud/deploy-services.sh`

@@ -217,7 +217,7 @@ python lib/detection.py tests/images/muni_snapshot_20251207_092107.jpg
 pytest tests/test_system_status.py -v
 
 # Interactive detection viewer
-python scripts/station_viewer.py
+python scripts/detection_viewer.py
 ```
 
 ## Notes

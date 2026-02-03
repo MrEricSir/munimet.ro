@@ -2,8 +2,8 @@
 """
 OpenCV-based detection library for SF Muni Metro status.
 
-This module wraps the detection logic from scripts/station_viewer.py
-to provide a clean API for the status detection service.
+This module provides the detection API used by the status service,
+combining station detection, train detection, and delay analysis.
 """
 
 from pathlib import Path

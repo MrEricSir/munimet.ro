@@ -774,8 +774,18 @@ HTML_TEMPLATE = '''
             </div>
 
             <div class="info-section">
-                <h3>Trains Detected ({{ detection.trains|length }})</h3>
-                <div id="trainsInfo">
+                <h3>Click Info</h3>
+                <div class="click-info" id="clickInfo">
+                    Click on stations or track segments to see details.
+                </div>
+            </div>
+
+            <div class="info-section">
+                <div class="section-header" onclick="toggleSection('trains')">
+                    <h3>Trains Detected ({{ detection.trains|length }})</h3>
+                    <span class="section-toggle" id="trains-toggle">[+]</span>
+                </div>
+                <div class="section-content collapsed" id="trains-content">
                     {% if detection.trains %}
                         {% for t in detection.trains %}
                         {% if t.confidence == 'high' %}
@@ -795,13 +805,6 @@ HTML_TEMPLATE = '''
                     {% else %}
                         <div class="no-delays">No trains detected</div>
                     {% endif %}
-                </div>
-            </div>
-
-            <div class="info-section">
-                <h3>Click Info</h3>
-                <div class="click-info" id="clickInfo">
-                    Click on stations or track segments to see details.
                 </div>
             </div>
 
