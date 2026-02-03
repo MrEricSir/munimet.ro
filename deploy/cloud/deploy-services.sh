@@ -33,8 +33,25 @@ echo ""
 # Navigate to project root
 cd "$(dirname "$0")/../.."
 
+# Pre-deploy validation
+echo "[0/4] Running pre-deploy validation..."
+if [ -f "scripts/validate.sh" ]; then
+    if ./scripts/validate.sh --quick; then
+        echo "✓ Pre-deploy validation passed"
+    else
+        echo "❌ Pre-deploy validation failed"
+        echo ""
+        echo "Fix validation errors before deploying."
+        echo "Run './scripts/validate.sh' for details."
+        exit 1
+    fi
+else
+    echo "⚠️  Validation script not found, skipping..."
+fi
+echo ""
+
 # Build and push Docker image
-echo "[1/3] Building Docker image..."
+echo "[1/4] Building Docker image..."
 gcloud builds submit \
     --tag "$API_IMAGE" \
     --project "$PROJECT_ID" \

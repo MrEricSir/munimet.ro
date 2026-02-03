@@ -6,19 +6,12 @@ This module wraps the detection logic from scripts/station_viewer.py
 to provide a clean API for the status detection service.
 """
 
-import sys
 from pathlib import Path
-
-# Add scripts directory to path for imports
-LIB_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = LIB_DIR.parent
-SCRIPTS_DIR = PROJECT_ROOT / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
 
 import cv2
 
-# Import detection components from scripts
-from station_detector import (
+# Import detection components from lib/
+from lib.station_detector import (
     StationDetector,
     STATION_X_POSITIONS,
     UPPER_TRACK_Y_PCT,
@@ -30,14 +23,18 @@ from station_detector import (
     REFERENCE_IMAGE_HEIGHT,
     HSV_RANGES,
 )
-from detect_stations import STATION_ORDER, INTERNAL_STATIONS
+from lib.station_constants import STATION_ORDER, INTERNAL_STATIONS
 
 # Try to import train detector (requires tesseract)
 try:
-    from train_detector import TrainDetector, TESSERACT_AVAILABLE
+    from lib.train_detector import TrainDetector, TESSERACT_AVAILABLE
 except ImportError:
     TrainDetector = None
     TESSERACT_AVAILABLE = False
+
+# Path resolution
+LIB_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = LIB_DIR.parent
 
 # Station full names for display
 STATION_NAMES = {

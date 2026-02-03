@@ -193,7 +193,7 @@ p.sub-credits {
     text-decoration: underline;
 }
 
-/* Easter egg link */
+/* Easter egg link - fixed to bottom right of viewport */
 .easter-egg {
     position: fixed;
     bottom: 8px;
@@ -203,7 +203,7 @@ p.sub-credits {
     text-decoration: none;
     font-family: serif;
     transition: color 0.3s ease;
-    z-index: 1000;
+    z-index: 9999;
 }
 
 .easter-egg:hover {

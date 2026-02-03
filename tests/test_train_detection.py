@@ -18,7 +18,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.train_detector import TrainDetector, TESSERACT_AVAILABLE
+from lib.train_detector import TrainDetector, TESSERACT_AVAILABLE
 
 # Paths
 TESTS_DIR = Path(__file__).parent

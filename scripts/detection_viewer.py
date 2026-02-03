@@ -1,15 +1,31 @@
 #!/usr/bin/env python3
 """
-Simple Flask web UI for station detection visualization.
+Flask web UI for Muni Metro detection visualization.
 
-Run with: python scripts/station_viewer.py
-Then open: http://localhost:5001
+Displays station/train detection results with interactive overlays.
+
+Usage:
+    # Browse images in reference folder:
+    python scripts/detection_viewer.py
+
+    # View a specific image:
+    python scripts/detection_viewer.py path/to/image.jpg
+
+    # Specify a folder of images:
+    python scripts/detection_viewer.py --folder path/to/images/
+
+Options:
+    --port PORT     Server port (default: 5001)
+    --no-browser    Don't auto-open browser
 """
 
+import argparse
 import os
 import sys
 import json
 import base64
+import webbrowser
+import threading
 from pathlib import Path
 from io import BytesIO
 
@@ -20,37 +36,28 @@ from flask import Flask, render_template_string, jsonify, request
 # Add parent directory for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    from scripts.detect_stations import STATION_ORDER, INTERNAL_STATIONS
-    from scripts.station_detector import (
-        StationDetector, STATION_X_POSITIONS,
-        UPPER_TRACK_Y_PCT, LOWER_TRACK_Y_PCT, TRACK_HEIGHT_PCT,
-        UPPER_LABEL_Y_PCT, LOWER_LABEL_Y_PCT,
-        REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
-        HSV_RANGES,
-    )
-    from scripts.train_detector import TrainDetector, TESSERACT_AVAILABLE
-except ModuleNotFoundError:
-    from detect_stations import STATION_ORDER, INTERNAL_STATIONS
-    from station_detector import (
-        StationDetector, STATION_X_POSITIONS,
-        UPPER_TRACK_Y_PCT, LOWER_TRACK_Y_PCT, TRACK_HEIGHT_PCT,
-        UPPER_LABEL_Y_PCT, LOWER_LABEL_Y_PCT,
-        REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
-        HSV_RANGES,
-    )
-    from train_detector import TrainDetector, TESSERACT_AVAILABLE
+from lib.station_constants import STATION_ORDER, INTERNAL_STATIONS
+from lib.station_detector import (
+    StationDetector, STATION_X_POSITIONS,
+    UPPER_TRACK_Y_PCT, LOWER_TRACK_Y_PCT, TRACK_HEIGHT_PCT,
+    UPPER_LABEL_Y_PCT, LOWER_LABEL_Y_PCT,
+    REFERENCE_IMAGE_WIDTH, REFERENCE_IMAGE_HEIGHT,
+    HSV_RANGES,
+)
+from lib.train_detector import TrainDetector, TESSERACT_AVAILABLE
 
 app = Flask(__name__)
 
-# Configuration
-IMAGE_FOLDER = Path(__file__).parent.parent / "artifacts" / "reference_data" / "images"
+# Configuration - can be overridden by CLI args
+DEFAULT_IMAGE_FOLDER = Path(__file__).parent.parent / "artifacts" / "reference_data" / "images"
+IMAGE_FOLDER = DEFAULT_IMAGE_FOLDER
 detector = StationDetector()
 train_detector = TrainDetector() if TESSERACT_AVAILABLE else None
 
 # Global state
 current_image_index = 0
 image_files = []
+single_image_mode = False  # When True, only show one image (no navigation)
 
 
 def load_image_files():
@@ -694,15 +701,17 @@ HTML_TEMPLATE = '''
 <body>
     <div class="header">
         <div>
-            <h1>Station Detection Viewer</h1>
-            <span class="filename">{{ filename }} ({{ index + 1 }} / {{ total }})</span>
+            <h1>Detection Viewer</h1>
+            <span class="filename">{{ filename }}{% if not single_image_mode %} ({{ index + 1 }} / {{ total }}){% endif %}</span>
         </div>
+        {% if not single_image_mode %}
         <div class="nav-buttons">
             <button onclick="navigate(-10)" {{ 'disabled' if index < 10 else '' }}>&lt;&lt; -10</button>
             <button onclick="navigate(-1)" {{ 'disabled' if index == 0 else '' }}>&lt; Prev</button>
             <button onclick="navigate(1)" {{ 'disabled' if index >= total - 1 else '' }}>Next &gt;</button>
             <button onclick="navigate(10)" {{ 'disabled' if index >= total - 10 else '' }}>+10 &gt;&gt;</button>
         </div>
+        {% endif %}
     </div>
 
     <div class="container">
@@ -1050,6 +1059,7 @@ def index():
         total=len(image_files),
         image_data=image_data,
         detection=detection,
+        single_image_mode=single_image_mode,
     )
 
 
@@ -1067,8 +1077,87 @@ def get_detection(idx):
     return jsonify(detection)
 
 
+def open_browser(port):
+    """Open browser after a short delay to allow server to start."""
+    import time
+    time.sleep(0.5)
+    webbrowser.open(f'http://localhost:{port}')
+
+
+def main():
+    global IMAGE_FOLDER, image_files, single_image_mode
+
+    parser = argparse.ArgumentParser(
+        description='Muni Metro detection visualization viewer',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
+    )
+    parser.add_argument(
+        'image',
+        nargs='?',
+        help='Path to a single image file to view'
+    )
+    parser.add_argument(
+        '--folder', '-f',
+        help='Folder containing images to browse'
+    )
+    parser.add_argument(
+        '--port', '-p',
+        type=int,
+        default=5001,
+        help='Server port (default: 5001)'
+    )
+    parser.add_argument(
+        '--no-browser',
+        action='store_true',
+        help="Don't auto-open browser"
+    )
+
+    args = parser.parse_args()
+
+    # Determine image source
+    if args.image:
+        # Single image mode
+        image_path = Path(args.image).resolve()
+        if not image_path.exists():
+            print(f"Error: Image not found: {image_path}")
+            sys.exit(1)
+        if not image_path.suffix.lower() in ('.jpg', '.jpeg', '.png'):
+            print(f"Error: Unsupported image format: {image_path.suffix}")
+            sys.exit(1)
+
+        image_files = [image_path]
+        single_image_mode = True
+        print(f"Viewing single image: {image_path.name}")
+
+    elif args.folder:
+        # Custom folder mode
+        IMAGE_FOLDER = Path(args.folder).resolve()
+        if not IMAGE_FOLDER.exists():
+            print(f"Error: Folder not found: {IMAGE_FOLDER}")
+            sys.exit(1)
+        load_image_files()
+        print(f"Found {len(image_files)} images in {IMAGE_FOLDER}")
+
+    else:
+        # Default: browse reference images
+        load_image_files()
+        print(f"Found {len(image_files)} images in {IMAGE_FOLDER}")
+
+    if not image_files:
+        print("No images found!")
+        sys.exit(1)
+
+    url = f"http://localhost:{args.port}"
+    print(f"Starting server at {url}")
+
+    # Auto-open browser unless disabled
+    if not args.no_browser:
+        threading.Thread(target=open_browser, args=(args.port,), daemon=True).start()
+
+    # Run server (debug=False when auto-opening browser to avoid double-open)
+    app.run(host='localhost', port=args.port, debug=args.no_browser)
+
+
 if __name__ == '__main__':
-    load_image_files()
-    print(f"Found {len(image_files)} images in {IMAGE_FOLDER}")
-    print("Starting server at http://localhost:5001")
-    app.run(host='localhost', port=5001, debug=True)
+    main()

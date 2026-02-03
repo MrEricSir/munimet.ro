@@ -390,11 +390,11 @@ The sync scripts use `gsutil rsync` to efficiently download only changed files.
 Contributors can collect their own reference images:
 
 ```bash
-# Run data collector (downloads images periodically)
+# Download a snapshot image
 python scripts/download_muni_image.py
 
-# Label collected images (requires tkinter)
-python scripts/label_images.py
+# View detection results (auto-opens browser)
+python scripts/detection_viewer.py artifacts/runtime/downloads/muni_snapshot_*.jpg
 ```
 
 ## Verification

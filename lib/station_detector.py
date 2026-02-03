@@ -13,10 +13,12 @@ text detection when color detection fails.
 import cv2
 import numpy as np
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
+
+# Import shared constants
+from lib.station_constants import get_section_directions, INTERNAL_STATIONS
 
 # Hardcoded station X-positions (pixels) for 1860x800 reference image
 # These are the known positions and don't change between images
@@ -594,11 +596,6 @@ class StationDetector:
             }
 
         # Build track segments
-        try:
-            from scripts.detect_stations import get_section_directions, INTERNAL_STATIONS
-        except ModuleNotFoundError:
-            from detect_stations import get_section_directions, INTERNAL_STATIONS
-
         track_segments = {}
 
         # Filter to only visible stations (exclude internal)
@@ -883,12 +880,6 @@ class StationDetector:
         lower_track_y: Tuple[int, int]
     ) -> Dict:
         """Derive track segment bounds from station positions."""
-        # Import direction helper
-        try:
-            from scripts.detect_stations import get_section_directions, INTERNAL_STATIONS
-        except ModuleNotFoundError:
-            from detect_stations import get_section_directions, INTERNAL_STATIONS
-
         segments = {}
         codes = [code for code, _ in station_order]
 

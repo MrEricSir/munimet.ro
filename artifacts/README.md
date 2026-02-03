@@ -65,35 +65,33 @@ After collecting new reference data, upload to Google Cloud Storage:
 
 ## Workflows
 
-### Collecting and Uploading Reference Data
+### Collecting Reference Images
 
 ```bash
 # 1. Collect new images
 python scripts/download_muni_image.py
 
-# 2. Label images
-python scripts/label_images.py
+# 2. View detection results (auto-opens browser)
+python scripts/detection_viewer.py path/to/image.jpg
 
 # 3. Upload to cloud storage
 ./scripts/sync-reference-data.sh upload    # macOS/Linux
 .\scripts\sync-reference-data.ps1 upload   # Windows
 ```
 
-### Updating Labels
+### Viewing Detection Results
 
-The `labels.json` file is managed via GCS along with the reference images:
+Use the detection viewer to visualize station/train detection on images:
 
 ```bash
-# 1. Download current labels and images
-./scripts/sync-reference-data.sh download    # macOS/Linux
-.\scripts\sync-reference-data.ps1 download   # Windows
+# View a single image (auto-opens browser)
+python scripts/detection_viewer.py path/to/image.jpg
 
-# 2. Run labeling tool
-python scripts/label_images.py  # Modifies artifacts/reference_data/labels.json
+# Browse all reference images
+python scripts/detection_viewer.py
 
-# 3. Upload changes to cloud
-./scripts/sync-reference-data.sh upload    # macOS/Linux
-.\scripts\sync-reference-data.ps1 upload   # Windows
+# Browse images from a custom folder
+python scripts/detection_viewer.py --folder path/to/images/
 ```
 
 ## Bidirectional Sync
