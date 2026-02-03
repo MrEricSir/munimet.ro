@@ -26,6 +26,25 @@ LOCAL_CACHE_DIR = PROJECT_ROOT / "artifacts" / "runtime" / "cache"
 # Cache configuration
 REPORT_CACHE_MAX_AGE = 86400  # 24 hours - reports regenerate daily
 
+# Station code to name mapping (for incidents that only have codes)
+STATION_NAMES = {
+    'WE': 'West Portal',
+    'FH': 'Forest Hill',
+    'CA': 'Castro',
+    'CH': 'Church',
+    'VN': 'Van Ness',
+    'CC': 'Civic Center',
+    'PO': 'Powell',
+    'MO': 'Montgomery',
+    'EM': 'Embarcadero',
+    'MN': 'Main',
+    'FP': 'Folsom',
+    'TT': 'Temporary Terminal',
+    'CT': 'Chinatown',
+    'US': 'Union Square',
+    'YB': 'Yerba Buena',
+}
+
 # Track if we've restored from GCS this session
 _gcs_restored = False
 
@@ -287,6 +306,7 @@ def log_status_check(status, best_status, detection_data, timestamp):
     delays_bunching = detection_data.get('delays_bunching', [])
 
     # Platform holds
+    # detection.py uses 'station' for code and 'name' for station name
     for delay in delays_platforms:
         cursor.execute('''
             INSERT INTO delay_incidents (check_id, timestamp, type, station, station_name, direction)
@@ -295,15 +315,17 @@ def log_status_check(status, best_status, detection_data, timestamp):
             check_id,
             timestamp,
             'platform_hold',
-            delay.get('code'),
-            delay.get('name'),
+            delay.get('station'),  # station code like 'PO', 'MO'
+            delay.get('name'),     # station name like 'Powell', 'Montgomery'
             delay.get('direction')
         ))
 
     # Red segments
+    # detection.py uses 'from' and 'to' for station codes (not 'from_code')
     for delay in delays_segments:
+        from_code = delay.get('from')
         details = json.dumps({
-            'from': delay.get('from'),
+            'from': from_code,
             'to': delay.get('to')
         })
         # Use the 'from' station as the primary station
@@ -314,14 +336,16 @@ def log_status_check(status, best_status, detection_data, timestamp):
             check_id,
             timestamp,
             'red_segment',
-            delay.get('from_code'),
-            delay.get('from'),
+            from_code,
+            STATION_NAMES.get(from_code, from_code),  # lookup name, fallback to code
             delay.get('direction'),
             details
         ))
 
     # Train bunching
+    # detection.py uses 'station' for station code (no separate 'station_code' field)
     for delay in delays_bunching:
+        station_code = delay.get('station')
         details = json.dumps({
             'train_count': delay.get('train_count')
         })
@@ -332,8 +356,8 @@ def log_status_check(status, best_status, detection_data, timestamp):
             check_id,
             timestamp,
             'bunching',
-            delay.get('station_code'),
-            delay.get('station'),
+            station_code,
+            STATION_NAMES.get(station_code, station_code),  # lookup name, fallback to code
             delay.get('direction'),
             details
         ))
