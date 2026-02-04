@@ -29,6 +29,8 @@ GCP_PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'munimetro')
 CREDENTIALS = [
     ("BLUESKY_HANDLE", "Bluesky handle", False, "munimetro.bsky.social"),
     ("BLUESKY_APP_PASSWORD", "Bluesky app password", True, None),
+    ("MASTODON_INSTANCE", "Mastodon instance URL", False, "https://mastodon.social"),
+    ("MASTODON_ACCESS_TOKEN", "Mastodon access token", True, None),
 ]
 
 

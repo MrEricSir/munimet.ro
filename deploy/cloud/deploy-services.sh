@@ -104,10 +104,28 @@ echo ""
 echo "[3/4] Deploying status checker job..."
 
 # Build secrets flag if secrets exist in Secret Manager
-SECRETS_FLAG=""
+SECRETS_LIST=""
+
+# Check for Bluesky credentials
 if gcloud secrets describe BLUESKY_HANDLE --project="$PROJECT_ID" &>/dev/null; then
-    SECRETS_FLAG="--set-secrets=BLUESKY_HANDLE=BLUESKY_HANDLE:latest,BLUESKY_APP_PASSWORD=BLUESKY_APP_PASSWORD:latest"
+    SECRETS_LIST="BLUESKY_HANDLE=BLUESKY_HANDLE:latest,BLUESKY_APP_PASSWORD=BLUESKY_APP_PASSWORD:latest"
     echo "  (with Bluesky credentials from Secret Manager)"
+fi
+
+# Check for Mastodon credentials
+if gcloud secrets describe MASTODON_ACCESS_TOKEN --project="$PROJECT_ID" &>/dev/null; then
+    if [ -n "$SECRETS_LIST" ]; then
+        SECRETS_LIST="${SECRETS_LIST},MASTODON_INSTANCE=MASTODON_INSTANCE:latest,MASTODON_ACCESS_TOKEN=MASTODON_ACCESS_TOKEN:latest"
+    else
+        SECRETS_LIST="MASTODON_INSTANCE=MASTODON_INSTANCE:latest,MASTODON_ACCESS_TOKEN=MASTODON_ACCESS_TOKEN:latest"
+    fi
+    echo "  (with Mastodon credentials from Secret Manager)"
+fi
+
+# Build the secrets flag if any secrets are configured
+SECRETS_FLAG=""
+if [ -n "$SECRETS_LIST" ]; then
+    SECRETS_FLAG="--set-secrets=${SECRETS_LIST}"
 fi
 
 gcloud run jobs deploy "$CHECKER_JOB" \

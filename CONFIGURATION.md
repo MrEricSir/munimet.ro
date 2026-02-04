@@ -69,6 +69,26 @@ This document records the actual configuration values used for this deployment.
 - **Roles**:
   - Storage Object Admin on `gs://munimetro-cache`
   - Cloud Run Invoker on `munimetro-checker` job
+  - Secret Manager Secret Accessor (for social media credentials)
+
+### Secret Manager
+
+Credentials for social media notifications are stored in Secret Manager:
+
+| Secret | Description |
+|--------|-------------|
+| `BLUESKY_HANDLE` | Bluesky account handle (e.g., `munimetro.bsky.social`) |
+| `BLUESKY_APP_PASSWORD` | Bluesky app password |
+| `MASTODON_INSTANCE` | Mastodon instance URL (e.g., `https://mastodon.social`) |
+| `MASTODON_ACCESS_TOKEN` | Mastodon access token |
+
+## Social Media Accounts
+
+- **Bluesky**: [@munimetro.bsky.social](https://bsky.app/profile/munimetro.bsky.social)
+- **Mastodon**: [@MuniMetro@mastodon.social](https://mastodon.social/@MuniMetro)
+- **RSS Feed**: `https://munimet.ro/rss.xml`
+
+Status updates are posted automatically when the system status changes.
 
 ## GCS Sync Configuration
 

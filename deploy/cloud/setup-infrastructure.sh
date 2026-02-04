@@ -86,7 +86,7 @@ gsutil iam ch \
 echo "✓ Service account has objectAdmin access to gs://$BUCKET_NAME"
 echo ""
 
-# Grant service account access to Secret Manager (for Bluesky credentials)
+# Grant service account access to Secret Manager (for social media credentials)
 echo "[5b/9] Granting service account access to Secret Manager..."
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \

@@ -24,5 +24,8 @@ pytesseract>=0.3.10
 # Bluesky integration
 atproto>=0.0.55
 
+# Mastodon integration
+Mastodon.py>=1.8.0
+
 # Environment management
 python-dotenv>=1.0.0

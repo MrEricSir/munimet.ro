@@ -202,6 +202,51 @@ export GCS_BUCKET="BUCKET_NAME"
 ./deploy/cloud/deploy-services.sh
 ```
 
+## Social Media Notifications (Optional)
+
+The checker job can post status updates to Bluesky and Mastodon when the system status changes. To enable this:
+
+### 1. Setup credentials locally (generates app passwords/tokens)
+
+```bash
+python scripts/setup/setup-credentials.py --cloud
+```
+
+This will prompt you for:
+- **Bluesky**: Handle (e.g., `munimetro.bsky.social`) and app password
+- **Mastodon**: Instance URL (e.g., `https://mastodon.social`) and access token
+
+Credentials are stored in Google Cloud Secret Manager.
+
+### 2. Create Bluesky app password
+
+1. Go to Bluesky Settings → App Passwords
+2. Create a new app password
+3. Copy the generated password
+
+### 3. Create Mastodon access token
+
+1. Go to your Mastodon instance → Preferences → Development
+2. Create a new application with `write:statuses` scope
+3. Copy the access token
+
+### 4. Redeploy to pick up secrets
+
+```bash
+./deploy/cloud/deploy-services.sh
+```
+
+The deploy script automatically detects secrets in Secret Manager and mounts them.
+
+### Secrets used
+
+| Secret Name | Description |
+|-------------|-------------|
+| `BLUESKY_HANDLE` | Bluesky account handle |
+| `BLUESKY_APP_PASSWORD` | Bluesky app password |
+| `MASTODON_INSTANCE` | Mastodon instance URL |
+| `MASTODON_ACCESS_TOKEN` | Mastodon access token |
+
 ## Security
 
 ### IAM Permissions
