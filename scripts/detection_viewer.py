@@ -737,9 +737,11 @@ HTML_TEMPLATE = '''
                     🟡 DELAYS DETECTED
                 </div>
                 <div style="color: #ffcc88; font-size: 0.85em; margin-top: 8px;">
-                    {% if detection.delays_segments %}{{ detection.delays_segments|length }} track section(s) disabled{% endif %}
-                    {% if detection.delays_segments and detection.delays_platforms|length >= 2 %}, {% endif %}
-                    {% if detection.delays_platforms|length >= 2 %}{{ detection.delays_platforms|length }} platforms in hold{% endif %}
+                    {% set reasons = [] %}
+                    {% if detection.delays_segments %}{% set _ = reasons.append(detection.delays_segments|length ~ ' track section(s) disabled') %}{% endif %}
+                    {% if detection.delays_platforms|length >= 2 %}{% set _ = reasons.append(detection.delays_platforms|length ~ ' platforms in hold') %}{% endif %}
+                    {% if detection.delays_bunching %}{% set _ = reasons.append('train bunching detected') %}{% endif %}
+                    {{ reasons|join(', ') }}
                 </div>
                 {% else %}
                 <div style="background: #208020; color: white; padding: 15px; border-radius: 8px; font-size: 1.3em; font-weight: bold;">
@@ -756,7 +758,7 @@ HTML_TEMPLATE = '''
             <div class="info-section">
                 <h3>Delays Detected</h3>
                 <div id="delaysInfo">
-                    {% if detection.delays_segments or detection.delays_platforms %}
+                    {% if detection.delays_segments or detection.delays_platforms or detection.delays_bunching %}
                         {% for d in detection.delays_segments %}
                         <div class="delay-item delay-red" onclick="showSegment('{{ d.key }}')">
                             Track Off: {{ d.from }} &rarr; {{ d.to }} ({{ d.direction }})
@@ -765,6 +767,11 @@ HTML_TEMPLATE = '''
                         {% for d in detection.delays_platforms %}
                         <div class="delay-item delay-yellow" onclick="showStation('{{ d.station }}')">
                             Hold: {{ d.name }} ({{ d.direction }})
+                        </div>
+                        {% endfor %}
+                        {% for b in detection.delays_bunching %}
+                        <div class="delay-item delay-yellow" onclick="showBunching('{{ b.station }}', '{{ b.direction }}', {{ b.train_count }})">
+                            Bunching: {{ b.train_count }} trains at {{ b.station }} ({{ b.direction }})
                         </div>
                         {% endfor %}
                     {% else %}
@@ -983,6 +990,18 @@ HTML_TEMPLATE = '''
                     Status: ${status}
                 `;
             }
+        }
+
+        function showBunching(station, direction, trainCount) {
+            const stationData = detection.stations.find(s => s.code === station);
+            const stationName = stationData ? stationData.name : station;
+            document.getElementById('clickInfo').innerHTML = `
+                <strong>Train Bunching</strong><br>
+                Station: ${stationName} (${station})<br>
+                Direction: ${direction}<br>
+                Trains bunched: <span style="color:#ffcc00">${trainCount}</span><br>
+                <span style="color:#888;font-size:0.85em">Multiple trains queued close together, indicating delays</span>
+            `;
         }
 
         function showTrain(id, x, y, track, confidence) {
