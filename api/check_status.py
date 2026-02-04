@@ -171,6 +171,11 @@ def check_status(should_write_cache=False):
                 statuses = cache_data['statuses'][:]
             if 'best_status' in cache_data:
                 previous_best_status = cache_data['best_status']
+            cached_at = cache_data.get('cached_at', 'unknown')
+            prev_statuses_str = ', '.join(s['status'] for s in statuses) if statuses else '(empty)'
+            print(f"\nCache read: {len(statuses)} previous statuses [{prev_statuses_str}], cached_at={cached_at}")
+        else:
+            print(f"\nCache read: No existing cache found (starting fresh)")
 
         # Add new status at the front
         statuses.insert(0, new_status)
@@ -178,6 +183,10 @@ def check_status(should_write_cache=False):
         # Calculate best status using shared function
         # This ensures webapp, RSS, and Bluesky all show the same status
         best_status = calculate_best_status(statuses, window_size=3)
+
+        # Log the smoothing calculation
+        all_statuses_str = ', '.join(s['status'] for s in statuses[:3])
+        print(f"Smoothing: [{all_statuses_str}] -> best_status={best_status['status']}")
 
         # Keep only last 3 statuses (~1.5 min window at 30s intervals)
         statuses = statuses[:3]
@@ -209,15 +218,24 @@ def check_status(should_write_cache=False):
 
         # Log to analytics database
         try:
-            log_status_check(
+            from lib.analytics import check_database_health
+            check_id = log_status_check(
                 status=detection['status'],
                 best_status=best_status['status'],
                 detection_data=detection.get('detection', {}),
                 timestamp=new_status['timestamp']
             )
-            print(f"  Analytics logged")
+            print(f"  Analytics logged (check_id={check_id}, status={detection['status']}, best_status={best_status['status']})")
+
+            # Verify database health after logging
+            health = check_database_health()
+            print(f"  DB health: {health['check_count']} checks, exists={health['exists']}, has_data={health['has_data']}")
+            if health.get('error'):
+                print(f"  DB health error: {health['error']}")
         except Exception as e:
             print(f"  Analytics log failed: {e}")
+            import traceback
+            traceback.print_exc()
 
         # Notify all channels if BEST status changed
         # This ensures notifications match what the webapp shows

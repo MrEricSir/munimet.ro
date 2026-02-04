@@ -25,9 +25,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def print_diagnostics():
+    """Print diagnostic information."""
+    from datetime import datetime
+    print("=" * 60)
+    print("DIAGNOSTIC INFO")
+    print("=" * 60)
+    print(f"Timestamp (UTC): {datetime.utcnow().isoformat()}")
+    print(f"Timestamp (local): {datetime.now().isoformat()}")
+    print(f"CLOUD_RUN={os.getenv('CLOUD_RUN')}")
+    print(f"GCS_BUCKET={os.getenv('GCS_BUCKET')}")
+    print("=" * 60)
+    print()
+
+
 def main():
     """Generate all analytics reports."""
     try:
+        print_diagnostics()
+
         print("Starting MuniMetro analytics report generation...")
         print("-" * 60)
 
@@ -63,6 +79,18 @@ def main():
 
         # Ensure database schema exists
         init_db()
+
+        # Check status distribution in database before generating
+        try:
+            from lib.analytics import get_db_connection
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT best_status, COUNT(*) FROM status_checks GROUP BY best_status')
+            status_counts = {row[0]: row[1] for row in cursor.fetchall()}
+            conn.close()
+            print(f"\nStatus distribution in DB: green={status_counts.get('green', 0)}, yellow={status_counts.get('yellow', 0)}, red={status_counts.get('red', 0)}")
+        except Exception as e:
+            print(f"Could not query status distribution: {e}")
 
         # Generate reports for all time periods
         results = generate_all_reports()

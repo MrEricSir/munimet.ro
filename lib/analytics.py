@@ -81,13 +81,17 @@ def restore_db_from_gcs():
     if _gcs_restored:
         return True  # Already restored this session
 
+    bucket_name = _get_gcs_bucket()
+    blob_path = 'analytics/analytics.db'
+
     try:
+        print(f"Restoring analytics DB from gs://{bucket_name}/{blob_path}...")
         client = _get_gcs_client()
-        bucket = client.bucket(_get_gcs_bucket())
-        blob = bucket.blob('analytics/analytics.db')
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
 
         if not blob.exists():
-            print("No analytics DB backup found in GCS")
+            print(f"No analytics DB backup found in GCS (gs://{bucket_name}/{blob_path})")
             _gcs_restored = True
             return False
 
@@ -100,8 +104,10 @@ def restore_db_from_gcs():
         _gcs_restored = True
         return True
     except Exception as e:
-        print(f"Error restoring analytics DB from GCS: {e}")
-        _gcs_restored = True  # Don't retry on error
+        print(f"Error restoring analytics DB from gs://{bucket_name}/{blob_path}: {e}")
+        import traceback
+        traceback.print_exc()
+        _gcs_restored = True  # Don't retry on error (but backup safety check will prevent overwrite)
         return False
 
 
@@ -109,6 +115,9 @@ def backup_db_to_gcs():
     """
     Backup the analytics database to GCS if running on Cloud Run.
     Should be called periodically (e.g., after each status check).
+
+    Safety: Will not overwrite a larger GCS backup with a smaller local file,
+    which could indicate data loss from a failed restore.
 
     Returns:
         bool: True if backed up successfully
@@ -120,11 +129,24 @@ def backup_db_to_gcs():
         return False
 
     try:
+        local_size = LOCAL_DB_PATH.stat().st_size
+
         client = _get_gcs_client()
         bucket = client.bucket(_get_gcs_bucket())
         blob = bucket.blob('analytics/analytics.db')
 
+        # Safety check: don't overwrite a larger backup with smaller data
+        # This prevents data loss if restore failed and we have a fresh DB
+        if blob.exists():
+            blob.reload()  # Refresh metadata
+            gcs_size = blob.size or 0
+            if local_size < gcs_size * 0.9:  # Allow 10% variance for normal fluctuation
+                print(f"Warning: Local DB ({local_size} bytes) much smaller than GCS backup ({gcs_size} bytes)")
+                print("Skipping backup to prevent data loss - investigate restore failure")
+                return False
+
         blob.upload_from_filename(str(LOCAL_DB_PATH))
+        print(f"Backed up analytics DB to GCS ({local_size} bytes)")
         return True
     except Exception as e:
         print(f"Error backing up analytics DB to GCS: {e}")
@@ -169,7 +191,12 @@ def get_db_connection():
     """Get a connection to the analytics database."""
     # On Cloud Run, restore from GCS if not already done
     if _is_cloud_run():
-        restore_db_from_gcs()
+        restored = restore_db_from_gcs()
+        # If restore failed and no local DB exists, we have a problem
+        # But we still proceed - the backup will only happen if we have
+        # meaningful data (checked in backup_db_to_gcs)
+        if not restored and not LOCAL_DB_PATH.exists():
+            print("Warning: No GCS backup found and no local DB - starting fresh")
 
     os.makedirs(LOCAL_DB_PATH.parent, exist_ok=True)
     conn = sqlite3.connect(str(LOCAL_DB_PATH))
@@ -668,9 +695,16 @@ def generate_report(days):
     init_db()
 
     try:
+        frequency = get_delay_frequency(days)
+
+        # Log status breakdown for debugging
+        by_status = frequency.get('by_status', {})
+        print(f"Generating {days}-day report: total={frequency['total_checks']}, "
+              f"green={by_status.get('green', 0)}, yellow={by_status.get('yellow', 0)}, red={by_status.get('red', 0)}")
+
         report = {
             'period_days': days,
-            'frequency': get_delay_frequency(days),
+            'frequency': frequency,
             'by_station': get_delays_by_station(days),
             'by_time': get_delays_by_time(days),
             'generated_at': datetime.now().isoformat(),
@@ -680,16 +714,23 @@ def generate_report(days):
 
         # Cache the report (GCS on Cloud Run, local file otherwise)
         if _is_cloud_run():
-            _write_gcs_json(_get_report_gcs_path(days), report)
+            success = _write_gcs_json(_get_report_gcs_path(days), report)
+            if success:
+                print(f"  Cached to GCS: {_get_report_gcs_path(days)}")
+            else:
+                print(f"  WARNING: Failed to cache to GCS")
         else:
             cache_path = _get_report_cache_path(days)
             os.makedirs(LOCAL_CACHE_DIR, exist_ok=True)
             with open(cache_path, 'w') as f:
                 json.dump(report, f)
+            print(f"  Cached to local: {cache_path}")
 
         return report
     except Exception as e:
         print(f"Error generating {days}-day report: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
