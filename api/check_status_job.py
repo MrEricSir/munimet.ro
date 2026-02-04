@@ -65,13 +65,13 @@ def print_diagnostics():
             else:
                 print(f"  analytics/analytics.db: NOT FOUND")
 
-            # Check status cache
-            status_blob = bucket.blob('muni_status.json')
+            # Check status cache (stored as latest_status.json)
+            status_blob = bucket.blob('latest_status.json')
             if status_blob.exists():
                 status_blob.reload()
-                print(f"  muni_status.json: {status_blob.size} bytes, updated {status_blob.updated}")
+                print(f"  latest_status.json: {status_blob.size} bytes, updated {status_blob.updated}")
             else:
-                print(f"  muni_status.json: NOT FOUND")
+                print(f"  latest_status.json: NOT FOUND")
 
             # Check report cache
             report_blob = bucket.blob('analytics/analytics_report_7d.json')

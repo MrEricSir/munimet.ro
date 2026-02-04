@@ -232,6 +232,77 @@ export GCS_BUCKET="BUCKET_NAME"
 
 See [../../CONFIGURATION.md](../../CONFIGURATION.md) for actual service account and bucket details.
 
+## Data Persistence
+
+### Analytics Database
+
+The analytics system uses SQLite stored in GCS for persistence across container restarts.
+
+**Storage location**: `gs://munimetro-cache/analytics/analytics.db`
+
+**How it works**:
+1. Job starts → downloads `analytics.db` from GCS to local filesystem
+2. Status check runs → data logged to local SQLite
+3. Job ends → uploads local `analytics.db` back to GCS
+
+**Safety features**:
+- **Size check**: Won't overwrite a larger GCS backup with a smaller local file (prevents data loss from failed restores)
+- **GCS versioning**: Enabled on the bucket - old versions are retained when files are overwritten
+
+### GCS Versioning
+
+Versioning is enabled on `gs://munimetro-cache` to protect against accidental data loss.
+
+**List all versions of analytics DB**:
+```bash
+gsutil ls -la gs://munimetro-cache/analytics/analytics.db
+```
+
+**Restore a previous version** (if data loss occurs):
+```bash
+# Find the generation number from the list command above
+gsutil cp "gs://munimetro-cache/analytics/analytics.db#<GENERATION_NUMBER>" \
+    gs://munimetro-cache/analytics/analytics.db
+```
+
+**View version metadata**:
+```bash
+gsutil stat "gs://munimetro-cache/analytics/analytics.db#<GENERATION_NUMBER>"
+```
+
+### Cache Files
+
+| File | Purpose | Location |
+|------|---------|----------|
+| `analytics.db` | Status check history, delay incidents | `gs://munimetro-cache/analytics/` |
+| `analytics_report_*d.json` | Pre-generated analytics reports (1d, 7d, 30d, 365d) | `gs://munimetro-cache/analytics/` |
+| `latest_status.json` | Current status cache (for API responses) | `gs://munimetro-cache/` |
+| `latest_image.jpg` | Most recent MIMIC screenshot | `gs://munimetro-cache/` |
+
+### Lifecycle Management (Optional)
+
+To automatically delete old versions after 30 days (reduces storage costs):
+
+```bash
+cat > /tmp/lifecycle.json << 'EOF'
+{
+  "rule": [
+    {
+      "action": {"type": "Delete"},
+      "condition": {
+        "numNewerVersions": 10,
+        "isLive": false
+      }
+    }
+  ]
+}
+EOF
+
+gsutil lifecycle set /tmp/lifecycle.json gs://munimetro-cache
+```
+
+This keeps the 10 most recent versions of each file and deletes older non-current versions.
+
 ## Troubleshooting
 
 ### Permission denied errors
@@ -280,6 +351,51 @@ gcloud logging read 'resource.type="cloud_scheduler_job"' \
 gcloud scheduler jobs run SCHEDULER_JOB_NAME \
     --location REGION
 ```
+
+### Analytics data missing or incomplete
+
+**Symptoms**: Analytics page shows 0 red events, or very few total checks
+
+**Diagnostic steps**:
+
+1. **Check job execution logs** for GCS restore/backup issues:
+   ```bash
+   gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=munimetro-checker" \
+       --limit=50 --format="table(timestamp,textPayload)"
+   ```
+
+   Look for:
+   - `Restored analytics DB from GCS (X bytes)` - successful restore
+   - `WARNING: Local DB smaller than GCS backup` - backup skipped to prevent data loss
+   - `ERROR` messages during restore/backup
+
+2. **Check database size in GCS**:
+   ```bash
+   gsutil ls -l gs://munimetro-cache/analytics/analytics.db
+   ```
+
+3. **Check scheduler is running consistently**:
+   ```bash
+   gcloud scheduler jobs describe munimetro-status-check --location=us-west1
+   ```
+
+   Verify `lastAttemptTime` is recent and `state` is `ENABLED`.
+
+4. **View database version history** (if data was lost):
+   ```bash
+   gsutil ls -la gs://munimetro-cache/analytics/analytics.db
+   ```
+
+5. **Restore from a previous version** if needed:
+   ```bash
+   gsutil cp "gs://munimetro-cache/analytics/analytics.db#<GENERATION>" \
+       gs://munimetro-cache/analytics/analytics.db
+   ```
+
+**Common causes**:
+- Scheduler paused or misconfigured
+- GCS restore fails silently, creating empty DB that overwrites backup
+- Container restarts during overnight hours when no traffic keeps it warm
 
 ## Cleanup
 
