@@ -110,10 +110,8 @@ class TestTrainDetectionBaseline:
                 else:
                     missing.append(expected_id)
 
-        # Report overrides and optional missing as warnings
+        # Report optional missing trains as warnings (OCR overrides are expected, not warned)
         import warnings
-        if overrides_used:
-            warnings.warn(f"OCR overrides used: {overrides_used}")
         if missing_optional:
             warnings.warn(f"Optional trains not detected (OCR environment-sensitive): {missing_optional}")
 
