@@ -212,6 +212,8 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
         return clusters
 
     # Find clusters on each track
+    # For upper track (westbound): trains queue to the RIGHT of stations they're entering
+    # Find the nearest station to the front (left edge) of the cluster
     for cluster in find_clusters(upper_trains):
         cluster_left_x = min(t['x'] for t in cluster)
         nearest_station = None
@@ -219,11 +221,11 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
         for station_code, station_x in STATION_X_POSITIONS.items():
             if station_code in EXCLUDED_UPPER:
                 continue
-            if station_x <= cluster_left_x:
-                distance = cluster_left_x - station_x
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest_station = station_code
+            # Find nearest station to cluster front (absolute distance)
+            distance = abs(station_x - cluster_left_x)
+            if distance < min_distance:
+                min_distance = distance
+                nearest_station = station_code
         if nearest_station and min_distance < 300:
             bunching_incidents.append({
                 'station': nearest_station,
@@ -232,6 +234,8 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
                 'train_count': len(cluster),
             })
 
+    # For lower track (eastbound): trains queue to the LEFT of stations they're entering
+    # Find the nearest station at or to the RIGHT of the cluster front
     for cluster in find_clusters(lower_trains):
         cluster_right_x = max(t['x'] for t in cluster)
         nearest_station = None
@@ -239,6 +243,7 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
         for station_code, station_x in STATION_X_POSITIONS.items():
             if station_code in EXCLUDED_LOWER:
                 continue
+            # Station must be at or to the right of the cluster front
             if station_x >= cluster_right_x:
                 distance = station_x - cluster_right_x
                 if distance < min_distance:

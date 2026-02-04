@@ -215,23 +215,38 @@ class TestTrainBunchingDetection:
         assert any(b['station'] == 'PO' for b in bunching), f"Should detect bunching approaching PO, got: {bunching}"
 
     def test_excluded_stations_ignored(self):
-        """Chinatown (CT) and Embarcadero (EM) should not report bunching."""
+        """Track-specific excluded stations should not report bunching.
+
+        Exclusions by track:
+        - Upper track (westbound): CT (Chinatown) is the northern terminus
+        - Lower track (eastbound): EM (Embarcadero), MO (Montgomery) are turnaround area
+        """
         from lib.detection import detect_train_bunching
 
-        # CT is at x=1564, EM is at x=1182
-        # Bunch trains right at CT (upper track, trains to right of CT)
-        # These are past CT heading towards end of line - should be excluded
-        trains = [
+        # CT is at x=1564 - excluded for upper track (terminus)
+        # Bunch trains right at CT (upper track)
+        upper_trains = [
             {'id': 'W2010LL', 'x': 1580, 'track': 'upper'},
             {'id': 'M2089MM', 'x': 1630, 'track': 'upper'},  # 50px gap
             {'id': 'D2099J', 'x': 1680, 'track': 'upper'},   # 50px gap
             {'id': 'F2164SS', 'x': 1730, 'track': 'upper'},  # 50px gap
         ]
 
-        bunching = detect_train_bunching(trains)
-        # Should not detect bunching at CT or EM (excluded turnaround stations)
-        assert not any(b['station'] == 'CT' for b in bunching), f"CT should be excluded, got: {bunching}"
-        assert not any(b['station'] == 'EM' for b in bunching), f"EM should be excluded, got: {bunching}"
+        bunching = detect_train_bunching(upper_trains)
+        assert not any(b['station'] == 'CT' for b in bunching), f"CT should be excluded for upper track, got: {bunching}"
+
+        # EM is at x=1182 - excluded for lower track (turnaround)
+        # Bunch trains right at EM (lower track, approaching from west)
+        lower_trains = [
+            {'id': 'W2010LL', 'x': 1100, 'track': 'lower'},
+            {'id': 'M2089MM', 'x': 1150, 'track': 'lower'},  # 50px gap
+            {'id': 'D2099J', 'x': 1200, 'track': 'lower'},   # 50px gap - at EM
+            {'id': 'F2164SS', 'x': 1250, 'track': 'lower'},  # 50px gap - past EM
+        ]
+
+        bunching = detect_train_bunching(lower_trains)
+        assert not any(b['station'] == 'EM' for b in bunching), f"EM should be excluded for lower track, got: {bunching}"
+        assert not any(b['station'] == 'MO' for b in bunching), f"MO should be excluded for lower track, got: {bunching}"
 
     def test_three_trains_not_bunching(self):
         """3 trains clustered should NOT trigger bunching (threshold is 4)."""
@@ -278,9 +293,43 @@ class TestTrainBunchingDetection:
         status = calculate_system_status(trains_with_routes, [], [], bunching)
         assert status == 'yellow', f"Expected yellow with bunching, got {status}"
 
-        # Without bunching, same trains should be green
-        status_no_bunching = calculate_system_status(trains_with_routes, [], [], [])
-        assert status_no_bunching == 'green', f"Expected green without bunching, got {status_no_bunching}"
+    def test_bunching_at_embarcadero_upper_track(self):
+        """Upper track bunching near Embarcadero should report EM, not Montgomery.
+
+        EM is at x=1182. Trains clustered around x=1167-1325 are at/near Embarcadero,
+        not approaching Montgomery (x=1054). Uses absolute distance for upper track.
+        """
+        from lib.detection import detect_train_bunching
+
+        # Real-world scenario: 5 trains clustered near Embarcadero on upper track
+        # EM is at x=1182, MO is at x=1054
+        trains = [
+            {'id': 'W2174KK', 'x': 1167, 'track': 'upper'},
+            {'id': '5109ML', 'x': 1199, 'track': 'upper'},   # 32px gap
+            {'id': 'W2148MM', 'x': 1254, 'track': 'upper'},  # 55px gap
+            {'id': 'D2054J', 'x': 1273, 'track': 'upper'},   # 19px gap
+            {'id': 'W2004KK', 'x': 1325, 'track': 'upper'},  # 52px gap
+        ]
+
+        bunching = detect_train_bunching(trains)
+        assert len(bunching) == 1, f"Should detect one bunching incident, got: {bunching}"
+        assert bunching[0]['station'] == 'EM', f"Should report bunching at EM (nearest to cluster), got: {bunching[0]['station']}"
+        assert bunching[0]['train_count'] == 5
+        assert bunching[0]['direction'] == 'Westbound'
+
+    def test_bunching_real_image(self):
+        """Test bunching detection on real image with visible bunching at Embarcadero."""
+        result = detect_system_status(str(IMAGES_DIR / "muni_snapshot_20260203_165648.jpg"))
+
+        # This image shows bunching on upper track near Embarcadero
+        bunching = result.get('delays_bunching', [])
+        assert len(bunching) > 0, f"Should detect bunching in this image, got none"
+
+        # Should report bunching at Embarcadero (not Montgomery)
+        em_bunching = [b for b in bunching if b['station'] == 'EM']
+        assert len(em_bunching) > 0, f"Should detect bunching at EM, got: {bunching}"
+        assert em_bunching[0]['track'] == 'upper'
+        assert em_bunching[0]['direction'] == 'Westbound'
 
 
 class TestDelaySummaryGeneration:

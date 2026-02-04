@@ -178,10 +178,14 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
         [{'station': 'PO', 'track': 'upper', 'direction': 'Westbound', 'train_count': 5}, ...]
         Direction is 'Northbound'/'Southbound' for CT/US/YB, 'Westbound'/'Eastbound' for others.
     """
-    # Stations to exclude from bunching analysis:
-    # - CT (Chinatown) and EM (Embarcadero): turnaround points where trains queue normally
-    # - Internal stations (MN, FP, TT): not passenger stations
-    EXCLUDED_STATIONS = {'CT', 'EM', 'MN', 'FP', 'TT'}
+    # Internal stations to always exclude
+    INTERNAL_STATIONS = {'MN', 'FP', 'TT'}
+
+    # Track-specific exclusions for turnaround points where bunching is normal:
+    # - Upper track (Westbound/Northbound): CT is the northern terminus
+    # - Lower track (Eastbound/Southbound): EM is the eastern terminus, MO is adjacent
+    EXCLUDED_UPPER = INTERNAL_STATIONS | {'CT'}
+    EXCLUDED_LOWER = INTERNAL_STATIONS | {'EM', 'MO'}
 
     # Direction terminology: CT, US, YB are Northbound/Southbound; others are Westbound/Eastbound
     NORTH_SOUTH_STATIONS = {'CT', 'US', 'YB'}
@@ -227,25 +231,23 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
     upper_clusters = find_clusters(upper_trains)
     lower_clusters = find_clusters(lower_trains)
 
-    # For each cluster, find the station it's approaching
+    # For upper track (westbound): trains queue to the RIGHT of stations they're entering
+    # Find the nearest station to the front (left edge) of the cluster
     for cluster in upper_clusters:
-        # Upper track moves westbound (left), so cluster approaches the station to its left
         cluster_left_x = min(t['x'] for t in cluster)
 
-        # Find the nearest station to the left of (or at) this cluster
         nearest_station = None
         min_distance = float('inf')
         for station_code, station_x in STATION_X_POSITIONS.items():
-            if station_code in EXCLUDED_STATIONS:
+            if station_code in EXCLUDED_UPPER:
                 continue
-            # Station must be to the left of or at the cluster
-            if station_x <= cluster_left_x:
-                distance = cluster_left_x - station_x
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest_station = station_code
+            # Find nearest station to cluster front (absolute distance)
+            distance = abs(station_x - cluster_left_x)
+            if distance < min_distance:
+                min_distance = distance
+                nearest_station = station_code
 
-        if nearest_station and min_distance < 300:  # Must be reasonably close to a station
+        if nearest_station and min_distance < 300:
             bunching_incidents.append({
                 'station': nearest_station,
                 'track': 'upper',
@@ -253,24 +255,24 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=70):
                 'train_count': len(cluster),
             })
 
+    # For lower track (eastbound): trains queue to the LEFT of stations they're entering
+    # Find the nearest station at or to the RIGHT of the cluster front
     for cluster in lower_clusters:
-        # Lower track moves eastbound (right), so cluster approaches the station to its right
         cluster_right_x = max(t['x'] for t in cluster)
 
-        # Find the nearest station to the right of (or at) this cluster
         nearest_station = None
         min_distance = float('inf')
         for station_code, station_x in STATION_X_POSITIONS.items():
-            if station_code in EXCLUDED_STATIONS:
+            if station_code in EXCLUDED_LOWER:
                 continue
-            # Station must be to the right of or at the cluster
+            # Station must be at or to the right of the cluster front
             if station_x >= cluster_right_x:
                 distance = station_x - cluster_right_x
                 if distance < min_distance:
                     min_distance = distance
                     nearest_station = station_code
 
-        if nearest_station and min_distance < 300:  # Must be reasonably close to a station
+        if nearest_station and min_distance < 300:
             bunching_incidents.append({
                 'station': nearest_station,
                 'track': 'lower',
