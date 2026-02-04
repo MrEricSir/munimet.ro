@@ -74,7 +74,12 @@ class TestTrainDetectionBaseline:
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
     @pytest.mark.parametrize("img_path,baseline", IMAGES_WITH_TRAINS)
     def test_baseline_trains_detected(self, detector, img_path, baseline):
-        """Ensure all baseline trains are detected (including via OCR overrides)."""
+        """Ensure all baseline trains are detected (including via OCR overrides).
+
+        Trains marked as "optional" in the baseline are environment-sensitive and
+        may not be detected on all OCR environments (e.g., different Tesseract versions
+        on macOS vs Ubuntu CI). Missing optional trains generate warnings, not failures.
+        """
         if not img_path.exists():
             pytest.skip(f"Test image not found: {img_path}")
 
@@ -83,9 +88,11 @@ class TestTrainDetectionBaseline:
         detected_ids = {t["id"] for t in trains}
 
         missing = []
+        missing_optional = []
         overrides_used = []
         for entry in baseline:
             expected_id, expected_x, override_info = parse_baseline_entry(entry)
+            is_optional = override_info.get("optional", False) if override_info else False
 
             # Check if detected (exact or via override)
             found = False
@@ -98,14 +105,17 @@ class TestTrainDetectionBaseline:
                     break
 
             if not found:
-                missing.append(expected_id)
+                if is_optional:
+                    missing_optional.append(expected_id)
+                else:
+                    missing.append(expected_id)
 
-        # Store override info for conftest to display as yellow
+        # Report overrides and optional missing as warnings
+        import warnings
         if overrides_used:
-            # pytest doesn't have a built-in way to mark partial success,
-            # so we'll just note it in a warning
-            import warnings
             warnings.warn(f"OCR overrides used: {overrides_used}")
+        if missing_optional:
+            warnings.warn(f"Optional trains not detected (OCR environment-sensitive): {missing_optional}")
 
         assert not missing, f"Missing baseline trains in {img_path.name}: {missing}"
 

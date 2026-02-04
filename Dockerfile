@@ -26,12 +26,13 @@ FROM python:3.13-slim-bookworm
 
 # Install runtime dependencies
 # - curl: health checks
-# - tesseract-ocr: train ID detection (optional but improves accuracy)
+# - tesseract-ocr + tesseract-ocr-eng: train ID detection with English model
 # - libgl1: OpenCV headless runtime
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     tesseract-ocr \
+    tesseract-ocr-eng \
     libgl1 \
     && rm -rf /var/lib/apt/lists/*
 

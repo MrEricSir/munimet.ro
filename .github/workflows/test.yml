@@ -10,19 +10,19 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    # Run in same container as production for consistent Tesseract OCR results
+    container:
+      image: python:3.13-slim-bookworm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
 
-      - name: Install Tesseract OCR
-        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
-
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r api/requirements.txt

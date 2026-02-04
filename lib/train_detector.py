@@ -15,6 +15,13 @@ try:
 except ImportError:
     TESSERACT_AVAILABLE = False
 
+# Tesseract OCR configuration for consistent results across environments
+# --oem 3: Use default OCR engine mode (LSTM + legacy, most compatible)
+# --psm 6: Assume a single uniform block of text
+# Note: Character whitelist removed as it can cause detection issues;
+# invalid characters are filtered post-OCR in _extract_train_id()
+OCR_CONFIG = '--oem 3 --psm 6'
+
 # Train ID pattern
 TRAIN_ID_PATTERN = re.compile(r'[A-Z]?\d{4}[A-Z*X]{1,2}')
 
@@ -234,7 +241,7 @@ class TrainDetector:
         _, roi_bin = cv2.threshold(roi_large, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
         try:
-            text = pytesseract.image_to_string(roi_bin, config='--psm 6')
+            text = pytesseract.image_to_string(roi_bin, config=OCR_CONFIG)
             return self._extract_train_ids(text)
         except Exception:
             return []
@@ -319,13 +326,13 @@ class TrainDetector:
 
         # Single OCR attempt (vertical text as-is, tesseract handles it)
         try:
-            text = pytesseract.image_to_string(mask_clean, config='--psm 6')
+            text = pytesseract.image_to_string(mask_clean, config=OCR_CONFIG)
             train_id = self._extract_train_id(text)
             if train_id:
                 return train_id
 
             # Try inverted
-            text = pytesseract.image_to_string(255 - mask_clean, config='--psm 6')
+            text = pytesseract.image_to_string(255 - mask_clean, config=OCR_CONFIG)
             return self._extract_train_id(text)
         except Exception:
             return None
