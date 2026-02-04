@@ -18,6 +18,7 @@ ignore_unused = [
     "pytesseract",               # Used by train_detector.py (in scripts/)
     "opencv-python-headless",    # Imported as cv2
     "python-dotenv",             # Imported as dotenv
+    "Mastodon.py",               # Imported as mastodon (lazy import in notifiers)
 ]
 
 # Ignore imports that aren't in requirements.txt (local modules)
