@@ -12,7 +12,6 @@
       ["2234LM", 962, {"ocr_override": "2023LL", "note": "OCR misreads significantly"}],
       ["M2066KK", 975],
       ["4311M", 1052, {"ocr_override": "2043LL", "note": "OCR significantly different"}],
-      ["F2164SS", 1185, {"ocr_override": "6348SL", "note": "OCR misreads significantly", "optional": true}],
       ["2178NN", 1178],
       ["C2175TT", 1726],
       ["B2181TT", 1729]
@@ -27,8 +26,7 @@
       ["9019K", 876],
       ["2234LM", 961, {"ocr_override": "W2023LL", "note": "OCR misreads significantly"}],
       ["4311M", 1052, {"ocr_override": "2043LL", "note": "OCR significantly different"}],
-      ["2066KK", 1181],
-      ["1091TT", 1855, {"ocr_override": "1091T", "note": "OCR drops trailing T", "optional": true}]
+      ["2066KK", 1181]
     ],
     "IMG_9793.jpg": [
       ["6521LK", 172],
@@ -47,8 +45,6 @@
       ["M2051KK", 184, {"ocr_override": "6521LK", "note": "OCR misreads significantly - different train visible"}],
       ["M2089MM", 347],
       ["R2162LL", 457, {"ocr_override": "2162LL", "note": "OCR drops leading R; position adjusted to match detection"}],
-      ["1133KK", 570, {"optional": true, "note": "Not reliably detected on all OCR environments"}],
-      ["7177TF", 666, {"optional": true, "note": "Not reliably detected on all OCR environments"}],
       ["2011NN", 800],
       ["9019K", 876],
       ["W2023LL", 968, {"ocr_override": "W2023L", "note": "OCR drops one L"}],
@@ -60,7 +56,6 @@
       ["1116M", 477, {"ocr_override": "W2116M", "note": "OCR reads 11 as W2"}],
       ["W2126M", 905],
       ["D2129J", 972],
-      ["M2077OK", 974, {"optional": true, "note": "Not reliably detected on all OCR environments"}],
       ["W2127K", 1044, {"ocr_override": "W2120TK", "note": "OCR misreads 27K as 20TK"}],
       ["M2089LL", 1052, {"ocr_override": "M2039LL", "note": "OCR misreads 8 as 3"}],
       ["W2093K", 1112],
@@ -105,19 +100,15 @@
       ["D2004NN", 879],
       ["D2099J", 1054],
       ["7052KX", 1174, {"note": "Actually 2 bunched trains at Embarcadero - detection improvement needed"}],
-      ["C2145TT", 1676],
-      ["B2118TT", 1815, {"optional": true, "note": "Not reliably detected on all OCR environments"}]
+      ["C2145TT", 1676]
     ],
     "muni_snapshot_20260202_122209.jpg": [
       ["7217OK", 37, {"ocr_override": "M2017OK", "note": "OCR misreads M2 as 72"}],
-      ["M2187EM", 176, {"ocr_override": "W2187EM", "note": "OCR misreads W as M", "optional": true}],
       ["W2010MM", 233],
-      ["W2177LL", 482, {"optional": true, "note": "Not reliably detected on all OCR environments"}],
       ["W2082KK", 625],
       ["M2058J", 674],
       ["M2025LL", 724],
       ["D2050NN", 800],
-      ["2073NN", 811, {"ocr_override": "M2073NN", "note": "OCR drops leading M", "optional": true}],
       ["M2036KK", 875],
       ["W2114MM", 878],
       ["W2083KK", 922],
