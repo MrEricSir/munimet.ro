@@ -167,7 +167,7 @@ def detect_segment_color(hsv, bounds):
         return 'unknown', 0
 
 
-def detect_train_bunching(trains, threshold=4, cluster_distance=70):
+def detect_train_bunching(trains, threshold=4, cluster_distance=85):
     """
     Detect train bunching (multiple trains clustered close together).
 

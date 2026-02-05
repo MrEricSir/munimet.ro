@@ -35,6 +35,109 @@ INVALID_REPEATED_DIGITS = re.compile(r'(\d)\1{3}')
 # 'A', 'G', 'H', 'O', 'P', 'Q', 'U', 'V', 'Y', 'Z' are NOT valid Muni prefixes
 VALID_TRAIN_PREFIXES = set('MBCDEFIJKLNRSTW')
 
+# Valid Muni train suffixes - be permissive but filter obvious OCR errors
+# Valid single suffixes: line designators (J, K, L, M, N, S, T) plus X/* markers
+# Valid double suffixes: most combinations are valid except unusual ones
+VALID_SUFFIX_LETTERS = set('JKLMNSTX*')  # Common suffix characters
+
+# Valid Muni train suffixes
+# Single letter: line designators (J, K, L, M, N, S, T) plus X marker
+# Double letters: doubled designators (JJ, KK, LL, MM, NN, SS, TT)
+VALID_SINGLE_SUFFIXES = set('JKLMNSTX*')
+VALID_DOUBLE_SUFFIXES = {'JJ', 'KK', 'LL', 'MM', 'NN', 'SS', 'TT'}
+
+
+def _clean_suffix(train_id):
+    """Clean up train ID suffix to fix common OCR contamination.
+
+    Handles cases like:
+    - D2073JL → D2073J (extra L from nearby text)
+    - 7217OK → 7217K (O misread, should just be K)
+    - W2015MM → W2015M (extra M from station label MNL)
+    """
+    # Find the suffix (1-3 chars after 4 digits)
+    match = re.match(r'^([A-Z]?)(\d{4})([A-Z*X]{1,3})$', train_id)
+    if not match:
+        return train_id
+
+    prefix = match.group(1)
+    digits = match.group(2)
+    suffix = match.group(3)
+
+    # If suffix is already valid, return as-is
+    if suffix in VALID_SINGLE_SUFFIXES or suffix in VALID_DOUBLE_SUFFIXES:
+        return train_id
+
+    # Try to clean up the suffix
+    cleaned_suffix = suffix
+
+    # Case 1: 3-char suffix - try to extract valid 1 or 2 char suffix
+    if len(suffix) == 3:
+        # Check if first 2 chars are valid double suffix
+        if suffix[:2] in VALID_DOUBLE_SUFFIXES:
+            cleaned_suffix = suffix[:2]
+        # Check if first char is valid single suffix
+        elif suffix[0] in VALID_SINGLE_SUFFIXES:
+            cleaned_suffix = suffix[0]
+
+    # Case 2: 2-char suffix that's not a valid double (like JJ, KK, etc.)
+    elif len(suffix) == 2 and suffix not in VALID_DOUBLE_SUFFIXES:
+        # If first char is O (likely OCR error for 0), use second char
+        if suffix[0] == 'O' and suffix[1] in VALID_SINGLE_SUFFIXES:
+            cleaned_suffix = suffix[1]
+        # Mixed letters like JL, MN are contamination - train can't be on two routes
+        # Keep only the first letter (assumes the second is from nearby text)
+        elif suffix[0] in VALID_SINGLE_SUFFIXES:
+            cleaned_suffix = suffix[0]
+
+    if cleaned_suffix != suffix:
+        return prefix + digits + cleaned_suffix
+    return train_id
+
+
+def _has_invalid_suffix(train_id):
+    """Check if train ID has an invalid suffix that indicates OCR error."""
+    # Find where suffix starts (after 4 digits)
+    match = re.search(r'\d{4}([A-Z*X]{1,2})$', train_id)
+    if not match:
+        return False
+
+    suffix = match.group(1)
+
+    # Single character suffix - must be a valid line designator or X/*
+    if len(suffix) == 1:
+        return suffix not in VALID_SINGLE_SUFFIXES
+
+    # Double character suffix - must be a valid double (JJ, KK, etc.)
+    # or a combination of valid single suffixes
+    if len(suffix) == 2:
+        if suffix in VALID_DOUBLE_SUFFIXES:
+            return False
+        # Allow combinations like KL, JM, etc.
+        if suffix[0] in VALID_SINGLE_SUFFIXES and suffix[1] in VALID_SINGLE_SUFFIXES:
+            return False
+        return True
+
+    return False
+
+
+def _has_suspicious_digits(train_id):
+    """Check if train ID has suspicious digit patterns that indicate OCR error."""
+    # Extract the 4-digit car number
+    match = re.search(r'([A-Z]?)(\d{4})[A-Z*X]{1,2}$', train_id)
+    if not match:
+        return False
+
+    prefix = match.group(1)
+    digits = match.group(2)
+
+    # Train IDs without prefix starting with 0 are suspicious
+    # (real car numbers don't start with 0)
+    if not prefix and digits[0] == '0':
+        return True
+
+    return False
+
 # Pattern to detect invalid prefix (letter + 4 digits where letter is not valid)
 def _has_invalid_prefix(train_id):
     """Check if train ID has an invalid line prefix."""
@@ -89,7 +192,243 @@ class TrainDetector:
         return trains
 
     def _detect_by_ocr(self, gray, h, w, hsv):
-        """Detect trains via OCR - single pass per column."""
+        """Detect trains via OCR with selective component detection for pileups.
+
+        Strategy:
+        1. Run legacy column-based detection (proven stable)
+        2. Find clusters where trains are bunched (3+ within 100px)
+        3. Run component-based detection only in cluster regions (better isolation)
+        4. Merge results
+        """
+        trains = []
+
+        for track, (band_start, band_end) in [
+            ('upper', UPPER_TRAIN_BAND),
+            ('lower', LOWER_TRAIN_BAND)
+        ]:
+            y_min = int(h * band_start)
+            y_max = int(h * band_end)
+            band = gray[y_min:y_max, :]
+            band_hsv = hsv[y_min:y_max, :]
+            band_h = y_max - y_min
+
+            # Step 1: Legacy column-based detection (primary method)
+            track_trains = []
+            dark_mask = (band < 120).astype(np.uint8)
+            col_sums = dark_mask.sum(axis=0)
+            text_cols = np.where(col_sums > 3)[0]
+
+            if len(text_cols) > 0:
+                groups = self._group_columns(text_cols)
+                for x1, x2 in groups:
+                    width = x2 - x1
+                    if width < 6:
+                        continue
+
+                    if width > 20:
+                        sub_cols = self._split_wide_group(x1, x2, col_sums)
+                    else:
+                        sub_cols = [(x1, x2)]
+
+                    for sub_x1, sub_x2 in sub_cols:
+                        train_ids = self._ocr_column(band, dark_mask, sub_x1, sub_x2, band_h, track)
+                        if train_ids:
+                            sub_width = sub_x2 - sub_x1
+                            n_trains = len(train_ids)
+                            for i, train_id in enumerate(train_ids):
+                                if n_trains == 1:
+                                    center_x = (sub_x1 + sub_x2) // 2
+                                else:
+                                    center_x = sub_x1 + int(sub_width * (i + 0.5) / n_trains)
+                                track_trains.append({
+                                    'id': train_id,
+                                    'x': center_x,
+                                    'y': y_min + band_h // 2,
+                                    'track': track,
+                                    'confidence': 'high'
+                                })
+
+            # Step 2: Find clusters (potential pileups) - 3+ trains within 200px
+            clusters = self._find_train_clusters(track_trains, min_trains=3, max_spread=300)
+
+            # Step 3: For each cluster, run component detection with relaxed filters
+            for cluster_x_min, cluster_x_max in clusters:
+                component_trains = self._detect_by_components_in_region(
+                    band, y_min, band_h, track, cluster_x_min, cluster_x_max
+                )
+                track_trains.extend(component_trains)
+
+            trains.extend(track_trains)
+
+            # Also detect colored text labels (yellow, green)
+            colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
+            trains.extend(colored_trains)
+
+        return self._deduplicate(trains)
+
+    def _find_train_clusters(self, trains, min_trains=3, max_spread=200):
+        """Find clusters of trains that might indicate a pileup.
+
+        Uses a sliding window approach: finds the largest cluster containing
+        at least min_trains trains, where all trains are within max_spread
+        of each other (measured from leftmost to rightmost train).
+
+        Returns list of (x_min, x_max) tuples for each cluster region.
+        """
+        if len(trains) < min_trains:
+            return []
+
+        # Sort trains by x position
+        sorted_trains = sorted(trains, key=lambda t: t['x'])
+        clusters = []
+        used = set()  # Track which trains are already in a cluster
+
+        # Use a sliding window to find clusters
+        # A cluster is a contiguous group where the spread (max_x - min_x) <= max_spread
+        for start in range(len(sorted_trains)):
+            if start in used:
+                continue
+
+            # Expand the window as far as possible while keeping spread <= max_spread
+            end = start
+            while end + 1 < len(sorted_trains):
+                new_spread = sorted_trains[end + 1]['x'] - sorted_trains[start]['x']
+                if new_spread <= max_spread:
+                    end += 1
+                else:
+                    break
+
+            cluster_size = end - start + 1
+            if cluster_size >= min_trains:
+                x_min = sorted_trains[start]['x']
+                x_max = sorted_trains[end]['x']
+                # Extend region to catch any missed trains at edges
+                clusters.append((max(0, x_min - 40), x_max + 40))
+                # Mark these trains as used
+                for idx in range(start, end + 1):
+                    used.add(idx)
+
+        return clusters
+
+    def _detect_by_components_in_region(self, band, y_offset, band_h, track, x_min, x_max):
+        """Detect trains using component grouping in a specific x-region.
+
+        This uses RELAXED filters compared to _detect_by_components because
+        we only call this in regions where legacy detection already found
+        a cluster of trains (high confidence there are real trains).
+        """
+        trains = []
+
+        # Threshold to get dark text
+        _, binary = cv2.threshold(band, 120, 255, cv2.THRESH_BINARY_INV)
+
+        # Find connected components
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+
+        # Group components by x-position with moderate tolerance
+        columns = {}
+        x_tolerance = 8  # Relaxed from 6
+
+        for i in range(1, num_labels):
+            x, y, bw, bh, area = stats[i]
+            if area < 20:  # Relaxed from 30
+                continue
+
+            cx = x + bw // 2
+
+            # Only consider components in the target region
+            if cx < x_min or cx > x_max:
+                continue
+
+            # Find existing column within tolerance
+            found = False
+            for col_x in list(columns.keys()):
+                if abs(col_x - cx) <= x_tolerance:
+                    columns[col_x].append((x, y, bw, bh, area))
+                    found = True
+                    break
+
+            if not found:
+                columns[cx] = [(x, y, bw, bh, area)]
+
+        # Process each column
+        for col_x, components in columns.items():
+            # Need at least 3 character fragments (relaxed from 4)
+            if len(components) < 3:
+                continue
+
+            # Compute bounding box
+            min_x = min(c[0] for c in components)
+            min_y = min(c[1] for c in components)
+            max_x = max(c[0] + c[2] for c in components)
+            max_y = max(c[1] + c[3] for c in components)
+
+            col_w = max_x - min_x
+            col_h = max_y - min_y
+            total_area = sum(c[4] for c in components)
+
+            # Relaxed filters for cluster regions
+            if col_w < 5 or col_w > 25:  # Relaxed from 20
+                continue
+            if col_h < 40 or col_h > 130:  # Relaxed from 50-120
+                continue
+            if total_area < 150:  # Relaxed from 200
+                continue
+
+            # Skip station label regions
+            if track == 'lower':
+                station_cutoff = int(band_h * 0.15)
+                if min_y < station_cutoff:
+                    min_y = station_cutoff
+            else:
+                station_cutoff = int(band_h * 0.95)
+                if max_y > station_cutoff:
+                    max_y = station_cutoff
+
+            if max_y - min_y < 40:  # Relaxed from 50
+                continue
+
+            # Extract and OCR the column
+            pad = 3
+            roi_x1 = max(0, min_x - pad)
+            roi_x2 = min(band.shape[1], max_x + pad)
+            roi_y1 = max(0, min_y - pad)
+            roi_y2 = min(band.shape[0], max_y + pad)
+
+            roi = band[roi_y1:roi_y2, roi_x1:roi_x2]
+            if roi.size == 0 or roi.shape[0] < 30:  # Relaxed from 40
+                continue
+
+            train_ids = self._ocr_roi(roi, track)
+            if train_ids:
+                for train_id in train_ids:
+                    trains.append({
+                        'id': train_id,
+                        'x': col_x,
+                        'y': y_offset + (min_y + max_y) // 2,
+                        'track': track,
+                        'confidence': 'high'
+                    })
+
+        return trains
+
+    def _ocr_roi(self, roi, track):
+        """Run OCR on a region of interest and extract train IDs."""
+        # Scale up for better OCR
+        scale = 4
+        roi_large = cv2.resize(roi, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4)
+
+        # Otsu threshold
+        _, roi_bin = cv2.threshold(roi_large, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        try:
+            text = pytesseract.image_to_string(roi_bin, config=OCR_CONFIG)
+            return self._extract_train_ids(text)
+        except Exception:
+            return []
+
+    def _detect_by_ocr_legacy(self, gray, h, w, hsv):
+        """Legacy OCR detection method - kept for reference."""
         trains = []
 
         for track, (band_start, band_end) in [
@@ -490,7 +829,7 @@ class TrainDetector:
                 if m not in result:
                     result.append(m)
             if result:
-                return result
+                return [_clean_suffix(m) for m in result]
             combined = combined_5  # Fall through if neither worked
 
         # Fix duplicate leading letters (OCR sometimes doubles them in vertical text)
@@ -500,12 +839,17 @@ class TrainDetector:
         # First try to match without aggressive corrections
         matches = TRAIN_ID_PATTERN.findall(combined)
         if matches:
-            # Filter out invalid train IDs with repeated digits (e.g., 1111II, 0000MM)
-            # and invalid prefixes (e.g., A4111I - 'A' is not a valid Muni line)
+            # Filter out invalid train IDs with:
+            # - repeated digits (e.g., 1111II, 0000MM)
+            # - invalid prefixes (e.g., A4111I - 'A' is not a valid Muni line)
+            # - invalid suffixes (e.g., 2117XJ, 2111FX - X not used in combinations)
+            # - suspicious digit patterns (e.g., 8566MK - starts with 8)
             matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)
-                       and not _has_invalid_prefix(m)]
+                       and not _has_invalid_prefix(m)
+                       and not _has_invalid_suffix(m)
+                       and not _has_suspicious_digits(m)]
             if matches:
-                return matches
+                return [_clean_suffix(m) for m in matches]
 
         # Position-based corrections for vertical text OCR errors
         # Find where digits likely start (first digit or letter that looks like a digit)
@@ -541,11 +885,13 @@ class TrainDetector:
                         fixed[i] = 'O'
             matches = TRAIN_ID_PATTERN.findall(''.join(fixed))
             if matches:
-                # Filter out invalid train IDs with repeated digits and invalid prefixes
+                # Filter out invalid train IDs with repeated digits, invalid prefixes, invalid suffixes, and suspicious digits
                 matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)
-                           and not _has_invalid_prefix(m)]
+                           and not _has_invalid_prefix(m)
+                           and not _has_invalid_suffix(m)
+                           and not _has_suspicious_digits(m)]
                 if matches:
-                    return matches
+                    return [_clean_suffix(m) for m in matches]
 
         return []
 
@@ -564,7 +910,7 @@ class TrainDetector:
             is_dup = False
             for existing in unique:
                 if (existing['track'] == train['track'] and
-                        abs(existing['x'] - train['x']) < 30):
+                        abs(existing['x'] - train['x']) < 40):
                     # Only consider duplicates if IDs are similar
                     # (one is prefix of other, or differ by at most 2 chars)
                     if self._ids_are_similar(existing['id'], train['id']):

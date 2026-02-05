@@ -332,6 +332,43 @@ class TestTrainBunchingDetection:
         assert em_bunching[0]['direction'] == 'Westbound'
 
 
+class TestOCRImprovementCandidates:
+    """Tests for images where OCR improvements could detect more delays.
+
+    These tests document known cases where bunching or delays are visible
+    but not detected due to OCR limitations. They are marked as xfail
+    and will pass once OCR is improved.
+    """
+
+    @pytest.mark.xfail(reason="Environment-sensitive: passes with some Tesseract versions but not others")
+    def test_civic_center_pileup(self):
+        """Westbound pileup at Civic Center should be detected as yellow.
+
+        Image shows 4+ trains clustered on the upper track near Civic Center
+        (around x=800-970). Selective component-based detection correctly
+        identifies trains in this dense pileup area, triggering bunching detection.
+
+        Note: This test is environment-sensitive - OCR results vary between
+        Tesseract versions. Passes locally but may fail in Docker.
+        """
+        result = detect_system_status(str(IMAGES_DIR / "muni-pileup-westbound-at-civic-center.jpg"))
+
+        # Currently detects 19 trains but no route info (all '?')
+        # Should detect bunching and return yellow
+        assert result['system_status'] == 'yellow', (
+            f"Expected yellow due to bunching at Civic Center, got {result['system_status']}. "
+            f"Trains detected: {len(result['trains'])}, "
+            f"Bunching: {result.get('delays_bunching', [])}"
+        )
+
+        # Should have bunching incident near Civic Center (CC) or Van Ness (VN)
+        bunching = result.get('delays_bunching', [])
+        assert len(bunching) > 0, "Should detect train bunching"
+        assert any(b['station'] in ('CC', 'VN', 'PO') for b in bunching), (
+            f"Should detect bunching near Civic Center area, got: {bunching}"
+        )
+
+
 class TestDelaySummaryGeneration:
     """Unit tests for delay summary generation logic."""
 

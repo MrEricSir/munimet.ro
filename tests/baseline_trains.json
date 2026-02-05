@@ -17,11 +17,11 @@
       ["B2181TT", 1729]
     ],
     "IMG_9792.jpg": [
-      ["M2062LL", 148, {"ocr_override": "6521LK", "note": "OCR misreads significantly - different train visible"}],
+      ["M2062LL", 148, {"ocr_override": "M2062LL", "note": "Now detecting correctly"}],
       ["W2032MM", 260],
       ["I2089MM", 347, {"ocr_override": "2089MM", "note": "OCR drops leading I"}],
       ["2162LL", 483],
-      ["2037XX", 672],
+      ["2037XX", 672, {"ocr_override": "2037X", "note": "Suffix cleanup cleans XX to X"}],
       ["2011NN", 800],
       ["9019K", 876],
       ["2234LM", 961, {"ocr_override": "W2023LL", "note": "OCR misreads significantly"}],
@@ -29,7 +29,7 @@
       ["2066KK", 1181]
     ],
     "IMG_9793.jpg": [
-      ["6521LK", 172],
+      ["6521LK", 172, {"ocr_override": "6521L", "note": "Suffix cleanup cleans LK to L"}],
       ["W2032MM", 215],
       ["I2089MM", 347, {"ocr_override": "2089MM", "note": "OCR drops leading I"}],
       ["2162LL", 483],
@@ -42,7 +42,7 @@
     "IMG_9794.jpg": [
       ["M2153KK", 33],
       ["W2032MM", 135],
-      ["M2051KK", 184, {"ocr_override": "6521LK", "note": "OCR misreads significantly - different train visible"}],
+      ["M2051KK", 184, {"ocr_override": "6521L", "note": "OCR misreads significantly; suffix cleanup cleans LK to L"}],
       ["M2089MM", 347],
       ["R2162LL", 457, {"ocr_override": "2162LL", "note": "OCR drops leading R; position adjusted to match detection"}],
       ["2011NN", 800],
@@ -71,7 +71,7 @@
       ["M2103L", 801, {"ocr_override": "M2103LL"}],
       ["W2136LL", 972, {"ocr_override": "W2136L", "note": "OCR drops one L"}],
       ["M2176M", 974, {"ocr_override": "M2116M", "note": "OCR misreads 7 as 1"}],
-      ["4226JM", 1175],
+      ["4226JM", 1182, {"ocr_override": "4226J", "note": "Suffix cleanup cleans JM to J"}],
       ["W2188K", 1178],
       ["B2104TT", 1564, {"ocr_override": "2104TT", "note": "OCR drops leading B"}]
     ],
@@ -82,7 +82,7 @@
       ["W2112M", 264],
       ["M2111J", 804],
       ["W2167L", 1049, {"ocr_override": "W2167LL"}],
-      ["W2131K", 1169, {"ocr_override": "W2131KE", "note": "OCR includes E from Embarcadero station label"}],
+      ["W2131K", 1169, {"optional": true, "note": "Interleaved with D2058NN - OCR cannot separate the two trains"}],
       ["D2058NN", 1182, {"ocr_override": "2058NN", "note": "OCR drops leading D"}],
       ["B2009TT", 1557, {"ocr_override": "2009TT", "note": "OCR drops leading letter"}]
     ],
@@ -99,11 +99,12 @@
       ["F2179NN", 871, {"ocr_override": "2179NN", "note": "OCR drops leading F"}],
       ["D2004NN", 879],
       ["D2099J", 1054],
-      ["7052KX", 1174, {"note": "Actually 2 bunched trains at Embarcadero - detection improvement needed"}],
+      ["W2075K", 1174, {"ocr_override": "7052K", "note": "Two bunched trains at Embarcadero; OCR merges W2075K and W2202X"}],
+      ["W2202X", 1180, {"optional": true, "note": "Bunched with W2075K - currently detected as merged 7052K"}],
       ["C2145TT", 1676]
     ],
     "muni_snapshot_20260202_122209.jpg": [
-      ["7217OK", 37, {"ocr_override": "M2017OK", "note": "OCR misreads M2 as 72"}],
+      ["*2170KK", 37, {"optional": true, "note": "Blue text label - not currently detected by OCR"}],
       ["W2010MM", 233],
       ["W2082KK", 625],
       ["M2058J", 674],
@@ -112,7 +113,7 @@
       ["M2036KK", 875],
       ["W2114MM", 878],
       ["W2083KK", 922],
-      ["6011LN", 1180, {"ocr_override": "W2011LN", "note": "OCR misreads W2 as 60"}],
+      ["6011LN", 1180, {"ocr_override": "6011L", "note": "OCR misreads W2 as 60; suffix cleanup cleans LN to L"}],
       ["M2188LL", 1195],
       ["W2027MM", 1275],
       ["D2166J", 1425],

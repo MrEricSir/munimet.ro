@@ -98,9 +98,14 @@ def restore_db_from_gcs():
         # Ensure local directory exists
         os.makedirs(LOCAL_DB_PATH.parent, exist_ok=True)
 
+        # Get blob size before download
+        blob.reload()
+        gcs_size = blob.size or 0
+
         # Download the database
         blob.download_to_filename(str(LOCAL_DB_PATH))
-        print(f"Restored analytics DB from GCS ({blob.size} bytes)")
+        local_size = LOCAL_DB_PATH.stat().st_size
+        print(f"Restored analytics DB from GCS ({gcs_size} bytes downloaded, {local_size} bytes on disk)")
         _gcs_restored = True
         return True
     except Exception as e:
@@ -122,14 +127,21 @@ def backup_db_to_gcs():
     Returns:
         bool: True if backed up successfully
     """
+    import sys
+
+    print("  Backup: Starting...", flush=True)
+
     if not _is_cloud_run():
+        print("  Backup: Skipped (not on Cloud Run)", flush=True)
         return False
 
     if not LOCAL_DB_PATH.exists():
+        print(f"  Backup: Skipped (local DB doesn't exist at {LOCAL_DB_PATH})", flush=True)
         return False
 
     try:
         local_size = LOCAL_DB_PATH.stat().st_size
+        print(f"  Backup: Local DB size = {local_size} bytes", flush=True)
 
         client = _get_gcs_client()
         bucket = client.bucket(_get_gcs_bucket())
@@ -140,16 +152,25 @@ def backup_db_to_gcs():
         if blob.exists():
             blob.reload()  # Refresh metadata
             gcs_size = blob.size or 0
+            print(f"  Backup: GCS size = {gcs_size} bytes (blob.size raw = {blob.size})", flush=True)
             if local_size < gcs_size * 0.9:  # Allow 10% variance for normal fluctuation
-                print(f"Warning: Local DB ({local_size} bytes) much smaller than GCS backup ({gcs_size} bytes)")
-                print("Skipping backup to prevent data loss - investigate restore failure")
+                print(f"  Backup: WARNING - Local ({local_size}) much smaller than GCS ({gcs_size})", flush=True)
+                print("  Backup: Skipping to prevent data loss - investigate restore failure", flush=True)
                 return False
+            print(f"  Backup: Safety check passed ({local_size} >= {gcs_size * 0.9:.0f})", flush=True)
+        else:
+            print("  Backup: No existing GCS backup found", flush=True)
 
+        print("  Backup: Uploading...", flush=True)
         blob.upload_from_filename(str(LOCAL_DB_PATH))
-        print(f"Backed up analytics DB to GCS ({local_size} bytes)")
+        print(f"  Backup: Success - uploaded {local_size} bytes to GCS", flush=True)
+        sys.stdout.flush()
         return True
     except Exception as e:
-        print(f"Error backing up analytics DB to GCS: {e}")
+        print(f"  Backup: ERROR - {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
         return False
 
 
@@ -325,6 +346,8 @@ def log_status_check(status, best_status, detection_data, timestamp):
     if status != 'yellow':
         conn.commit()
         conn.close()
+        # Backup to GCS after logging (if on Cloud Run)
+        backup_db_to_gcs()
         return check_id
 
     # Insert delay incidents
