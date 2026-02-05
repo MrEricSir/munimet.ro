@@ -18,6 +18,10 @@ This document records the actual configuration values used for this deployment.
 - **Storage Class**: Standard
 - **Purpose**: API response cache for Cloud Run deployment
 - **Access**: Private (service account only)
+- **Versioning**: Enabled (for analytics.db recovery)
+- **Lifecycle Policy**:
+  - `latest_image.jpg`, `latest_status.json`: Keep only current version
+  - `analytics/*`: Keep 10 most recent versions
 
 #### Reference Data and Models Bucket
 - **Bucket Name**: `munimetro-annex`
@@ -35,7 +39,7 @@ This document records the actual configuration values used for this deployment.
 - **Region**: `us-west1`
 - **URL**: `https://munimetro-api-438243686292.us-west1.run.app`
 - **Custom Domain**: `https://munimet.ro`
-- **Memory**: 2Gi
+- **Memory**: 512Mi
 - **CPU**: 1
 - **Concurrency**: 80
 - **Min Instances**: 0
@@ -47,7 +51,7 @@ This document records the actual configuration values used for this deployment.
 - **Job Name**: `munimetro-checker`
 - **Type**: Cloud Run Job (batch execution)
 - **Region**: `us-west1`
-- **Memory**: 2Gi
+- **Memory**: 512Mi
 - **CPU**: 1
 - **Task Timeout**: 120s
 - **Max Retries**: 3

@@ -81,7 +81,7 @@ gcloud run deploy "$API_SERVICE" \
     --project "$PROJECT_ID" \
     --service-account "$SERVICE_ACCOUNT_EMAIL" \
     --allow-unauthenticated \
-    --memory 1Gi \
+    --memory 512Mi \
     --cpu 1 \
     --timeout 60s \
     --max-instances 10 \
@@ -133,7 +133,7 @@ gcloud run jobs deploy "$CHECKER_JOB" \
     --region "$REGION" \
     --project "$PROJECT_ID" \
     --service-account "$SERVICE_ACCOUNT_EMAIL" \
-    --memory 1Gi \
+    --memory 512Mi \
     --cpu 1 \
     --task-timeout 120s \
     --max-retries 3 \
