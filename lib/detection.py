@@ -391,12 +391,60 @@ def generate_delay_summaries(delays_platforms, delays_segments, bunching_inciden
                 last_name = STATION_NAMES.get(group[-1], group[-1])
                 summaries.append(f"{direction} delay from {first_name} to {last_name}")
 
-    # Process red track segments
+    # Process red track segments - group adjacent segments by direction
+    segments_by_direction = {}
     for segment in delays_segments:
-        from_name = STATION_NAMES.get(segment['from'], segment['from'])
-        to_name = STATION_NAMES.get(segment['to'], segment['to'])
         direction = segment['direction']
-        summaries.append(f"{direction} service not running between {from_name} and {to_name}")
+        if direction not in segments_by_direction:
+            segments_by_direction[direction] = []
+        segments_by_direction[direction].append(segment)
+
+    for direction, segments in segments_by_direction.items():
+        order = direction_orders.get(direction, [])
+
+        # Build connections between stations from segments
+        connections = {}
+        all_stations = set()
+        for seg in segments:
+            from_st = seg['from']
+            to_st = seg['to']
+            all_stations.add(from_st)
+            all_stations.add(to_st)
+            if from_st not in connections:
+                connections[from_st] = set()
+            if to_st not in connections:
+                connections[to_st] = set()
+            connections[from_st].add(to_st)
+            connections[to_st].add(from_st)
+
+        # Find connected chains of stations (BFS)
+        visited = set()
+        chains = []
+
+        for station in all_stations:
+            if station in visited:
+                continue
+            chain = set()
+            queue = [station]
+            while queue:
+                current = queue.pop(0)
+                if current in visited:
+                    continue
+                visited.add(current)
+                chain.add(current)
+                for neighbor in connections.get(current, []):
+                    if neighbor not in visited:
+                        queue.append(neighbor)
+            if chain:
+                chains.append(chain)
+
+        # Generate summary for each chain, ordered by direction of travel
+        for chain in chains:
+            sorted_stations = sorted(chain, key=lambda s: order.index(s) if s in order else 999)
+            if len(sorted_stations) >= 2:
+                first_name = STATION_NAMES.get(sorted_stations[0], sorted_stations[0])
+                last_name = STATION_NAMES.get(sorted_stations[-1], sorted_stations[-1])
+                summaries.append(f"{direction} service not running between {first_name} and {last_name}")
 
     # Process train bunching
     for bunching in bunching_incidents:

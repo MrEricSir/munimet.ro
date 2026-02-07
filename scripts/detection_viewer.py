@@ -45,6 +45,7 @@ from lib.station_detector import (
     HSV_RANGES,
 )
 from lib.train_detector import TrainDetector, TESSERACT_AVAILABLE
+from lib.detection import detect_segment_color, generate_delay_summaries  # Use canonical implementation
 
 app = Flask(__name__)
 
@@ -70,46 +71,6 @@ def load_image_files():
             f for f in IMAGE_FOLDER.glob("*.JPG")
         ])
     return image_files
-
-
-def detect_segment_color(hsv, bounds):
-    """Detect if a track segment is cyan (normal) or red (off)."""
-    x_min, x_max = bounds['x_min'], bounds['x_max']
-    y_min, y_max = bounds['y_min'], bounds['y_max']
-
-    h, w = hsv.shape[:2]
-    x_min = max(0, x_min)
-    y_min = max(0, y_min)
-    x_max = min(w, x_max)
-    y_max = min(h, y_max)
-
-    if x_max <= x_min or y_max <= y_min:
-        return 'unknown', 0.0
-
-    roi = hsv[y_min:y_max, x_min:x_max]
-
-    # Detect red (wraps around hue 0/180)
-    red_mask_low = cv2.inRange(roi,
-        HSV_RANGES['track_red_low']['lower'],
-        HSV_RANGES['track_red_low']['upper'])
-    red_mask_high = cv2.inRange(roi,
-        HSV_RANGES['track_red_high']['lower'],
-        HSV_RANGES['track_red_high']['upper'])
-    red_mask = red_mask_low | red_mask_high
-    red_ratio = np.count_nonzero(red_mask) / max(roi.size, 1)
-
-    # Detect cyan
-    cyan_mask = cv2.inRange(roi,
-        HSV_RANGES['track_cyan']['lower'],
-        HSV_RANGES['track_cyan']['upper'])
-    cyan_ratio = np.count_nonzero(cyan_mask) / max(roi.size, 1)
-
-    if red_ratio > 0.05:
-        return 'red', red_ratio
-    elif cyan_ratio > 0.05:
-        return 'cyan', cyan_ratio
-    else:
-        return 'unknown', 0.0
 
 
 def detect_platform_color(hsv, x, y, size=25, height=25):
@@ -471,6 +432,9 @@ def get_detection_data(image_path):
     # Calculate overall system status
     system_status = calculate_system_status(trains, delays_platforms, delays_segments, bunching_incidents)
 
+    # Generate human-readable delay summaries
+    delay_summaries = generate_delay_summaries(delays_platforms, delays_segments, bunching_incidents)
+
     return {
         'width': w,
         'height': h,
@@ -479,6 +443,7 @@ def get_detection_data(image_path):
         'delays_platforms': delays_platforms,
         'delays_segments': delays_segments,
         'delays_bunching': bunching_incidents,
+        'delay_summaries': delay_summaries,
         'trains': trains,
         'track_y_upper': track_y_upper,
         'track_y_lower': track_y_lower,
@@ -738,12 +703,10 @@ HTML_TEMPLATE = '''
                 <div style="background: #b8a000; color: white; padding: 15px; border-radius: 8px; font-size: 1.3em; font-weight: bold;">
                     🟡 DELAYS DETECTED
                 </div>
-                <div style="color: #ffcc88; font-size: 0.85em; margin-top: 8px;">
-                    {% set reasons = [] %}
-                    {% if detection.delays_segments %}{% set _ = reasons.append(detection.delays_segments|length ~ ' track section(s) disabled') %}{% endif %}
-                    {% if detection.delays_platforms|length >= 2 %}{% set _ = reasons.append(detection.delays_platforms|length ~ ' platforms in hold') %}{% endif %}
-                    {% if detection.delays_bunching %}{% set _ = reasons.append('train bunching detected') %}{% endif %}
-                    {{ reasons|join(', ') }}
+                <div style="color: #ffcc88; font-size: 0.85em; margin-top: 8px; text-align: left;">
+                    {% for summary in detection.delay_summaries %}
+                    <div style="margin: 4px 0;">• {{ summary }}</div>
+                    {% endfor %}
                 </div>
                 {% else %}
                 <div style="background: #208020; color: white; padding: 15px; border-radius: 8px; font-size: 1.3em; font-weight: bold;">
