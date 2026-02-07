@@ -34,6 +34,7 @@ KNOWN_STATUSES = [
     ("muni_snapshot_20251216_190936.jpg", "yellow", "2 platforms in hold"),
     ("muni_snapshot_20251207_122227.jpg", "yellow", "2 platforms in hold"),
     ("IMG_9794.jpg", "yellow", "Multiple platforms in hold"),
+    ("muni-westbound-castro-red-track.jpg", "yellow", "Westbound red track segment at Castro"),
 
     # Not operating (red)
     ("muni_snapshot_20251207_021407.jpg", "red", "Late night - not operating"),

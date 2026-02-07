@@ -157,12 +157,18 @@ def detect_segment_color(hsv, bounds):
     red_mask = cv2.bitwise_or(red_low_mask, red_high_mask)
     red_pixels = cv2.countNonZero(red_mask)
 
-    # Return dominant color
-    min_threshold = 100
-    if cyan_pixels > red_pixels and cyan_pixels >= min_threshold:
-        return 'cyan', cyan_pixels
-    elif red_pixels >= min_threshold:
+    # Return 'red' if there are enough red pixels, regardless of cyan count
+    # Any red section indicates track is disabled (safety-critical)
+    # Use both absolute threshold and percentage to avoid false positives from UI elements
+    min_pixel_threshold = 100
+    min_percentage_threshold = 0.05  # 5% of segment must be red
+    total_pixels = roi.shape[0] * roi.shape[1]
+    red_percentage = red_pixels / total_pixels if total_pixels > 0 else 0
+
+    if red_pixels >= min_pixel_threshold and red_percentage >= min_percentage_threshold:
         return 'red', red_pixels
+    elif cyan_pixels >= min_pixel_threshold:
+        return 'cyan', cyan_pixels
     else:
         return 'unknown', 0
 
