@@ -151,7 +151,7 @@ Current Muni Metro status with two-layer smoothing (best-of-3 + hysteresis).
 **Smoothing Behavior**:
 - **Best-of-3**: Takes most optimistic status from last 3 raw detections
 - **Hysteresis**: Requires 2-3 consecutive checks before changing reported status
-- Transition thresholds: green↔yellow (2 checks), to/from red (3 checks)
+- Transition thresholds: worsening (3 checks, ~90s), improving (2 checks, ~60s)
 - Extra smoothing during overnight transitions (11pm-1am, 4am-6am)
 - Reduces false positives from transient detection issues
 - Cache valid for 5 minutes

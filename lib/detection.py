@@ -660,12 +660,12 @@ def apply_status_hysteresis(best_status, reported_status, pending_status, pendin
     # Transition thresholds: how many consecutive checks needed to change
     # Format: (from_status, to_status) -> base_threshold
     THRESHOLDS = {
-        # Worsening transitions (slower)
-        ('green', 'yellow'): 2,   # Quick to warn of problems
+        # Worsening transitions (slower - avoid false alarms)
+        ('green', 'yellow'): 3,   # Need sustained issues before warning
         ('green', 'red'): 3,      # Unusual jump, needs confirmation
         ('yellow', 'red'): 3,     # Hesitant to declare "not operating"
 
-        # Improving transitions (faster)
+        # Improving transitions (faster - report good news quickly)
         ('red', 'yellow'): 2,     # Quick to report partial recovery
         ('red', 'green'): 2,      # Quick to report full recovery
         ('yellow', 'green'): 2,   # Quick to report recovery

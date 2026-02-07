@@ -525,8 +525,8 @@ class TestStatusHysteresis:
         assert result['status_changed'] == False
         assert result['pending_streak'] == 0
 
-    def test_green_to_yellow_needs_two(self):
-        """Green to yellow transition needs 2 consecutive checks."""
+    def test_green_to_yellow_needs_three(self):
+        """Green to yellow transition needs 3 consecutive checks."""
         from lib.detection import apply_status_hysteresis
 
         reported = {'status': 'green', 'timestamp': '2026-01-01T12:00:00'}
@@ -538,8 +538,13 @@ class TestStatusHysteresis:
         assert result['pending_status'] == 'yellow'
         assert result['pending_streak'] == 1
 
-        # Second yellow - should change
+        # Second yellow - should not change yet
         result = apply_status_hysteresis(best_yellow, reported, 'yellow', 1)
+        assert result['reported_status']['status'] == 'green'
+        assert result['pending_streak'] == 2
+
+        # Third yellow - should change
+        result = apply_status_hysteresis(best_yellow, reported, 'yellow', 2)
         assert result['reported_status']['status'] == 'yellow'
         assert result['status_changed'] == True
 
@@ -588,14 +593,17 @@ class TestStatusHysteresis:
         reported = {'status': 'green', 'timestamp': '2026-01-01T23:30:00'}
         best_yellow = {'status': 'yellow', 'timestamp': '2026-01-01T23:30:30'}
 
-        # At 11:30pm, green->yellow normally needs 2, but with overnight bonus needs 3
+        # At 11:30pm, green->yellow normally needs 3, but with overnight bonus needs 4
         result = apply_status_hysteresis(best_yellow, reported, None, 0, timestamp='2026-01-01T23:30:30')
         assert result['reported_status']['status'] == 'green'
 
         result = apply_status_hysteresis(best_yellow, reported, 'yellow', 1, timestamp='2026-01-01T23:31:00')
-        assert result['reported_status']['status'] == 'green'  # Still needs one more
+        assert result['reported_status']['status'] == 'green'
 
         result = apply_status_hysteresis(best_yellow, reported, 'yellow', 2, timestamp='2026-01-01T23:31:30')
+        assert result['reported_status']['status'] == 'green'  # Still needs one more
+
+        result = apply_status_hysteresis(best_yellow, reported, 'yellow', 3, timestamp='2026-01-01T23:32:00')
         assert result['reported_status']['status'] == 'yellow'  # Now it changes
 
     def test_streak_resets_on_different_pending(self):
