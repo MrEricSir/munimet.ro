@@ -353,13 +353,13 @@
             // Delay summaries (human-readable)
             const delaySummaries = detection.delay_summaries || [];
 
-            // Best of N info (shows history of recent checks)
+            // Status history info (shows recent checks used for smoothing)
             let bestOfNHtml = '';
             if (data.is_best_of_two && data.status_history && data.status_history.length > 1) {
                 const h = data.status_history;
                 const historyStr = h.map(s => s.status).join(' → ');
                 bestOfNHtml = `<div class="status-best-of-two">
-                    Best of ${h.length}: ${historyStr}
+                    Recent checks: ${historyStr}
                 </div>`;
             }
 

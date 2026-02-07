@@ -614,6 +614,115 @@ def detect_system_status(image_path):
     }
 
 
+# Status priority for hysteresis calculation
+STATUS_PRIORITY = {'green': 3, 'yellow': 2, 'red': 1}
+
+
+def apply_status_hysteresis(best_status, reported_status, pending_status, pending_streak, timestamp=None):
+    """
+    Apply hysteresis to smooth status transitions.
+
+    This prevents rapid status flips by requiring consistent agreement before
+    changing the reported status. Different thresholds are used for different
+    transitions, and overnight transition windows get extra smoothing.
+
+    Args:
+        best_status: The current best-of-3 status (dict with 'status' key)
+        reported_status: The currently reported status (dict with 'status' key, or None)
+        pending_status: The status we're considering changing to (string, or None)
+        pending_streak: How many consecutive checks have had this pending status
+        timestamp: ISO timestamp string (for time-of-day awareness)
+
+    Returns:
+        dict: {
+            'reported_status': dict - the status to report (may be unchanged),
+            'pending_status': str - the new pending status,
+            'pending_streak': int - the new streak count,
+            'status_changed': bool - whether reported status changed this check
+        }
+    """
+    from datetime import datetime
+
+    current_best = best_status['status']
+    current_reported = reported_status['status'] if reported_status else None
+
+    # Determine if we're in an overnight transition window
+    # These are times when status naturally oscillates: 11pm-1am (night), 4am-6am (morning)
+    in_transition_window = False
+    if timestamp:
+        try:
+            dt = datetime.fromisoformat(timestamp)
+            hour = dt.hour
+            in_transition_window = (23 <= hour or hour < 1) or (4 <= hour < 6)
+        except (ValueError, TypeError):
+            pass
+
+    # Transition thresholds: how many consecutive checks needed to change
+    # Format: (from_status, to_status) -> base_threshold
+    THRESHOLDS = {
+        # Worsening transitions (slower)
+        ('green', 'yellow'): 2,   # Quick to warn of problems
+        ('green', 'red'): 3,      # Unusual jump, needs confirmation
+        ('yellow', 'red'): 3,     # Hesitant to declare "not operating"
+
+        # Improving transitions (faster)
+        ('red', 'yellow'): 2,     # Quick to report partial recovery
+        ('red', 'green'): 2,      # Quick to report full recovery
+        ('yellow', 'green'): 2,   # Quick to report recovery
+    }
+
+    # If no current reported status, just use best_status immediately
+    if current_reported is None:
+        return {
+            'reported_status': best_status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'status_changed': True
+        }
+
+    # If best matches reported, no change needed - reset pending state
+    if current_best == current_reported:
+        return {
+            'reported_status': reported_status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'status_changed': False
+        }
+
+    # Best differs from reported - track pending streak
+    if pending_status == current_best:
+        # Same pending status, increment streak
+        new_streak = pending_streak + 1
+    else:
+        # Different pending status, start new streak
+        new_streak = 1
+
+    # Get threshold for this transition
+    transition_key = (current_reported, current_best)
+    base_threshold = THRESHOLDS.get(transition_key, 2)
+
+    # Add extra smoothing during overnight transition windows
+    threshold = base_threshold + (1 if in_transition_window else 0)
+
+    # Check if we've met the threshold
+    if new_streak >= threshold:
+        # Status change confirmed
+        return {
+            'reported_status': best_status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'status_changed': True
+        }
+    else:
+        # Not yet - keep current reported status
+        return {
+            'reported_status': reported_status,
+            'pending_status': current_best,
+            'pending_streak': new_streak,
+            'status_changed': False
+        }
+
+
 # For testing
 if __name__ == '__main__':
     import sys

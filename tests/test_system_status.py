@@ -499,5 +499,122 @@ class TestDelaySummaryBaseline:
         assert result.get('delay_summaries', []) == [], f"{image_name}: expected no delay summaries"
 
 
+class TestStatusHysteresis:
+    """Tests for status hysteresis (transition smoothing)."""
+
+    def test_initial_status_no_hysteresis(self):
+        """Initial status should be accepted immediately."""
+        from lib.detection import apply_status_hysteresis
+
+        best = {'status': 'green', 'timestamp': '2026-01-01T12:00:00'}
+        result = apply_status_hysteresis(best, None, None, 0)
+
+        assert result['reported_status']['status'] == 'green'
+        assert result['status_changed'] == True
+        assert result['pending_streak'] == 0
+
+    def test_same_status_no_change(self):
+        """Same status should not trigger change."""
+        from lib.detection import apply_status_hysteresis
+
+        best = {'status': 'green', 'timestamp': '2026-01-01T12:00:00'}
+        reported = {'status': 'green', 'timestamp': '2026-01-01T11:59:30'}
+        result = apply_status_hysteresis(best, reported, None, 0)
+
+        assert result['reported_status']['status'] == 'green'
+        assert result['status_changed'] == False
+        assert result['pending_streak'] == 0
+
+    def test_green_to_yellow_needs_two(self):
+        """Green to yellow transition needs 2 consecutive checks."""
+        from lib.detection import apply_status_hysteresis
+
+        reported = {'status': 'green', 'timestamp': '2026-01-01T12:00:00'}
+        best_yellow = {'status': 'yellow', 'timestamp': '2026-01-01T12:00:30'}
+
+        # First yellow - should not change
+        result = apply_status_hysteresis(best_yellow, reported, None, 0)
+        assert result['reported_status']['status'] == 'green'
+        assert result['pending_status'] == 'yellow'
+        assert result['pending_streak'] == 1
+
+        # Second yellow - should change
+        result = apply_status_hysteresis(best_yellow, reported, 'yellow', 1)
+        assert result['reported_status']['status'] == 'yellow'
+        assert result['status_changed'] == True
+
+    def test_yellow_to_red_needs_three(self):
+        """Yellow to red transition needs 3 consecutive checks."""
+        from lib.detection import apply_status_hysteresis
+
+        reported = {'status': 'yellow', 'timestamp': '2026-01-01T12:00:00'}
+        best_red = {'status': 'red', 'timestamp': '2026-01-01T12:00:30'}
+
+        # First red - should not change
+        result = apply_status_hysteresis(best_red, reported, None, 0)
+        assert result['reported_status']['status'] == 'yellow'
+        assert result['pending_streak'] == 1
+
+        # Second red - should not change
+        result = apply_status_hysteresis(best_red, reported, 'red', 1)
+        assert result['reported_status']['status'] == 'yellow'
+        assert result['pending_streak'] == 2
+
+        # Third red - should change
+        result = apply_status_hysteresis(best_red, reported, 'red', 2)
+        assert result['reported_status']['status'] == 'red'
+        assert result['status_changed'] == True
+
+    def test_red_to_green_needs_two(self):
+        """Recovery from red to green needs 2 consecutive checks."""
+        from lib.detection import apply_status_hysteresis
+
+        reported = {'status': 'red', 'timestamp': '2026-01-01T12:00:00'}
+        best_green = {'status': 'green', 'timestamp': '2026-01-01T06:00:00'}
+
+        # First green - should not change
+        result = apply_status_hysteresis(best_green, reported, None, 0)
+        assert result['reported_status']['status'] == 'red'
+
+        # Second green - should change
+        result = apply_status_hysteresis(best_green, reported, 'green', 1)
+        assert result['reported_status']['status'] == 'green'
+        assert result['status_changed'] == True
+
+    def test_overnight_transition_extra_smoothing(self):
+        """During overnight transition (11pm-1am), need extra confirmation."""
+        from lib.detection import apply_status_hysteresis
+
+        reported = {'status': 'green', 'timestamp': '2026-01-01T23:30:00'}
+        best_yellow = {'status': 'yellow', 'timestamp': '2026-01-01T23:30:30'}
+
+        # At 11:30pm, green->yellow normally needs 2, but with overnight bonus needs 3
+        result = apply_status_hysteresis(best_yellow, reported, None, 0, timestamp='2026-01-01T23:30:30')
+        assert result['reported_status']['status'] == 'green'
+
+        result = apply_status_hysteresis(best_yellow, reported, 'yellow', 1, timestamp='2026-01-01T23:31:00')
+        assert result['reported_status']['status'] == 'green'  # Still needs one more
+
+        result = apply_status_hysteresis(best_yellow, reported, 'yellow', 2, timestamp='2026-01-01T23:31:30')
+        assert result['reported_status']['status'] == 'yellow'  # Now it changes
+
+    def test_streak_resets_on_different_pending(self):
+        """Streak should reset when pending status changes."""
+        from lib.detection import apply_status_hysteresis
+
+        reported = {'status': 'green', 'timestamp': '2026-01-01T12:00:00'}
+        best_yellow = {'status': 'yellow', 'timestamp': '2026-01-01T12:00:30'}
+        best_red = {'status': 'red', 'timestamp': '2026-01-01T12:01:00'}
+
+        # First yellow
+        result = apply_status_hysteresis(best_yellow, reported, None, 0)
+        assert result['pending_streak'] == 1
+
+        # Then red - streak should reset
+        result = apply_status_hysteresis(best_red, reported, 'yellow', 1)
+        assert result['pending_status'] == 'red'
+        assert result['pending_streak'] == 1  # Reset, not 2
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

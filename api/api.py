@@ -110,8 +110,8 @@ class StatusResource:
 
                 # Use cache if it's fresh enough (based on cached_at for fallback decision)
                 if cache_age < CACHE_MAX_AGE:
-                    # Get best status (most optimistic of last 2)
-                    best = cache_data.get('best_status', cache_data.get('statuses', [{}])[0])
+                    # Get reported status (hysteresis-smoothed) with fallback chain
+                    best = cache_data.get('reported_status') or cache_data.get('best_status', cache_data.get('statuses', [{}])[0])
 
                     # Build response with best status
                     response_data = {
@@ -246,11 +246,12 @@ class HealthResource:
                 cache_age = (datetime.now() - cached_at).total_seconds()
                 is_stale = cache_age > CACHE_MAX_AGE
 
+                reported = cache_data.get('reported_status') or cache_data.get('best_status', {})
                 components['cache'] = {
                     'status': 'degraded' if is_stale else 'healthy',
                     'cache_age_seconds': round(cache_age, 1),
                     'is_stale': is_stale,
-                    'last_status': cache_data.get('best_status', {}).get('status')
+                    'last_status': reported.get('status')
                 }
                 if is_stale:
                     overall_status = 'degraded'

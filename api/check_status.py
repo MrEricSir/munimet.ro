@@ -24,6 +24,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
 from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image, calculate_best_status
+from lib.detection import apply_status_hysteresis
 from lib.notifiers import notify_status_change
 from lib.analytics import log_status_check
 
@@ -162,39 +163,68 @@ def check_status(should_write_cache=False):
             'timestamp': now.isoformat()
         }
 
-        # Read existing cache to get previous statuses and best_status
+        # Read existing cache to get previous statuses and hysteresis state
         statuses = []
-        previous_best_status = None
+        previous_reported_status = None
+        pending_status = None
+        pending_streak = 0
         cache_data = read_cache()
         if cache_data:
             if 'statuses' in cache_data:
                 statuses = cache_data['statuses'][:]
-            if 'best_status' in cache_data:
-                previous_best_status = cache_data['best_status']
+            if 'reported_status' in cache_data:
+                previous_reported_status = cache_data['reported_status']
+            elif 'best_status' in cache_data:
+                # Backward compatibility: use best_status if reported_status not present
+                previous_reported_status = cache_data['best_status']
+            pending_status = cache_data.get('pending_status')
+            pending_streak = cache_data.get('pending_streak', 0)
             cached_at = cache_data.get('cached_at', 'unknown')
             prev_statuses_str = ', '.join(s['status'] for s in statuses) if statuses else '(empty)'
-            print(f"\nCache read: {len(statuses)} previous statuses [{prev_statuses_str}], cached_at={cached_at}")
+            reported_str = previous_reported_status['status'] if previous_reported_status else 'none'
+            print(f"\nCache read: {len(statuses)} previous statuses [{prev_statuses_str}], reported={reported_str}, cached_at={cached_at}")
         else:
             print(f"\nCache read: No existing cache found (starting fresh)")
 
         # Add new status at the front
         statuses.insert(0, new_status)
 
-        # Calculate best status using shared function
-        # This ensures webapp, RSS, and Bluesky all show the same status
+        # Calculate best status using shared function (first smoothing pass)
         best_status = calculate_best_status(statuses, window_size=3)
+
+        # Apply hysteresis (second smoothing pass)
+        # This prevents rapid status flips by requiring consistent agreement
+        hysteresis_result = apply_status_hysteresis(
+            best_status=best_status,
+            reported_status=previous_reported_status,
+            pending_status=pending_status,
+            pending_streak=pending_streak,
+            timestamp=new_status['timestamp']
+        )
+
+        reported_status = hysteresis_result['reported_status']
+        pending_status = hysteresis_result['pending_status']
+        pending_streak = hysteresis_result['pending_streak']
 
         # Log the smoothing calculation
         all_statuses_str = ', '.join(s['status'] for s in statuses[:3])
-        print(f"Smoothing: [{all_statuses_str}] -> best_status={best_status['status']}")
+        best_str = best_status['status']
+        reported_str = reported_status['status']
+        if best_str != reported_str:
+            print(f"Smoothing: [{all_statuses_str}] -> best={best_str}, reported={reported_str} (pending: {pending_status} x{pending_streak})")
+        else:
+            print(f"Smoothing: [{all_statuses_str}] -> {reported_str}")
 
         # Keep only last 3 statuses (~1.5 min window at 30s intervals)
         statuses = statuses[:3]
 
-        # Write cache with status history and tracking fields
+        # Write cache with status history, hysteresis state, and tracking fields
         cache_data = {
             'statuses': statuses,
-            'best_status': best_status,
+            'best_status': best_status,  # Keep for backward compatibility
+            'reported_status': reported_status,  # Hysteresis-smoothed status
+            'pending_status': pending_status,
+            'pending_streak': pending_streak,
             'cached_at': now.isoformat(),
             # Track last successful check separately (for staleness detection)
             'last_successful_check': now.isoformat(),
@@ -207,7 +237,7 @@ def check_status(should_write_cache=False):
             print(f"\nCache updated")
             if len(statuses) > 1:
                 history = ' -> '.join(s['status'] for s in statuses)
-                print(f"  History: [{history}], Best: {best_status['status']}")
+                print(f"  History: [{history}], Reported: {reported_status['status']}")
             # Also cache the image for the dashboard
             if write_cached_image(result['filepath']):
                 print(f"  Image cached")
@@ -221,11 +251,11 @@ def check_status(should_write_cache=False):
             from lib.analytics import check_database_health
             check_id = log_status_check(
                 status=detection['status'],
-                best_status=best_status['status'],
+                best_status=reported_status['status'],  # Use hysteresis-smoothed status
                 detection_data=detection.get('detection', {}),
                 timestamp=new_status['timestamp']
             )
-            print(f"  Analytics logged (check_id={check_id}, status={detection['status']}, best_status={best_status['status']})")
+            print(f"  Analytics logged (check_id={check_id}, raw={detection['status']}, reported={reported_status['status']})")
 
             # Verify database health after logging
             health = check_database_health()
@@ -237,18 +267,18 @@ def check_status(should_write_cache=False):
             import traceback
             traceback.print_exc()
 
-        # Notify all channels if BEST status changed
+        # Notify all channels if REPORTED status changed (after hysteresis)
         # This ensures notifications match what the webapp shows
-        current_best = best_status['status']
-        previous_best = previous_best_status['status'] if previous_best_status else None
-        if previous_best is not None and current_best != previous_best:
-            print(f"\nBest status changed: {previous_best} -> {current_best}")
-            delay_summaries = best_status.get('detection', {}).get('delay_summaries', [])
+        if hysteresis_result['status_changed'] and previous_reported_status is not None:
+            current_reported = reported_status['status']
+            previous_reported = previous_reported_status['status']
+            print(f"\nReported status changed: {previous_reported} -> {current_reported}")
+            delay_summaries = reported_status.get('detection', {}).get('delay_summaries', [])
             notify_results = notify_status_change(
-                status=current_best,
-                previous_status=previous_best,
+                status=current_reported,
+                previous_status=previous_reported,
                 delay_summaries=delay_summaries,
-                timestamp=best_status['timestamp']
+                timestamp=reported_status['timestamp']
             )
             for channel, result in notify_results.items():
                 if result['success']:

@@ -103,7 +103,7 @@ Health check endpoint with component-level status.
 
 ### GET /status
 
-Current Muni Metro status with best-of-three smoothing logic.
+Current Muni Metro status with two-layer smoothing (best-of-3 + hysteresis).
 
 **Response** (200 OK):
 ```json
@@ -146,12 +146,14 @@ Current Muni Metro status with best-of-three smoothing logic.
 - `cached`: Whether response served from cache
 - `cache_age`: Seconds since cache update
 - `status_history`: Last 3 status checks
-- `is_best_of_two`: Whether best-of-three smoothing applied
+- `is_best_of_two`: Whether smoothing was applied
 
-**Caching Behavior**:
-- Maintains last 2 status checks
-- Returns most optimistic status (green > yellow > red)
-- Reduces false positives from transient issues
+**Smoothing Behavior**:
+- **Best-of-3**: Takes most optimistic status from last 3 raw detections
+- **Hysteresis**: Requires 2-3 consecutive checks before changing reported status
+- Transition thresholds: green↔yellow (2 checks), to/from red (3 checks)
+- Extra smoothing during overnight transitions (11pm-1am, 4am-6am)
+- Reduces false positives from transient detection issues
 - Cache valid for 5 minutes
 - Fallback to live prediction if cache stale (when `ENABLE_FALLBACK=true`)
 
