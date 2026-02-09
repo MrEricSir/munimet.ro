@@ -216,15 +216,20 @@ class TestTrainBunchingDetection:
         assert any(b['station'] == 'PO' for b in bunching), f"Should detect bunching approaching PO, got: {bunching}"
 
     def test_excluded_stations_ignored(self):
-        """Track-specific excluded stations should not report bunching.
+        """Internal stations should not report bunching.
 
-        Exclusions by track:
-        - Upper track (westbound): CT (Chinatown) is the northern terminus
-        - Lower track (eastbound): EM (Embarcadero), MO (Montgomery) are turnaround area
+        Only internal stations (not visible to passengers) are excluded:
+        - MN (Main), FP (Folsom), TT (Temporary Terminal)
+
+        CT, EM, MO are now included as they have station-specific zone lengths.
         """
-        from lib.detection import detect_train_bunching
+        from lib.detection import detect_train_bunching, BUNCHING_EXCLUDED_STATIONS
 
-        # CT is at x=1564 - excluded for upper track (terminus)
+        # Verify the exclusion list contains only internal stations
+        assert BUNCHING_EXCLUDED_STATIONS == {'MN', 'FP', 'TT'}, \
+            f"Expected only internal stations excluded, got: {BUNCHING_EXCLUDED_STATIONS}"
+
+        # CT is at x=1564 - now INCLUDED for upper track with zone length 150px
         # Bunch trains right at CT (upper track)
         upper_trains = [
             {'id': 'W2010LL', 'x': 1580, 'track': 'upper'},
@@ -234,20 +239,22 @@ class TestTrainBunchingDetection:
         ]
 
         bunching = detect_train_bunching(upper_trains)
-        assert not any(b['station'] == 'CT' for b in bunching), f"CT should be excluded for upper track, got: {bunching}"
+        # CT should now be detected since it's no longer excluded
+        assert any(b['station'] == 'CT' for b in bunching), f"CT should now be included for upper track, got: {bunching}"
 
-        # EM is at x=1182 - excluded for lower track (turnaround)
-        # Bunch trains right at EM (lower track, approaching from west)
+        # EM is at x=1182 - now INCLUDED for lower track with zone length 75px
+        # Bunch trains approaching EM (lower track - trains approach from LEFT, so cluster to the left of station)
+        # Cluster front (rightmost train) must be within zone length (75px) of station
         lower_trains = [
-            {'id': 'W2010LL', 'x': 1100, 'track': 'lower'},
-            {'id': 'M2089MM', 'x': 1150, 'track': 'lower'},  # 50px gap
-            {'id': 'D2099J', 'x': 1200, 'track': 'lower'},   # 50px gap - at EM
-            {'id': 'F2164SS', 'x': 1250, 'track': 'lower'},  # 50px gap - past EM
+            {'id': 'W2010LL', 'x': 1110, 'track': 'lower'},
+            {'id': 'M2089MM', 'x': 1130, 'track': 'lower'},  # 20px gap
+            {'id': 'D2099J', 'x': 1150, 'track': 'lower'},   # 20px gap
+            {'id': 'F2164SS', 'x': 1170, 'track': 'lower'},  # 20px gap - cluster front at 1170, EM at 1182 (12px away)
         ]
 
         bunching = detect_train_bunching(lower_trains)
-        assert not any(b['station'] == 'EM' for b in bunching), f"EM should be excluded for lower track, got: {bunching}"
-        assert not any(b['station'] == 'MO' for b in bunching), f"MO should be excluded for lower track, got: {bunching}"
+        # EM should now be detected since it's no longer excluded
+        assert any(b['station'] == 'EM' for b in bunching), f"EM should now be included for lower track, got: {bunching}"
 
     def test_three_trains_not_bunching(self):
         """3 trains clustered should NOT trigger bunching (threshold is 4)."""

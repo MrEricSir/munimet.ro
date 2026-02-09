@@ -61,6 +61,25 @@ NORTH_SOUTH_STATIONS = {'CT', 'US', 'YB'}
 # Western stations have different Y positions for platforms
 WESTERN_STATIONS = {'WE', 'FH', 'CA', 'CH'}
 
+# Bunching detection constants (exported for visualization)
+BUNCHING_CLUSTER_DISTANCE = 70  # Max pixels between trains in a cluster
+BUNCHING_THRESHOLD = 4  # Min trains to count as bunching
+BUNCHING_DEFAULT_ZONE_LENGTH = 300  # Default detection zone length in pixels
+BUNCHING_EXCLUDED_STATIONS = {'MN', 'FP', 'TT'}  # Internal stations only
+
+# Station-specific zone lengths (where default doesn't apply)
+BUNCHING_ZONE_LENGTH_UPPER = {
+    'CT': 150,  # Chinatown - limited space at terminus
+    'CH': 75,   # Church - shorter zone
+    'EM': 75,   # Embarcadero - limited space
+}
+BUNCHING_ZONE_LENGTH_LOWER = {
+    'CT': 75,   # Chinatown - don't extend past subway end
+    'VN': 150,  # Van Ness - half length
+    'EM': 75,   # Embarcadero - limited space at terminus
+    'MO': 150,  # Montgomery - near terminus
+}
+
 
 def get_platform_y(code, img_height):
     """Get platform Y positions for a station based on image height."""
@@ -173,21 +192,18 @@ def detect_segment_color(hsv, bounds):
         return 'unknown', 0
 
 
-def detect_train_bunching(trains, threshold=4, cluster_distance=85):
+def detect_train_bunching(trains, threshold=BUNCHING_THRESHOLD, cluster_distance=BUNCHING_CLUSTER_DISTANCE):
     """
     Detect train bunching (multiple trains clustered close together).
 
     Returns:
         list: List of bunching incidents [{station, track, direction, train_count}]
     """
-    # Internal stations to always exclude
-    INTERNAL_STATIONS = {'MN', 'FP', 'TT'}
-
-    # Track-specific exclusions for turnaround points where bunching is normal:
-    # - Upper track (Westbound/Northbound): CT is the northern terminus
-    # - Lower track (Eastbound/Southbound): EM is the eastern terminus, MO is adjacent
-    EXCLUDED_UPPER = INTERNAL_STATIONS | {'CT'}
-    EXCLUDED_LOWER = INTERNAL_STATIONS | {'EM', 'MO'}  # Eastbound trains bunch at Embarcadero turnaround
+    def get_zone_length(station_code, track):
+        if track == 'upper':
+            return BUNCHING_ZONE_LENGTH_UPPER.get(station_code, BUNCHING_DEFAULT_ZONE_LENGTH)
+        else:
+            return BUNCHING_ZONE_LENGTH_LOWER.get(station_code, BUNCHING_DEFAULT_ZONE_LENGTH)
 
     def get_direction(station_code, track):
         if track == 'upper':
@@ -225,14 +241,16 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=85):
         nearest_station = None
         min_distance = float('inf')
         for station_code, station_x in STATION_X_POSITIONS.items():
-            if station_code in EXCLUDED_UPPER:
+            if station_code in BUNCHING_EXCLUDED_STATIONS:
                 continue
             # Find nearest station to cluster front (absolute distance)
             distance = abs(station_x - cluster_left_x)
-            if distance < min_distance:
+            # Check against station-specific zone length
+            max_zone = get_zone_length(station_code, 'upper')
+            if distance < max_zone and distance < min_distance:
                 min_distance = distance
                 nearest_station = station_code
-        if nearest_station and min_distance < 300:
+        if nearest_station:
             bunching_incidents.append({
                 'station': nearest_station,
                 'track': 'upper',
@@ -247,15 +265,17 @@ def detect_train_bunching(trains, threshold=4, cluster_distance=85):
         nearest_station = None
         min_distance = float('inf')
         for station_code, station_x in STATION_X_POSITIONS.items():
-            if station_code in EXCLUDED_LOWER:
+            if station_code in BUNCHING_EXCLUDED_STATIONS:
                 continue
             # Station must be at or to the right of the cluster front
             if station_x >= cluster_right_x:
                 distance = station_x - cluster_right_x
-                if distance < min_distance:
+                # Check against station-specific zone length
+                max_zone = get_zone_length(station_code, 'lower')
+                if distance < max_zone and distance < min_distance:
                     min_distance = distance
                     nearest_station = station_code
-        if nearest_station and min_distance < 300:
+        if nearest_station:
             bunching_incidents.append({
                 'station': nearest_station,
                 'track': 'lower',

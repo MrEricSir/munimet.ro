@@ -45,7 +45,16 @@ from lib.station_detector import (
     HSV_RANGES,
 )
 from lib.train_detector import TrainDetector, TESSERACT_AVAILABLE
-from lib.detection import detect_segment_color, generate_delay_summaries  # Use canonical implementation
+from lib.detection import (
+    detect_segment_color,
+    generate_delay_summaries,
+    detect_train_bunching,
+    calculate_system_status,
+    BUNCHING_EXCLUDED_STATIONS,
+    BUNCHING_DEFAULT_ZONE_LENGTH,
+    BUNCHING_ZONE_LENGTH_UPPER,
+    BUNCHING_ZONE_LENGTH_LOWER,
+)
 
 app = Flask(__name__)
 
@@ -118,180 +127,6 @@ def detect_platform_color(hsv, x, y, size=25, height=25):
         return 'unknown', 0
 
 
-def detect_train_bunching(trains, threshold=4, cluster_distance=70):
-    """
-    Detect train bunching (multiple trains clustered close together approaching a station).
-
-    Train bunching occurs when several trains queue up very close to each other,
-    indicating delays or congestion. This is different from normal busy operation
-    where trains are evenly spaced.
-
-    The algorithm looks for clusters of 4+ trains where each train is within
-    cluster_distance pixels of its neighbor, approaching a non-excluded station.
-
-    Args:
-        trains: List of train dicts with 'x', 'track' keys
-        threshold: Number of trains in a cluster to consider bunching (default 4)
-        cluster_distance: Max pixel distance between adjacent trains in a cluster
-
-    Returns:
-        List of dicts describing bunching incidents:
-        [{'station': 'PO', 'track': 'upper', 'direction': 'Westbound', 'train_count': 5}, ...]
-        Direction is 'Northbound'/'Southbound' for CT/US/YB, 'Westbound'/'Eastbound' for others.
-    """
-    # Internal stations to always exclude
-    INTERNAL_STATIONS = {'MN', 'FP', 'TT'}
-
-    # Track-specific exclusions for turnaround points where bunching is normal:
-    # - Upper track (Westbound/Northbound): CT is the northern terminus
-    # - Lower track (Eastbound/Southbound): EM is the eastern terminus, MO is adjacent
-    EXCLUDED_UPPER = INTERNAL_STATIONS | {'CT'}
-    EXCLUDED_LOWER = INTERNAL_STATIONS | {'EM', 'MO'}
-
-    # Direction terminology: CT, US, YB are Northbound/Southbound; others are Westbound/Eastbound
-    NORTH_SOUTH_STATIONS = {'CT', 'US', 'YB'}
-
-    def get_direction(station_code, track):
-        """Get the direction label for a station and track."""
-        if track == 'upper':
-            return 'Northbound' if station_code in NORTH_SOUTH_STATIONS else 'Westbound'
-        else:
-            return 'Southbound' if station_code in NORTH_SOUTH_STATIONS else 'Eastbound'
-
-    bunching_incidents = []
-
-    # Separate trains by track and sort by x position
-    upper_trains = sorted([t for t in trains if t.get('track') == 'upper'], key=lambda t: t['x'])
-    lower_trains = sorted([t for t in trains if t.get('track') == 'lower'], key=lambda t: t['x'])
-
-    def find_clusters(sorted_trains):
-        """Find clusters of trains that are close together."""
-        if len(sorted_trains) < threshold:
-            return []
-
-        clusters = []
-        current_cluster = [sorted_trains[0]]
-
-        for i in range(1, len(sorted_trains)):
-            # Check if this train is close to the previous one
-            if sorted_trains[i]['x'] - sorted_trains[i-1]['x'] <= cluster_distance:
-                current_cluster.append(sorted_trains[i])
-            else:
-                # End current cluster, start new one
-                if len(current_cluster) >= threshold:
-                    clusters.append(current_cluster)
-                current_cluster = [sorted_trains[i]]
-
-        # Don't forget the last cluster
-        if len(current_cluster) >= threshold:
-            clusters.append(current_cluster)
-
-        return clusters
-
-    # Find clusters on each track
-    upper_clusters = find_clusters(upper_trains)
-    lower_clusters = find_clusters(lower_trains)
-
-    # For upper track (westbound): trains queue to the RIGHT of stations they're entering
-    # Find the nearest station to the front (left edge) of the cluster
-    for cluster in upper_clusters:
-        cluster_left_x = min(t['x'] for t in cluster)
-
-        nearest_station = None
-        min_distance = float('inf')
-        for station_code, station_x in STATION_X_POSITIONS.items():
-            if station_code in EXCLUDED_UPPER:
-                continue
-            # Find nearest station to cluster front (absolute distance)
-            distance = abs(station_x - cluster_left_x)
-            if distance < min_distance:
-                min_distance = distance
-                nearest_station = station_code
-
-        if nearest_station and min_distance < 300:
-            bunching_incidents.append({
-                'station': nearest_station,
-                'track': 'upper',
-                'direction': get_direction(nearest_station, 'upper'),
-                'train_count': len(cluster),
-            })
-
-    # For lower track (eastbound): trains queue to the LEFT of stations they're entering
-    # Find the nearest station at or to the RIGHT of the cluster front
-    for cluster in lower_clusters:
-        cluster_right_x = max(t['x'] for t in cluster)
-
-        nearest_station = None
-        min_distance = float('inf')
-        for station_code, station_x in STATION_X_POSITIONS.items():
-            if station_code in EXCLUDED_LOWER:
-                continue
-            # Station must be at or to the right of the cluster front
-            if station_x >= cluster_right_x:
-                distance = station_x - cluster_right_x
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest_station = station_code
-
-        if nearest_station and min_distance < 300:
-            bunching_incidents.append({
-                'station': nearest_station,
-                'track': 'lower',
-                'direction': get_direction(nearest_station, 'lower'),
-                'train_count': len(cluster),
-            })
-
-    return bunching_incidents
-
-
-def calculate_system_status(trains, delays_platforms, delays_segments, bunching_incidents=None):
-    """
-    Calculate overall system status based on train and delay data.
-
-    Returns: 'red', 'yellow', or 'green'
-
-    Logic:
-    - Red: Fewer than 2 trains have valid route suffixes (subway not operating)
-    - Yellow: 2+ platforms in hold mode OR any track sections disabled OR train bunching
-    - Green: Normal operation
-
-    Precedence: red > yellow > green
-    """
-    import re
-
-    if bunching_incidents is None:
-        bunching_incidents = []
-
-    # Check how many trains have valid route suffixes
-    # Train ID format: [Letter]?[4 digits][1-2 letter suffix]
-    # The suffix (route) is the letters at the end after the number
-    suffix_pattern = re.compile(r'\d{4}([A-Z]{1,2})$')
-
-    trains_with_routes = 0
-
-    for train in trains:
-        train_id = train.get('id', '')
-        if train_id.startswith('UNKNOWN'):
-            continue
-        match = suffix_pattern.search(train_id)
-        if match:
-            trains_with_routes += 1
-
-    # Red: Fewer than 2 trains with route suffixes (subway likely not operating)
-    # This catches overnight/maintenance displays where only 0-1 trains show valid IDs
-    if trains_with_routes < 2:
-        return 'red'
-
-    # Yellow: 2+ platforms in hold OR any track sections disabled OR train bunching
-    platforms_in_hold = len(delays_platforms)
-    tracks_disabled = len(delays_segments)
-    has_bunching = len(bunching_incidents) > 0
-
-    if platforms_in_hold >= 2 or tracks_disabled > 0 or has_bunching:
-        return 'yellow'
-
-    # Green: Normal operation
-    return 'green'
 
 
 def get_detection_data(image_path):
@@ -825,12 +660,41 @@ HTML_TEMPLATE = '''
                     <input type="checkbox" id="showTrains" checked onchange="updateOverlay()">
                     Show train markers
                 </label>
+                <label>
+                    <input type="checkbox" id="showBunchingZones" onchange="updateOverlay(); toggleBunchingLegend()">
+                    Show bunching detection zones
+                </label>
+            </div>
+            <div id="bunchingLegend" style="display: none; margin-top: 10px; padding: 10px; background: #1a1a2e; border-radius: 4px; font-size: 0.8em;">
+                <div style="color: #8af; margin-bottom: 5px;">Bunching Detection Zones</div>
+                <div style="color: #aaa; margin-bottom: 8px;">
+                    Triggers when 4+ trains cluster within 70px of each other inside a station's zone.
+                </div>
+                <div style="margin-bottom: 6px;">
+                    <div style="color: #ccc; margin-bottom: 4px;">Upper track (Westbound):</div>
+                    <span style="display: inline-block; width: 12px; height: 12px; background: rgba(255, 180, 0, 0.3); border: 2px solid rgba(255, 180, 0, 0.7); margin-right: 4px;"></span>
+                    <span style="display: inline-block; width: 12px; height: 12px; background: rgba(255, 100, 0, 0.3); border: 2px solid rgba(255, 100, 0, 0.7); margin-right: 6px;"></span>
+                    <span style="color: #ffb400;">Alternating zones (trains approach →)</span>
+                </div>
+                <div style="margin-bottom: 6px;">
+                    <div style="color: #ccc; margin-bottom: 4px;">Lower track (Eastbound):</div>
+                    <span style="display: inline-block; width: 12px; height: 12px; background: rgba(0, 180, 255, 0.3); border: 2px solid rgba(0, 180, 255, 0.7); margin-right: 4px;"></span>
+                    <span style="display: inline-block; width: 12px; height: 12px; background: rgba(0, 255, 180, 0.3); border: 2px solid rgba(0, 255, 180, 0.7); margin-right: 6px;"></span>
+                    <span style="color: #00b4ff;">Alternating zones (← trains approach)</span>
+                </div>
+                <div style="color: #aaa; margin-top: 6px; font-size: 0.9em;">
+                    <strong>Boundaries:</strong> Solid line = station position, dashed = zone edge (midpoint to next station or 300px max)
+                </div>
+                <div style="color: #888; margin-top: 6px; font-size: 0.9em;">
+                    <strong>Excluded:</strong> Internal stations only (MN, FP, TT)
+                </div>
             </div>
         </div>
     </div>
 
     <script>
         const detection = {{ detection | tojson }};
+        const bunchingConfig = {{ bunching_config | tojson }};
         let imgWidth, imgHeight, scaleX, scaleY;
 
         function setupOverlay() {
@@ -850,10 +714,128 @@ HTML_TEMPLATE = '''
             const showStations = document.getElementById('showStations').checked;
             const showSegments = document.getElementById('showSegments').checked;
             const showTrains = document.getElementById('showTrains').checked;
+            const showBunchingZones = document.getElementById('showBunchingZones').checked;
 
             let svg = `<svg viewBox="0 0 ${imgWidth} ${imgHeight}" preserveAspectRatio="xMidYMid meet">`;
 
-            // Draw segments first (behind stations)
+            // Draw bunching detection zones (behind everything else)
+            if (showBunchingZones) {
+                // Constants from lib/detection.py (passed via bunchingConfig)
+                const EXCLUDED_STATIONS = bunchingConfig.excluded_stations;
+                const DEFAULT_ZONE_LENGTH = bunchingConfig.default_zone_length;
+                const ZONE_LENGTH_UPPER = bunchingConfig.zone_length_upper;
+                const ZONE_LENGTH_LOWER = bunchingConfig.zone_length_lower;
+                const ZONE_HEIGHT = 40;   // Visual height of zone (display only)
+
+                function getZoneLength(code, track) {
+                    if (track === 'upper') {
+                        return ZONE_LENGTH_UPPER[code] || DEFAULT_ZONE_LENGTH;
+                    } else {
+                        return ZONE_LENGTH_LOWER[code] || DEFAULT_ZONE_LENGTH;
+                    }
+                }
+
+                // Get sorted station positions for boundary calculations
+                const stationsByX = [...detection.stations].sort((a, b) => a.x - b.x);
+
+                // Alternating colors for adjacent zones
+                const upperColors = [
+                    {fill: 'rgba(255, 180, 0, 0.2)', stroke: 'rgba(255, 180, 0, 0.7)'},
+                    {fill: 'rgba(255, 100, 0, 0.2)', stroke: 'rgba(255, 100, 0, 0.7)'}
+                ];
+                const lowerColors = [
+                    {fill: 'rgba(0, 180, 255, 0.2)', stroke: 'rgba(0, 180, 255, 0.7)'},
+                    {fill: 'rgba(0, 255, 180, 0.2)', stroke: 'rgba(0, 255, 180, 0.7)'}
+                ];
+
+                // Build list of eligible stations for each track (same exclusions for both)
+                const upperEligible = stationsByX.filter(s => !EXCLUDED_STATIONS.includes(s.code));
+                const lowerEligible = stationsByX.filter(s => !EXCLUDED_STATIONS.includes(s.code));
+
+                // Draw upper track zones (Westbound/Northbound - trains approach from RIGHT)
+                // Zone extends from station to midpoint with next station (or station-specific max)
+                upperEligible.forEach((s, idx) => {
+                    const upperY = detection.track_y_upper;
+                    const colors = upperColors[idx % 2];
+                    const maxZone = getZoneLength(s.code, 'upper');
+
+                    // Find next eligible station to the right for boundary
+                    const nextStation = upperEligible[idx + 1];
+                    let zoneEnd;
+                    if (nextStation) {
+                        // Zone extends to midpoint between this station and next
+                        zoneEnd = Math.min(s.x + maxZone, (s.x + nextStation.x) / 2);
+                    } else {
+                        // Last station - extend to max zone length but not past image
+                        zoneEnd = Math.min(s.x + maxZone, imgWidth - 10);
+                    }
+                    const zoneWidth = Math.max(0, zoneEnd - s.x);
+
+                    if (zoneWidth > 0) {
+                        // Zone rectangle
+                        svg += `<rect
+                            x="${s.x}" y="${upperY - ZONE_HEIGHT/2}"
+                            width="${zoneWidth}" height="${ZONE_HEIGHT}"
+                            fill="${colors.fill}" stroke="${colors.stroke}"
+                            stroke-width="2"
+                            pointer-events="none"/>`;
+
+                        // Station label at left edge (station position)
+                        svg += `<line x1="${s.x}" y1="${upperY - ZONE_HEIGHT/2 - 5}" x2="${s.x}" y2="${upperY + ZONE_HEIGHT/2 + 5}"
+                            stroke="${colors.stroke}" stroke-width="2" pointer-events="none"/>`;
+                        svg += `<text x="${s.x + 3}" y="${upperY - ZONE_HEIGHT/2 - 8}"
+                            text-anchor="start" fill="${colors.stroke}" font-size="11" font-weight="bold">
+                            ${s.code}</text>`;
+
+                        // Zone boundary marker at right edge
+                        svg += `<line x1="${zoneEnd}" y1="${upperY - ZONE_HEIGHT/2}" x2="${zoneEnd}" y2="${upperY + ZONE_HEIGHT/2}"
+                            stroke="${colors.stroke}" stroke-width="1" stroke-dasharray="3,3" pointer-events="none"/>`;
+                    }
+                });
+
+                // Draw lower track zones (Eastbound/Southbound - trains approach from LEFT)
+                // Zone extends from station leftward to midpoint with previous station (or station-specific max)
+                lowerEligible.forEach((s, idx) => {
+                    const lowerY = detection.track_y_lower;
+                    const colors = lowerColors[idx % 2];
+                    const maxZone = getZoneLength(s.code, 'lower');
+
+                    // Find previous eligible station to the left for boundary
+                    const prevStation = lowerEligible[idx - 1];
+                    let zoneStart;
+                    if (prevStation) {
+                        // Zone extends to midpoint between this station and previous
+                        zoneStart = Math.max(s.x - maxZone, (s.x + prevStation.x) / 2);
+                    } else {
+                        // First station - extend to max zone length but not past image edge
+                        zoneStart = Math.max(s.x - maxZone, 10);
+                    }
+                    const zoneWidth = Math.max(0, s.x - zoneStart);
+
+                    if (zoneWidth > 0) {
+                        // Zone rectangle
+                        svg += `<rect
+                            x="${zoneStart}" y="${lowerY - ZONE_HEIGHT/2}"
+                            width="${zoneWidth}" height="${ZONE_HEIGHT}"
+                            fill="${colors.fill}" stroke="${colors.stroke}"
+                            stroke-width="2"
+                            pointer-events="none"/>`;
+
+                        // Station label at right edge (station position)
+                        svg += `<line x1="${s.x}" y1="${lowerY - ZONE_HEIGHT/2 - 5}" x2="${s.x}" y2="${lowerY + ZONE_HEIGHT/2 + 5}"
+                            stroke="${colors.stroke}" stroke-width="2" pointer-events="none"/>`;
+                        svg += `<text x="${s.x - 3}" y="${lowerY + ZONE_HEIGHT/2 + 15}"
+                            text-anchor="end" fill="${colors.stroke}" font-size="11" font-weight="bold">
+                            ${s.code}</text>`;
+
+                        // Zone boundary marker at left edge
+                        svg += `<line x1="${zoneStart}" y1="${lowerY - ZONE_HEIGHT/2}" x2="${zoneStart}" y2="${lowerY + ZONE_HEIGHT/2}"
+                            stroke="${colors.stroke}" stroke-width="1" stroke-dasharray="3,3" pointer-events="none"/>`;
+                    }
+                });
+            }
+
+            // Draw segments (behind stations)
             if (showSegments) {
                 detection.segments.forEach(seg => {
                     let fillColor, strokeColor;
@@ -1012,6 +994,12 @@ HTML_TEMPLATE = '''
             window.location.href = '/?index=' + ({{ index }} + delta);
         }
 
+        function toggleBunchingLegend() {
+            const legend = document.getElementById('bunchingLegend');
+            const checkbox = document.getElementById('showBunchingZones');
+            legend.style.display = checkbox.checked ? 'block' : 'none';
+        }
+
         // Handle window resize
         window.addEventListener('resize', setupOverlay);
     </script>
@@ -1039,6 +1027,14 @@ def index():
     detection = get_detection_data(image_path)
     image_data = image_to_base64(image_path)
 
+    # Pass bunching constants to template for visualization
+    bunching_config = {
+        'excluded_stations': list(BUNCHING_EXCLUDED_STATIONS),
+        'default_zone_length': BUNCHING_DEFAULT_ZONE_LENGTH,
+        'zone_length_upper': BUNCHING_ZONE_LENGTH_UPPER,
+        'zone_length_lower': BUNCHING_ZONE_LENGTH_LOWER,
+    }
+
     return render_template_string(
         HTML_TEMPLATE,
         filename=image_path.name,
@@ -1047,6 +1043,7 @@ def index():
         image_data=image_data,
         detection=detection,
         single_image_mode=single_image_mode,
+        bunching_config=bunching_config,
     )
 
 
