@@ -700,10 +700,10 @@ def apply_status_hysteresis(best_status, reported_status, pending_status, pendin
             'status_changed': True
         }
 
-    # If best matches reported, no change needed - reset pending state
+    # If best matches reported, use fresh data but mark as no status change
     if current_best == current_reported:
         return {
-            'reported_status': reported_status,
+            'reported_status': best_status,  # Use fresh data (timestamp, trains, etc.)
             'pending_status': None,
             'pending_streak': 0,
             'status_changed': False
