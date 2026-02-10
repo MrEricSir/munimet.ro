@@ -26,18 +26,21 @@ FROM python:3.13-slim-bookworm
 
 # Install runtime dependencies
 # - curl: health checks and downloading tessdata
-# - tesseract-ocr: OCR engine for train ID detection
+# - tesseract-ocr + tesseract-ocr-eng: OCR engine for train ID detection
 # - libgl1: OpenCV headless runtime
-# Note: We download tessdata_best instead of using tesseract-ocr-eng package
-# because the "best" model has higher accuracy than the default "fast" model
+# Note: We install tesseract-ocr-eng first to create the tessdata directory,
+# then overwrite with tessdata_best for higher accuracy
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
     tesseract-ocr \
+    tesseract-ocr-eng \
     libgl1 \
     && rm -rf /var/lib/apt/lists/* \
     && curl -L -o /usr/share/tesseract-ocr/5/tessdata/eng.traineddata \
-    https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
+    https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata \
+    && echo "Installed tessdata_best eng.traineddata:" \
+    && ls -la /usr/share/tesseract-ocr/5/tessdata/eng.traineddata
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
