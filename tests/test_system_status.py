@@ -532,6 +532,47 @@ class TestStatusHysteresis:
         assert result['status_changed'] == False
         assert result['pending_streak'] == 0
 
+    def test_same_status_uses_fresh_data(self):
+        """When status unchanged, reported_status should use fresh data from best_status.
+
+        Regression test for bug where reported_status returned stale timestamps,
+        train counts, and image paths when status value remained unchanged.
+        """
+        from lib.detection import apply_status_hysteresis
+
+        # Old reported status with stale data
+        reported = {
+            'status': 'green',
+            'timestamp': '2026-01-01T11:00:00',  # Old timestamp
+            'description': 'Normal operation - 5 trains detected',
+            'image_path': '/old/image.jpg',
+            'detection': {
+                'trains': [{'id': 'OLD1'}, {'id': 'OLD2'}]
+            }
+        }
+
+        # Fresh best status with new data
+        best = {
+            'status': 'green',  # Same status value
+            'timestamp': '2026-01-01T12:00:00',  # Fresh timestamp
+            'description': 'Normal operation - 15 trains detected',
+            'image_path': '/new/image.jpg',
+            'detection': {
+                'trains': [{'id': 'NEW1'}, {'id': 'NEW2'}, {'id': 'NEW3'}]
+            }
+        }
+
+        result = apply_status_hysteresis(best, reported, None, 0)
+
+        # status_changed should be False (no status transition)
+        assert result['status_changed'] == False
+
+        # But reported_status should have FRESH data, not stale data
+        assert result['reported_status']['timestamp'] == '2026-01-01T12:00:00'
+        assert result['reported_status']['image_path'] == '/new/image.jpg'
+        assert result['reported_status']['description'] == 'Normal operation - 15 trains detected'
+        assert len(result['reported_status']['detection']['trains']) == 3
+
     def test_green_to_yellow_needs_three(self):
         """Green to yellow transition needs 3 consecutive checks."""
         from lib.detection import apply_status_hysteresis
