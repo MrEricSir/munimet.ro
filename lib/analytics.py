@@ -226,7 +226,7 @@ def get_db_connection():
 
 
 # Current schema version - increment when adding migrations
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def get_schema_version(cursor):
@@ -290,10 +290,11 @@ def run_migrations(cursor, current_version):
 
         cursor.execute('INSERT OR REPLACE INTO schema_version (version) VALUES (1)')
 
-    # Add future migrations here:
-    # if current_version < 2:
-    #     cursor.execute('ALTER TABLE ...')
-    #     cursor.execute('UPDATE schema_version SET version = 2')
+    if current_version < 2:
+        # Version 2: Add interval_seconds column for time-based analytics
+        # This stores the check interval so we can calculate durations instead of counts
+        cursor.execute('ALTER TABLE status_checks ADD COLUMN interval_seconds INTEGER DEFAULT 30')
+        cursor.execute('UPDATE schema_version SET version = 2')
 
 
 def init_db():
@@ -310,7 +311,7 @@ def init_db():
     conn.close()
 
 
-def log_status_check(status, best_status, detection_data, timestamp):
+def log_status_check(status, best_status, detection_data, timestamp, interval_seconds=None):
     """
     Log a status check and its delay incidents.
 
@@ -319,25 +320,32 @@ def log_status_check(status, best_status, detection_data, timestamp):
         best_status: Smoothed best status
         detection_data: Dict with trains, delays_platforms, delays_segments, delays_bunching
         timestamp: ISO8601 timestamp string
+        interval_seconds: Check interval in seconds (default: from config)
 
     Returns:
         int: The check_id of the inserted record
     """
+    from lib.config import DEFAULT_CHECK_INTERVAL
+
     # Ensure database exists
     init_db()
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # Use default interval if not specified
+    if interval_seconds is None:
+        interval_seconds = DEFAULT_CHECK_INTERVAL
+
     # Count trains
     trains = detection_data.get('trains', [])
     train_count = len(trains)
 
-    # Insert status check
+    # Insert status check with interval
     cursor.execute('''
-        INSERT INTO status_checks (timestamp, status, best_status, train_count)
-        VALUES (?, ?, ?, ?)
-    ''', (timestamp, status, best_status, train_count))
+        INSERT INTO status_checks (timestamp, status, best_status, train_count, interval_seconds)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (timestamp, status, best_status, train_count, interval_seconds))
 
     check_id = cursor.lastrowid
 
@@ -425,54 +433,66 @@ def get_delay_frequency(days=7):
     """
     Get delay frequency statistics for the specified time period.
 
+    Returns time-based metrics (in minutes) instead of check counts,
+    making the data independent of check interval.
+
     Args:
         days: Number of days to look back
 
     Returns:
         dict: {
-            'total_checks': int,
-            'delayed_checks': int,
-            'delay_rate': float,
-            'by_status': {'green': int, 'yellow': int, 'red': int}
+            'total_minutes': float,      # Total monitored time
+            'delayed_minutes': float,    # Time spent in delayed state
+            'delay_rate': float,         # Percentage of time delayed
+            'by_status': {'green': float, 'yellow': float, 'red': float}  # Minutes per status
         }
     """
+    from lib.config import DEFAULT_CHECK_INTERVAL
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cutoff = (datetime.now() - timedelta(days=days)).isoformat()
 
-    # Total checks
+    # Get total time by summing intervals (in seconds, then convert to minutes)
+    # Use COALESCE to handle records from before the interval column was added
     cursor.execute('''
-        SELECT COUNT(*) as total FROM status_checks WHERE timestamp >= ?
-    ''', (cutoff,))
-    total_checks = cursor.fetchone()['total']
+        SELECT SUM(COALESCE(interval_seconds, ?)) as total_seconds
+        FROM status_checks WHERE timestamp >= ?
+    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
+    row = cursor.fetchone()
+    total_seconds = row['total_seconds'] or 0
+    total_minutes = total_seconds / 60.0
 
-    # Status distribution uses best_status (what users actually see on dashboard)
+    # Time per status (what users actually see on dashboard)
     cursor.execute('''
-        SELECT best_status, COUNT(*) as count
+        SELECT best_status, SUM(COALESCE(interval_seconds, ?)) as seconds
         FROM status_checks
         WHERE timestamp >= ?
         GROUP BY best_status
-    ''', (cutoff,))
+    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
 
-    by_status = {'green': 0, 'yellow': 0, 'red': 0}
+    by_status = {'green': 0.0, 'yellow': 0.0, 'red': 0.0}
     for row in cursor.fetchall():
-        by_status[row['best_status']] = row['count']
+        by_status[row['best_status']] = round(row['seconds'] / 60.0, 1)
 
-    # Delay tracking uses raw status (actual delay detections, regardless of smoothing)
+    # Delay time uses raw status (actual delay detections, regardless of smoothing)
     cursor.execute('''
-        SELECT COUNT(*) as count FROM status_checks
+        SELECT SUM(COALESCE(interval_seconds, ?)) as seconds
+        FROM status_checks
         WHERE timestamp >= ? AND status = 'yellow'
-    ''', (cutoff,))
-    delayed_checks = cursor.fetchone()['count']
+    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
+    row = cursor.fetchone()
+    delayed_seconds = row['seconds'] or 0
+    delayed_minutes = delayed_seconds / 60.0
 
     conn.close()
 
-    delay_rate = delayed_checks / total_checks if total_checks > 0 else 0.0
+    delay_rate = delayed_minutes / total_minutes if total_minutes > 0 else 0.0
 
     return {
-        'total_checks': total_checks,
-        'delayed_checks': delayed_checks,
+        'total_minutes': round(total_minutes, 1),
+        'delayed_minutes': round(delayed_minutes, 1),
         'delay_rate': round(delay_rate, 4),
         'by_status': by_status
     }
@@ -480,50 +500,64 @@ def get_delay_frequency(days=7):
 
 def get_delays_by_station(days=7):
     """
-    Get delay counts grouped by station.
+    Get delay time grouped by station.
+
+    Returns time-based metrics (in minutes) instead of incident counts.
 
     Args:
         days: Number of days to look back
 
     Returns:
         list: [
-            {'station': 'PO', 'name': 'Powell', 'count': 45, 'types': {...}},
+            {'station': 'PO', 'name': 'Powell', 'minutes': 45.5, 'types': {...}},
             ...
         ]
-        Sorted by count descending.
+        Sorted by minutes descending.
     """
+    from lib.config import DEFAULT_CHECK_INTERVAL
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cutoff = (datetime.now() - timedelta(days=days)).isoformat()
 
-    # Get counts by station and type
+    # Join with status_checks to get interval for each incident
+    # Each incident represents one check interval of delay at that station
     cursor.execute('''
-        SELECT station, station_name, type, COUNT(*) as count
-        FROM delay_incidents
-        WHERE timestamp >= ? AND station IS NOT NULL
-        GROUP BY station, type
-        ORDER BY station
-    ''', (cutoff,))
+        SELECT
+            di.station,
+            di.station_name,
+            di.type,
+            SUM(COALESCE(sc.interval_seconds, ?)) as seconds
+        FROM delay_incidents di
+        JOIN status_checks sc ON di.check_id = sc.id
+        WHERE di.timestamp >= ? AND di.station IS NOT NULL
+        GROUP BY di.station, di.type
+        ORDER BY di.station
+    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
 
     # Aggregate by station
     stations = {}
     for row in cursor.fetchall():
         station = row['station']
+        minutes = row['seconds'] / 60.0
         if station not in stations:
             stations[station] = {
                 'station': station,
                 'name': row['station_name'],
-                'count': 0,
+                'minutes': 0.0,
                 'types': {}
             }
-        stations[station]['count'] += row['count']
-        stations[station]['types'][row['type']] = row['count']
+        stations[station]['minutes'] += minutes
+        stations[station]['types'][row['type']] = round(minutes, 1)
 
     conn.close()
 
-    # Sort by count descending
-    result = sorted(stations.values(), key=lambda x: x['count'], reverse=True)
+    # Round totals and sort by minutes descending
+    for s in stations.values():
+        s['minutes'] = round(s['minutes'], 1)
+
+    result = sorted(stations.values(), key=lambda x: x['minutes'], reverse=True)
     return result
 
 
@@ -531,37 +565,49 @@ def get_delays_by_time(days=7):
     """
     Get delay patterns by hour of day and day of week.
 
+    Returns time-based metrics (in minutes) instead of incident counts.
+
     Args:
         days: Number of days to look back
 
     Returns:
         dict: {
-            'by_hour': {0: count, 1: count, ..., 23: count},
-            'by_day': {0: count, ..., 6: count}  # 0=Monday
+            'by_hour': {0: minutes, 1: minutes, ..., 23: minutes},
+            'by_day': {0: minutes, ..., 6: minutes}  # 0=Monday
         }
     """
+    from lib.config import DEFAULT_CHECK_INTERVAL
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cutoff = (datetime.now() - timedelta(days=days)).isoformat()
 
-    # Get all delay incidents in the period
+    # Join with status_checks to get interval for each incident
     cursor.execute('''
-        SELECT timestamp FROM delay_incidents WHERE timestamp >= ?
-    ''', (cutoff,))
+        SELECT di.timestamp, COALESCE(sc.interval_seconds, ?) as interval_seconds
+        FROM delay_incidents di
+        JOIN status_checks sc ON di.check_id = sc.id
+        WHERE di.timestamp >= ?
+    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
 
-    by_hour = {h: 0 for h in range(24)}
-    by_day = {d: 0 for d in range(7)}
+    by_hour = {h: 0.0 for h in range(24)}
+    by_day = {d: 0.0 for d in range(7)}
 
     for row in cursor.fetchall():
         try:
             dt = datetime.fromisoformat(row['timestamp'])
-            by_hour[dt.hour] += 1
-            by_day[dt.weekday()] += 1
+            minutes = row['interval_seconds'] / 60.0
+            by_hour[dt.hour] += minutes
+            by_day[dt.weekday()] += minutes
         except ValueError:
             continue
 
     conn.close()
+
+    # Round all values
+    by_hour = {h: round(m, 1) for h, m in by_hour.items()}
+    by_day = {d: round(m, 1) for d, m in by_day.items()}
 
     return {
         'by_hour': by_hour,
@@ -686,15 +732,15 @@ def _empty_report(days):
     return {
         'period_days': days,
         'frequency': {
-            'total_checks': 0,
-            'delayed_checks': 0,
+            'total_minutes': 0.0,
+            'delayed_minutes': 0.0,
             'delay_rate': 0.0,
-            'by_status': {'green': 0, 'yellow': 0, 'red': 0}
+            'by_status': {'green': 0.0, 'yellow': 0.0, 'red': 0.0}
         },
         'by_station': [],
         'by_time': {
-            'by_hour': {h: 0 for h in range(24)},
-            'by_day': {d: 0 for d in range(7)}
+            'by_hour': {h: 0.0 for h in range(24)},
+            'by_day': {d: 0.0 for d in range(7)}
         },
         'generated_at': None,
         'cached_at': None,
@@ -722,8 +768,8 @@ def generate_report(days):
 
         # Log status breakdown for debugging
         by_status = frequency.get('by_status', {})
-        print(f"Generating {days}-day report: total={frequency['total_checks']}, "
-              f"green={by_status.get('green', 0)}, yellow={by_status.get('yellow', 0)}, red={by_status.get('red', 0)}")
+        print(f"Generating {days}-day report: total={frequency['total_minutes']:.1f}min, "
+              f"green={by_status.get('green', 0):.1f}min, yellow={by_status.get('yellow', 0):.1f}min, red={by_status.get('red', 0):.1f}min")
 
         report = {
             'period_days': days,
@@ -772,8 +818,8 @@ def generate_all_reports():
         if report:
             results[days] = {
                 'success': True,
-                'total_checks': report['frequency']['total_checks'],
-                'delayed_checks': report['frequency']['delayed_checks']
+                'total_minutes': report['frequency']['total_minutes'],
+                'delayed_minutes': report['frequency']['delayed_minutes']
             }
         else:
             results[days] = {'success': False}

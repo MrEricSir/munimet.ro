@@ -227,6 +227,20 @@
             charts = {};
         }
 
+        function formatDuration(minutes) {
+            if (minutes < 60) {
+                return `${Math.round(minutes)} min`;
+            } else if (minutes < 1440) {
+                const hours = Math.floor(minutes / 60);
+                const mins = Math.round(minutes % 60);
+                return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+            } else {
+                const days = Math.floor(minutes / 1440);
+                const hours = Math.round((minutes % 1440) / 60);
+                return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+            }
+        }
+
         function renderAnalytics(data) {
             if (!data) {
                 document.getElementById('content').innerHTML = `
@@ -238,7 +252,7 @@
             }
 
             const freq = data.frequency;
-            const hasData = freq.total_checks > 0;
+            const hasData = freq.total_minutes > 0;
 
             if (!hasData) {
                 document.getElementById('content').innerHTML = `
@@ -250,10 +264,11 @@
                 return;
             }
 
-            // Calculate percentages
-            const greenPct = ((freq.by_status.green / freq.total_checks) * 100).toFixed(1);
-            const yellowPct = ((freq.by_status.yellow / freq.total_checks) * 100).toFixed(1);
-            const redPct = ((freq.by_status.red / freq.total_checks) * 100).toFixed(1);
+            // Calculate percentages from time
+            const totalMinutes = freq.total_minutes;
+            const greenPct = ((freq.by_status.green / totalMinutes) * 100).toFixed(1);
+            const yellowPct = ((freq.by_status.yellow / totalMinutes) * 100).toFixed(1);
+            const redPct = ((freq.by_status.red / totalMinutes) * 100).toFixed(1);
 
             const cacheInfo = data.from_cache
                 ? `Data cached ${Math.round(data.cache_age / 60)} min ago`
@@ -262,8 +277,8 @@
             document.getElementById('content').innerHTML = `
                 <div class="stats-summary">
                     <div class="stat-card">
-                        <div class="stat-value">${freq.total_checks.toLocaleString()}</div>
-                        <div class="stat-label">Total Checks</div>
+                        <div class="stat-value">${formatDuration(totalMinutes)}</div>
+                        <div class="stat-label">Monitored</div>
                     </div>
                     <div class="stat-card green">
                         <div class="stat-value">${greenPct}%</div>
@@ -312,7 +327,7 @@
             // Destroy existing charts
             destroyCharts();
 
-            // Status distribution pie chart
+            // Status distribution pie chart (time in minutes)
             charts.status = new Chart(document.getElementById('statusChart'), {
                 type: 'doughnut',
                 data: {
@@ -329,22 +344,30 @@
                     plugins: {
                         legend: {
                             position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const minutes = context.raw;
+                                    return `${context.label}: ${formatDuration(minutes)}`;
+                                }
+                            }
                         }
                     }
                 }
             });
 
-            // Delays by station bar chart (vertical)
+            // Delays by station bar chart (vertical, time in minutes)
             const stations = (data.by_station || []).slice(0, 10); // Top 10
             const stationLabels = stations.map(s => s.name || s.station);
-            const stationCounts = stations.map(s => s.count);
+            const stationMinutes = stations.map(s => s.minutes);
             charts.station = new Chart(document.getElementById('stationChart'), {
                 type: 'bar',
                 data: {
                     labels: stationLabels,
                     datasets: [{
-                        label: 'Delay Incidents',
-                        data: stationCounts,
+                        label: 'Minutes of Delay',
+                        data: stationMinutes,
                         backgroundColor: '#ecc94b'
                     }]
                 },
@@ -352,7 +375,14 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatDuration(context.raw);
+                                }
+                            }
+                        }
                     },
                     scales: {
                         x: {
@@ -361,19 +391,25 @@
                                 autoSkip: false
                             }
                         },
-                        y: { beginAtZero: true }
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Minutes'
+                            }
+                        }
                     }
                 }
             });
 
-            // Delays by hour bar chart
+            // Delays by hour bar chart (time in minutes)
             const hourData = data.by_time.by_hour;
             charts.hour = new Chart(document.getElementById('hourChart'), {
                 type: 'bar',
                 data: {
                     labels: Object.keys(hourData).map(h => `${h}:00`),
                     datasets: [{
-                        label: 'Delay Incidents',
+                        label: 'Minutes of Delay',
                         data: Object.values(hourData),
                         backgroundColor: '#4299e1'
                     }]
@@ -382,22 +418,35 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatDuration(context.raw);
+                                }
+                            }
+                        }
                     },
                     scales: {
-                        y: { beginAtZero: true }
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Minutes'
+                            }
+                        }
                     }
                 }
             });
 
-            // Delays by day of week bar chart
+            // Delays by day of week bar chart (time in minutes)
             const dayData = data.by_time.by_day;
             charts.day = new Chart(document.getElementById('dayChart'), {
                 type: 'bar',
                 data: {
                     labels: dayNames,
                     datasets: [{
-                        label: 'Delay Incidents',
+                        label: 'Minutes of Delay',
                         data: Object.values(dayData),
                         backgroundColor: '#9f7aea'
                     }]
@@ -406,10 +455,23 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatDuration(context.raw);
+                                }
+                            }
+                        }
                     },
                     scales: {
-                        y: { beginAtZero: true }
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Minutes'
+                            }
+                        }
                     }
                 }
             });

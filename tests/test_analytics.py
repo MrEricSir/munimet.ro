@@ -356,7 +356,7 @@ class TestDelayFrequencyQuery:
                 with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
                     analytics.init_db()
 
-                    # Log various status checks
+                    # Log various status checks with 30-second intervals
                     base_time = datetime.now() - timedelta(days=3)
 
                     for i in range(100):
@@ -380,24 +380,28 @@ class TestDelayFrequencyQuery:
                             status=status,
                             best_status=status,
                             detection_data=detection_data,
-                            timestamp=ts
+                            timestamp=ts,
+                            interval_seconds=30  # 30 second intervals
                         )
 
                     yield db_path
 
     def test_get_delay_frequency_basic(self, populated_db):
-        """Test basic delay frequency calculation."""
+        """Test basic delay frequency calculation (time-based)."""
         with patch.object(analytics, 'LOCAL_DB_PATH', populated_db):
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delay_frequency(days=7)
 
-        assert result['total_checks'] == 100
-        assert result['delayed_checks'] == 20  # 20% yellow
+        # 100 checks * 30 seconds = 3000 seconds = 50 minutes total
+        assert result['total_minutes'] == 50.0
+        # 20 yellow checks * 30 seconds = 600 seconds = 10 minutes delayed
+        assert result['delayed_minutes'] == 10.0
         assert 0.19 <= result['delay_rate'] <= 0.21  # ~20%
 
-        assert result['by_status']['green'] == 70
-        assert result['by_status']['yellow'] == 20
-        assert result['by_status']['red'] == 10
+        # Time per status in minutes
+        assert result['by_status']['green'] == 35.0  # 70 * 30s = 35 min
+        assert result['by_status']['yellow'] == 10.0  # 20 * 30s = 10 min
+        assert result['by_status']['red'] == 5.0  # 10 * 30s = 5 min
 
     def test_get_delay_frequency_empty_db(self, tmp_path):
         """Test delay frequency with empty database."""
@@ -408,10 +412,10 @@ class TestDelayFrequencyQuery:
                 analytics.init_db()
                 result = analytics.get_delay_frequency(days=7)
 
-        assert result['total_checks'] == 0
-        assert result['delayed_checks'] == 0
+        assert result['total_minutes'] == 0.0
+        assert result['delayed_minutes'] == 0.0
         assert result['delay_rate'] == 0.0
-        assert result['by_status'] == {'green': 0, 'yellow': 0, 'red': 0}
+        assert result['by_status'] == {'green': 0.0, 'yellow': 0.0, 'red': 0.0}
 
 
 class TestDelaysByStationQuery:
@@ -427,13 +431,13 @@ class TestDelaysByStationQuery:
                 with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
                     analytics.init_db()
 
-                    # Log delays at different stations
+                    # Log delays at different stations with 60-second intervals
                     base_time = datetime.now() - timedelta(days=1)
 
                     station_delays = [
-                        ('PO', 'Powell', 5),      # 5 delays at Powell
-                        ('MO', 'Montgomery', 3),  # 3 delays at Montgomery
-                        ('EM', 'Embarcadero', 2), # 2 delays at Embarcadero
+                        ('PO', 'Powell', 5),      # 5 checks at Powell = 5 min
+                        ('MO', 'Montgomery', 3),  # 3 checks at Montgomery = 3 min
+                        ('EM', 'Embarcadero', 2), # 2 checks at Embarcadero = 2 min
                     ]
 
                     for station, name, count in station_delays:
@@ -449,32 +453,33 @@ class TestDelaysByStationQuery:
                                 status='yellow',
                                 best_status='yellow',
                                 detection_data=detection_data,
-                                timestamp=ts
+                                timestamp=ts,
+                                interval_seconds=60  # 60 second intervals for easy math
                             )
 
                     yield db_path
 
     def test_get_delays_by_station_ordering(self, station_db):
-        """Test that stations are ordered by delay count descending."""
+        """Test that stations are ordered by delay time descending."""
         with patch.object(analytics, 'LOCAL_DB_PATH', station_db):
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delays_by_station(days=7)
 
         assert len(result) == 3
 
-        # Should be ordered by count descending
+        # Should be ordered by minutes descending
         assert result[0]['station'] == 'PO'
-        assert result[0]['count'] == 5
+        assert result[0]['minutes'] == 5.0  # 5 checks * 60s = 5 min
         assert result[0]['name'] == 'Powell'
 
         assert result[1]['station'] == 'MO'
-        assert result[1]['count'] == 3
+        assert result[1]['minutes'] == 3.0  # 3 checks * 60s = 3 min
 
         assert result[2]['station'] == 'EM'
-        assert result[2]['count'] == 2
+        assert result[2]['minutes'] == 2.0  # 2 checks * 60s = 2 min
 
     def test_get_delays_by_station_types(self, station_db):
-        """Test that delay types are tracked per station."""
+        """Test that delay types are tracked per station (in minutes)."""
         with patch.object(analytics, 'LOCAL_DB_PATH', station_db):
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delays_by_station(days=7)
@@ -482,7 +487,7 @@ class TestDelaysByStationQuery:
         # All delays in this fixture are platform_hold type
         for station in result:
             assert 'platform_hold' in station['types']
-            assert station['types']['platform_hold'] == station['count']
+            assert station['types']['platform_hold'] == station['minutes']
 
 
 class TestDelaysByTimeQuery:
@@ -498,7 +503,7 @@ class TestDelaysByTimeQuery:
                 with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
                     analytics.init_db()
 
-                    # Log delays at specific hours
+                    # Log delays at specific hours with 60-second intervals
                     # Monday at 8am, 9am, 5pm, 6pm (rush hours)
                     # Find a recent Monday
                     today = datetime.now()
@@ -518,43 +523,44 @@ class TestDelaysByTimeQuery:
                             status='yellow',
                             best_status='yellow',
                             detection_data=detection_data,
-                            timestamp=ts
+                            timestamp=ts,
+                            interval_seconds=60  # 60 second intervals = 1 minute each
                         )
 
                     yield db_path
 
     def test_get_delays_by_time_hours(self, time_db):
-        """Test delay distribution by hour of day."""
+        """Test delay distribution by hour of day (in minutes)."""
         with patch.object(analytics, 'LOCAL_DB_PATH', time_db):
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delays_by_time(days=7)
 
         by_hour = result['by_hour']
 
-        # Rush hours should have delays
-        assert by_hour[8] >= 1
-        assert by_hour[9] >= 1
-        assert by_hour[17] >= 1
-        assert by_hour[18] >= 1
+        # Rush hours should have 1 minute of delay each
+        assert by_hour[8] == 1.0
+        assert by_hour[9] == 1.0
+        assert by_hour[17] == 1.0
+        assert by_hour[18] == 1.0
 
         # Non-rush hours should be empty
-        assert by_hour[3] == 0
-        assert by_hour[14] == 0
+        assert by_hour[3] == 0.0
+        assert by_hour[14] == 0.0
 
     def test_get_delays_by_time_days(self, time_db):
-        """Test delay distribution by day of week."""
+        """Test delay distribution by day of week (in minutes)."""
         with patch.object(analytics, 'LOCAL_DB_PATH', time_db):
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delays_by_time(days=7)
 
         by_day = result['by_day']
 
-        # All delays are on Monday (weekday 0)
-        assert by_day[0] == 4
+        # All delays are on Monday (weekday 0) = 4 minutes total
+        assert by_day[0] == 4.0
 
         # Other days should be empty
         for day in range(1, 7):
-            assert by_day[day] == 0
+            assert by_day[day] == 0.0
 
 
 class TestRecentIncidentsQuery:
@@ -655,7 +661,7 @@ class TestReportGeneration:
         assert report['period_days'] == 7
 
         assert 'frequency' in report
-        assert 'total_checks' in report['frequency']
+        assert 'total_minutes' in report['frequency']
         assert 'delay_rate' in report['frequency']
 
         assert 'by_station' in report
@@ -673,7 +679,7 @@ class TestReportGeneration:
         report = analytics._empty_report(7)
 
         assert report['period_days'] == 7
-        assert report['frequency']['total_checks'] == 0
+        assert report['frequency']['total_minutes'] == 0.0
         assert report['frequency']['delay_rate'] == 0.0
         assert report['by_station'] == []
         assert report['no_data'] is True

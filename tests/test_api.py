@@ -361,10 +361,10 @@ class TestAnalyticsEndpoint:
         mock_report = {
             'period_days': 7,
             'frequency': {
-                'total_checks': 1000,
-                'delayed_checks': 50,
+                'total_minutes': 5000.0,
+                'delayed_minutes': 250.0,
                 'delay_rate': 0.05,
-                'by_status': {'green': 900, 'yellow': 50, 'red': 50}
+                'by_status': {'green': 4500.0, 'yellow': 250.0, 'red': 250.0}
             },
             'by_station': [],
             'by_time': {'by_hour': {}, 'by_day': {}},
@@ -384,7 +384,7 @@ class TestAnalyticsEndpoint:
         """Test that days query parameter is passed correctly."""
         mock_report = {
             'period_days': 30,
-            'frequency': {'total_checks': 0, 'delayed_checks': 0, 'delay_rate': 0, 'by_status': {}},
+            'frequency': {'total_minutes': 0.0, 'delayed_minutes': 0.0, 'delay_rate': 0.0, 'by_status': {}},
             'by_station': [],
             'by_time': {'by_hour': {}, 'by_day': {}},
             'generated_at': datetime.now().isoformat(),
@@ -400,7 +400,7 @@ class TestAnalyticsEndpoint:
         """Test that invalid days parameter defaults to 7."""
         mock_report = {
             'period_days': 7,
-            'frequency': {'total_checks': 0, 'delayed_checks': 0, 'delay_rate': 0, 'by_status': {}},
+            'frequency': {'total_minutes': 0.0, 'delayed_minutes': 0.0, 'delay_rate': 0.0, 'by_status': {}},
             'by_station': [],
             'by_time': {'by_hour': {}, 'by_day': {}},
             'generated_at': datetime.now().isoformat(),
@@ -415,7 +415,7 @@ class TestAnalyticsEndpoint:
         """Test that analytics has cache headers."""
         mock_report = {
             'period_days': 7,
-            'frequency': {'total_checks': 0, 'delayed_checks': 0, 'delay_rate': 0, 'by_status': {}},
+            'frequency': {'total_minutes': 0.0, 'delayed_minutes': 0.0, 'delay_rate': 0.0, 'by_status': {}},
             'by_station': [],
             'by_time': {'by_hour': {}, 'by_day': {}},
             'generated_at': datetime.now().isoformat(),
