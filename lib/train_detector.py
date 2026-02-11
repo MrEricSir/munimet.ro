@@ -230,6 +230,7 @@ class TrainDetector:
                     else:
                         sub_cols = [(x1, x2)]
 
+                    found_from_splits = []
                     for sub_x1, sub_x2 in sub_cols:
                         train_ids = self._ocr_column(band, dark_mask, sub_x1, sub_x2, band_h, track)
                         if train_ids:
@@ -240,13 +241,33 @@ class TrainDetector:
                                     center_x = (sub_x1 + sub_x2) // 2
                                 else:
                                     center_x = sub_x1 + int(sub_width * (i + 0.5) / n_trains)
-                                track_trains.append({
+                                found_from_splits.append({
                                     'id': train_id,
                                     'x': center_x,
                                     'y': y_min + band_h // 2,
                                     'track': track,
                                     'confidence': 'high'
                                 })
+
+                    # Fallback: if splits produced nothing, try the original unsplit range
+                    if not found_from_splits and len(sub_cols) > 1:
+                        train_ids = self._ocr_column(band, dark_mask, x1, x2, band_h, track)
+                        if train_ids:
+                            n_trains = len(train_ids)
+                            for i, train_id in enumerate(train_ids):
+                                if n_trains == 1:
+                                    center_x = (x1 + x2) // 2
+                                else:
+                                    center_x = x1 + int(width * (i + 0.5) / n_trains)
+                                found_from_splits.append({
+                                    'id': train_id,
+                                    'x': center_x,
+                                    'y': y_min + band_h // 2,
+                                    'track': track,
+                                    'confidence': 'high'
+                                })
+
+                    track_trains.extend(found_from_splits)
 
             # Step 2: Find clusters (potential pileups) - 3+ trains within 200px
             clusters = self._find_train_clusters(track_trains, min_trains=3, max_spread=300)
@@ -464,6 +485,7 @@ class TrainDetector:
                     else:
                         sub_cols = [(x1, x2)]
 
+                    found_from_splits = []
                     for sub_x1, sub_x2 in sub_cols:
                         train_ids = self._ocr_column(band, dark_mask, sub_x1, sub_x2, band_h, track)
                         if train_ids:
@@ -476,13 +498,33 @@ class TrainDetector:
                                 else:
                                     # Space trains evenly across the column
                                     center_x = sub_x1 + int(sub_width * (i + 0.5) / n_trains)
-                                trains.append({
+                                found_from_splits.append({
                                     'id': train_id,
                                     'x': center_x,
                                     'y': y_min + band_h // 2,
                                     'track': track,
                                     'confidence': 'high'
                                 })
+
+                    # Fallback: if splits produced nothing, try the original unsplit range
+                    if not found_from_splits and len(sub_cols) > 1:
+                        train_ids = self._ocr_column(band, dark_mask, x1, x2, band_h, track)
+                        if train_ids:
+                            n_trains = len(train_ids)
+                            for i, train_id in enumerate(train_ids):
+                                if n_trains == 1:
+                                    center_x = (x1 + x2) // 2
+                                else:
+                                    center_x = x1 + int(width * (i + 0.5) / n_trains)
+                                found_from_splits.append({
+                                    'id': train_id,
+                                    'x': center_x,
+                                    'y': y_min + band_h // 2,
+                                    'track': track,
+                                    'confidence': 'high'
+                                })
+
+                    trains.extend(found_from_splits)
 
             # Also detect colored text labels (yellow, green)
             colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
