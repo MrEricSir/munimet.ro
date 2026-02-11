@@ -63,11 +63,11 @@ fi
 
 # Select test files based on quick mode
 if [ "$QUICK_MODE" = true ]; then
-    TEST_FILES="tests/test_system_status.py"
+    TEST_FILES="tests/test_system_status.py tests/test_analytics.py tests/test_notifiers.py tests/test_api.py"
     echo "(Quick mode: skipping train detection tests)"
     echo ""
 else
-    TEST_FILES="tests/test_system_status.py tests/test_train_detection.py"
+    TEST_FILES="tests/test_system_status.py tests/test_train_detection.py tests/test_analytics.py tests/test_notifiers.py tests/test_api.py"
 fi
 
 docker run --rm \

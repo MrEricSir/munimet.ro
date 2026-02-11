@@ -26,18 +26,17 @@ PROJECT_ROOT = API_DIR.parent
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
 from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, read_cached_image
+from lib.config import (
+    CACHE_MAX_AGE,
+    STALENESS_FRESH,
+    STALENESS_AGING,
+    STALENESS_STALE,
+    STALENESS_EXPIRED,
+)
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
-CACHE_MAX_AGE = 300  # seconds (5 minutes) - fallback if cache is stale
 ENABLE_FALLBACK = os.getenv('ENABLE_FALLBACK', 'true').lower() == 'true'
-
-# Staleness thresholds (in seconds)
-# These define how we communicate data freshness to users
-STALENESS_FRESH = 300       # 0-5 min: fresh data
-STALENESS_AGING = 900       # 5-15 min: aging data (subtle warning)
-STALENESS_STALE = 1800      # 15-30 min: stale data (prominent warning)
-STALENESS_EXPIRED = 1800    # >30 min: expired data (error state)
 
 
 def _get_staleness_level(seconds):

@@ -25,6 +25,22 @@ from lib.station_detector import (
 )
 from lib.station_constants import STATION_ORDER, INTERNAL_STATIONS
 
+# Import bunching and status config from centralized config
+from lib.config import (
+    BUNCHING_CLUSTER_DISTANCE,
+    BUNCHING_THRESHOLD,
+    BUNCHING_DEFAULT_ZONE_LENGTH,
+    BUNCHING_EXCLUDED_STATIONS,
+    BUNCHING_ZONE_LENGTH_UPPER,
+    BUNCHING_ZONE_LENGTH_LOWER,
+    MIN_TRAINS_OPERATING,
+    HYSTERESIS_THRESHOLDS,
+    PLATFORM_Y_WESTERN_UPPER_PCT,
+    PLATFORM_Y_WESTERN_LOWER_PCT,
+    PLATFORM_Y_EASTERN_UPPER_PCT,
+    PLATFORM_Y_EASTERN_LOWER_PCT,
+)
+
 # Try to import train detector (requires tesseract)
 try:
     from lib.train_detector import TrainDetector, TESSERACT_AVAILABLE
@@ -61,34 +77,15 @@ NORTH_SOUTH_STATIONS = {'CT', 'US', 'YB'}
 # Western stations have different Y positions for platforms
 WESTERN_STATIONS = {'WE', 'FH', 'CA', 'CH'}
 
-# Bunching detection constants (exported for visualization)
-BUNCHING_CLUSTER_DISTANCE = 70  # Max pixels between trains in a cluster
-BUNCHING_THRESHOLD = 4  # Min trains to count as bunching
-BUNCHING_DEFAULT_ZONE_LENGTH = 300  # Default detection zone length in pixels
-BUNCHING_EXCLUDED_STATIONS = {'MN', 'FP', 'TT'}  # Internal stations only
-
-# Station-specific zone lengths (where default doesn't apply)
-BUNCHING_ZONE_LENGTH_UPPER = {
-    'CT': 150,  # Chinatown - limited space at terminus
-    'CH': 75,   # Church - shorter zone
-    'EM': 75,   # Embarcadero - limited space
-}
-BUNCHING_ZONE_LENGTH_LOWER = {
-    'CT': 75,   # Chinatown - don't extend past subway end
-    'VN': 150,  # Van Ness - half length
-    'EM': 75,   # Embarcadero - limited space at terminus
-    'MO': 150,  # Montgomery - near terminus
-}
-
 
 def get_platform_y(code, img_height):
     """Get platform Y positions for a station based on image height."""
     if code in WESTERN_STATIONS:
-        upper_y = int(img_height * 0.475)   # ~380 in 800px
-        lower_y = int(img_height * 0.625)   # ~500 in 800px
+        upper_y = int(img_height * PLATFORM_Y_WESTERN_UPPER_PCT)
+        lower_y = int(img_height * PLATFORM_Y_WESTERN_LOWER_PCT)
     else:
-        upper_y = int(img_height * 0.53)    # ~424 in 800px
-        lower_y = int(img_height * 0.5625)  # ~450 in 800px
+        upper_y = int(img_height * PLATFORM_Y_EASTERN_UPPER_PCT)
+        lower_y = int(img_height * PLATFORM_Y_EASTERN_LOWER_PCT)
     return upper_y, lower_y
 
 # Initialize detectors (lazy loaded)
@@ -310,8 +307,8 @@ def calculate_system_status(trains, delays_platforms, delays_segments, bunching_
         if match:
             trains_with_routes += 1
 
-    # Red: Fewer than 2 trains with route suffixes (not operating)
-    if trains_with_routes < 2:
+    # Red: Fewer than MIN_TRAINS_OPERATING trains with route suffixes (not operating)
+    if trains_with_routes < MIN_TRAINS_OPERATING:
         return 'red'
 
     # Yellow: 2+ platforms in hold OR any track sections disabled OR bunching
@@ -677,20 +674,6 @@ def apply_status_hysteresis(best_status, reported_status, pending_status, pendin
         except (ValueError, TypeError):
             pass
 
-    # Transition thresholds: how many consecutive checks needed to change
-    # Format: (from_status, to_status) -> base_threshold
-    THRESHOLDS = {
-        # Worsening transitions (slower - avoid false alarms)
-        ('green', 'yellow'): 3,   # Need sustained issues before warning
-        ('green', 'red'): 3,      # Unusual jump, needs confirmation
-        ('yellow', 'red'): 3,     # Hesitant to declare "not operating"
-
-        # Improving transitions (faster - report good news quickly)
-        ('red', 'yellow'): 2,     # Quick to report partial recovery
-        ('red', 'green'): 2,      # Quick to report full recovery
-        ('yellow', 'green'): 2,   # Quick to report recovery
-    }
-
     # If no current reported status, just use best_status immediately
     if current_reported is None:
         return {
@@ -719,7 +702,7 @@ def apply_status_hysteresis(best_status, reported_status, pending_status, pendin
 
     # Get threshold for this transition
     transition_key = (current_reported, current_best)
-    base_threshold = THRESHOLDS.get(transition_key, 2)
+    base_threshold = HYSTERESIS_THRESHOLDS.get(transition_key, 2)
 
     # Add extra smoothing during overnight transition windows
     threshold = base_threshold + (1 if in_transition_window else 0)

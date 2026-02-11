@@ -20,15 +20,32 @@ from typing import Dict, List, Optional, Tuple, Any
 # Import shared constants
 from lib.station_constants import get_section_directions, INTERNAL_STATIONS
 
-# Hardcoded station X-positions (pixels) for 1860x800 reference image
-# These are the known positions and don't change between images
-# Measured from the reference image "Mimic1_A7SE582P normal.jpg"
-# X position is center of the station platform (blue rectangle)
-REFERENCE_IMAGE_WIDTH = 1860
-REFERENCE_IMAGE_HEIGHT = 800
+# Import from centralized config and re-export for backward compatibility
+from lib.config import (
+    # Image dimensions
+    REFERENCE_WIDTH as REFERENCE_IMAGE_WIDTH,
+    REFERENCE_HEIGHT as REFERENCE_IMAGE_HEIGHT,
+    # Y-position percentages
+    UPPER_LABEL_Y_PCT,
+    LOWER_LABEL_Y_PCT,
+    UPPER_TRACK_Y_PCT,
+    LOWER_TRACK_Y_PCT,
+    TRACK_HEIGHT_PCT,
+    Y_BANDS,
+    # HSV color ranges
+    HSV_RANGES,
+    # Detection thresholds
+    PLATFORM_MIN_AREA,
+    PLATFORM_MAX_AREA,
+    PLATFORM_MIN_WIDTH,
+    PLATFORM_MAX_WIDTH,
+    PLATFORM_MIN_HEIGHT,
+    PLATFORM_MAX_HEIGHT,
+    STATION_CLUSTER_THRESHOLD,
+)
 
 # Station X-positions (center of each station) at reference resolution
-# Detected from track area analysis, skipping maintenance platforms
+# These are specific to the Muni display layout and don't belong in generic config
 STATION_X_POSITIONS = {
     'WE': 36,
     'FH': 178,
@@ -47,82 +64,8 @@ STATION_X_POSITIONS = {
     'YB': 1814,
 }
 
-# Station label Y-positions (percentage of image height)
-# These are where the green dots should be drawn (at the station labels)
-# Upper markers appear above the upper track, lower markers below the lower track
-UPPER_LABEL_Y_PCT = 0.375   # ~300px - above upper track (track at ~408px)
-LOWER_LABEL_Y_PCT = 0.68    # ~544px - below lower track (track at ~470px)
-
-# Track Y-positions (percentage of image height)
-# The cyan track lines where trains run
-# Upper track: Westbound/Northbound direction (Y=404-412 at 800px)
-# Lower track: Eastbound/Southbound direction (Y=468-472 at 800px)
-UPPER_TRACK_Y_PCT = 0.51    # ~408px at 800px height - upper cyan line
-LOWER_TRACK_Y_PCT = 0.5875  # ~470px at 800px height - lower cyan line
-TRACK_HEIGHT_PCT = 0.04     # Height of track region (~32px) - larger for easier clicking
-
 # Segments that should NOT be created (tracks not connected)
 DISCONNECTED_SEGMENTS = {('EM', 'CT')}
-
-# HSV color ranges for detection
-# Note: OpenCV uses H: 0-180, S: 0-255, V: 0-255
-HSV_RANGES = {
-    # Station platform icons
-    # Normal state: dark blue rectangles
-    'platform_blue': {
-        'lower': np.array([100, 100, 60]),
-        'upper': np.array([130, 255, 255]),
-    },
-    # Train holding: yellow/orange rectangles with X
-    # Bright yellow platforms have high saturation (S=70-255)
-    # Lower saturation values match text labels and should be excluded
-    'platform_yellow': {
-        'lower': np.array([18, 70, 150]),
-        'upper': np.array([45, 255, 255]),
-    },
-
-    # Track lines
-    # Normal operation: cyan/turquoise
-    'track_cyan': {
-        'lower': np.array([80, 100, 180]),
-        'upper': np.array([100, 255, 255]),
-    },
-    # Outage: red (wraps around 0)
-    'track_red_low': {
-        'lower': np.array([0, 80, 120]),
-        'upper': np.array([12, 255, 255]),
-    },
-    'track_red_high': {
-        'lower': np.array([168, 80, 120]),
-        'upper': np.array([180, 255, 255]),
-    },
-}
-
-# Y-band percentages for different visual elements
-Y_BANDS = {
-    # Station platform Y-bands (percentage of image height)
-    'upper_platform': (0.35, 0.50),  # Upper track platforms
-    'lower_platform': (0.58, 0.72),  # Lower track platforms
-
-    # Track line Y-bands (narrower, centered on actual track lines)
-    'upper_track': (0.50, 0.54),
-    'lower_track': (0.56, 0.60),
-
-    # Station label Y-bands (for text detection fallback)
-    'upper_labels': (0.42, 0.50),
-    'lower_labels': (0.60, 0.68),
-}
-
-# Platform detection parameters
-PLATFORM_MIN_AREA = 100  # Minimum contour area for platform detection
-PLATFORM_MAX_AREA = 2000  # Maximum contour area
-PLATFORM_MIN_WIDTH = 15
-PLATFORM_MAX_WIDTH = 50
-PLATFORM_MIN_HEIGHT = 6
-PLATFORM_MAX_HEIGHT = 25
-
-# Clustering parameters for grouping platforms into stations
-STATION_CLUSTER_THRESHOLD = 40  # Max X-distance to consider same station
 
 
 class ColorDetector:

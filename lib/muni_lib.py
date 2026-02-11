@@ -32,12 +32,17 @@ if not os.getenv('CLOUD_RUN'):
 LIB_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = LIB_DIR.parent
 
-# Configuration constants
-WEBPAGE_URL = "http://sfmunicentral.com/Enterprise/MetroLO.htm"
-IMAGE_ID = "snapshotImage"
-WAIT_TIME = 10
-EXPECTED_WIDTH = 1860
-EXPECTED_HEIGHT = 800
+# Import configuration from centralized config
+from lib.config import (
+    WEBPAGE_URL,
+    WEBPAGE_IMAGE_ID as IMAGE_ID,
+    WEBPAGE_WAIT_TIME as WAIT_TIME,
+    EXPECTED_WIDTH,
+    EXPECTED_HEIGHT,
+    IMAGE_URL,
+    HTTP_TIMEOUT,
+    HTTP_MAX_RETRIES,
+)
 
 
 def get_cache_path():
@@ -292,9 +297,6 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
     import random
     import time
 
-    # Direct image URL (extracted from obfuscated JavaScript)
-    IMAGE_URL = "http://sfmunicentral.com/sfmunicentral_Snapshot_Objects/Mimic1_A7SE582P.jpg"
-
     # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
 
@@ -313,7 +315,7 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
         try:
             # Download with cache-busting parameter (mimics JavaScript behavior)
             params = {'nocache': random.randint(0, 999)}
-            response = requests.get(IMAGE_URL, params=params, timeout=10)
+            response = requests.get(IMAGE_URL, params=params, timeout=HTTP_TIMEOUT)
 
             # Check for server errors (5xx) - these are retryable
             if response.status_code >= 500:
