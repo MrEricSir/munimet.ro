@@ -99,7 +99,7 @@ def main():
         all_success = True
         for days, result in results.items():
             if result['success']:
-                print(f"  {days}-day report: {result['total_checks']} checks, {result['delayed_checks']} delays")
+                print(f"  {days}-day report: {result['total_minutes']:.1f} min monitored, {result['delayed_minutes']:.1f} min delays")
             else:
                 print(f"  {days}-day report: FAILED")
                 all_success = False

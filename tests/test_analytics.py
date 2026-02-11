@@ -735,3 +735,173 @@ class TestDatabaseHealthCheck:
         assert result['exists'] is True
         assert result['has_data'] is True
         assert result['check_count'] == 5
+
+
+class TestIntervalHandling:
+    """Tests for check interval handling in time-based analytics."""
+
+    @pytest.fixture
+    def test_db(self, tmp_path):
+        """Create a fresh test database."""
+        db_path = tmp_path / "test_analytics.db"
+
+        with patch.object(analytics, 'LOCAL_DB_PATH', db_path):
+            with patch.object(analytics, '_is_cloud_run', return_value=False):
+                with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
+                    analytics.init_db()
+                    yield db_path
+
+    def test_interval_stored_correctly(self, test_db):
+        """Test that interval_seconds is stored in the database."""
+        with patch.object(analytics, 'LOCAL_DB_PATH', test_db):
+            with patch.object(analytics, '_is_cloud_run', return_value=False):
+                with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
+                    check_id = analytics.log_status_check(
+                        status='green',
+                        best_status='green',
+                        detection_data={'trains': [], 'delays_platforms': [], 'delays_segments': [], 'delays_bunching': []},
+                        timestamp=datetime.now().isoformat(),
+                        interval_seconds=180
+                    )
+
+        # Verify interval was stored
+        conn = sqlite3.connect(str(test_db))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT interval_seconds FROM status_checks WHERE id = ?', (check_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row['interval_seconds'] == 180
+
+    def test_default_interval_used_when_not_specified(self, test_db):
+        """Test that DEFAULT_CHECK_INTERVAL is used when interval not specified."""
+        from lib.config import DEFAULT_CHECK_INTERVAL
+
+        with patch.object(analytics, 'LOCAL_DB_PATH', test_db):
+            with patch.object(analytics, '_is_cloud_run', return_value=False):
+                with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
+                    check_id = analytics.log_status_check(
+                        status='green',
+                        best_status='green',
+                        detection_data={'trains': [], 'delays_platforms': [], 'delays_segments': [], 'delays_bunching': []},
+                        timestamp=datetime.now().isoformat()
+                        # No interval_seconds specified
+                    )
+
+        conn = sqlite3.connect(str(test_db))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT interval_seconds FROM status_checks WHERE id = ?', (check_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        assert row['interval_seconds'] == DEFAULT_CHECK_INTERVAL
+
+    def test_different_intervals_calculate_correctly(self, test_db):
+        """Test that checks with different intervals calculate correct total time."""
+        with patch.object(analytics, 'LOCAL_DB_PATH', test_db):
+            with patch.object(analytics, '_is_cloud_run', return_value=False):
+                with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
+                    base_time = datetime.now() - timedelta(hours=1)
+
+                    # 2 checks at 30 seconds = 1 minute
+                    for i in range(2):
+                        ts = (base_time + timedelta(minutes=i)).isoformat()
+                        analytics.log_status_check(
+                            status='green',
+                            best_status='green',
+                            detection_data={'trains': [], 'delays_platforms': [], 'delays_segments': [], 'delays_bunching': []},
+                            timestamp=ts,
+                            interval_seconds=30
+                        )
+
+                    # 2 checks at 180 seconds = 6 minutes
+                    for i in range(2):
+                        ts = (base_time + timedelta(minutes=10 + i)).isoformat()
+                        analytics.log_status_check(
+                            status='green',
+                            best_status='green',
+                            detection_data={'trains': [], 'delays_platforms': [], 'delays_segments': [], 'delays_bunching': []},
+                            timestamp=ts,
+                            interval_seconds=180
+                        )
+
+                    result = analytics.get_delay_frequency(days=1)
+
+        # Total should be 1 + 6 = 7 minutes
+        assert result['total_minutes'] == 7.0
+
+    def test_mixed_intervals_in_station_delays(self, test_db):
+        """Test that station delay minutes are calculated correctly with mixed intervals."""
+        with patch.object(analytics, 'LOCAL_DB_PATH', test_db):
+            with patch.object(analytics, '_is_cloud_run', return_value=False):
+                with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
+                    base_time = datetime.now() - timedelta(hours=1)
+
+                    # 1 delay at Powell with 30-second interval = 0.5 minutes
+                    analytics.log_status_check(
+                        status='yellow',
+                        best_status='yellow',
+                        detection_data={
+                            'trains': [{'id': 'W1'}],
+                            'delays_platforms': [{'station': 'PO', 'name': 'Powell', 'direction': 'WB'}],
+                            'delays_segments': [],
+                            'delays_bunching': []
+                        },
+                        timestamp=base_time.isoformat(),
+                        interval_seconds=30
+                    )
+
+                    # 1 delay at Powell with 180-second interval = 3 minutes
+                    analytics.log_status_check(
+                        status='yellow',
+                        best_status='yellow',
+                        detection_data={
+                            'trains': [{'id': 'W1'}],
+                            'delays_platforms': [{'station': 'PO', 'name': 'Powell', 'direction': 'WB'}],
+                            'delays_segments': [],
+                            'delays_bunching': []
+                        },
+                        timestamp=(base_time + timedelta(minutes=5)).isoformat(),
+                        interval_seconds=180
+                    )
+
+                    result = analytics.get_delays_by_station(days=1)
+
+        # Powell should have 0.5 + 3 = 3.5 minutes of delay
+        powell = next(s for s in result if s['station'] == 'PO')
+        assert powell['minutes'] == 3.5
+
+    def test_null_interval_uses_default_in_queries(self, test_db):
+        """Test that NULL interval_seconds values use default in calculations."""
+        from lib.config import DEFAULT_CHECK_INTERVAL
+
+        # Manually insert a record with NULL interval (simulating pre-migration data)
+        conn = sqlite3.connect(str(test_db))
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO status_checks (timestamp, status, best_status, train_count, interval_seconds)
+            VALUES (?, 'green', 'green', 0, NULL)
+        ''', (datetime.now().isoformat(),))
+        conn.commit()
+        conn.close()
+
+        with patch.object(analytics, 'LOCAL_DB_PATH', test_db):
+            with patch.object(analytics, '_is_cloud_run', return_value=False):
+                result = analytics.get_delay_frequency(days=1)
+
+        # Should use DEFAULT_CHECK_INTERVAL (30 seconds = 0.5 minutes)
+        expected_minutes = DEFAULT_CHECK_INTERVAL / 60.0
+        assert result['total_minutes'] == expected_minutes
+
+    def test_cloud_run_interval_constant_exists(self):
+        """Test that CLOUD_CHECK_INTERVAL is defined in config."""
+        from lib.config import CLOUD_CHECK_INTERVAL, DEFAULT_CHECK_INTERVAL
+
+        # Cloud Run interval should be 180 seconds (3 minutes)
+        assert CLOUD_CHECK_INTERVAL == 180
+        # Local interval should be 30 seconds
+        assert DEFAULT_CHECK_INTERVAL == 30
+        # Cloud Run interval should be longer than local
+        assert CLOUD_CHECK_INTERVAL > DEFAULT_CHECK_INTERVAL

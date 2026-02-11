@@ -30,7 +30,15 @@ from lib.analytics import log_status_check
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
-DEFAULT_INTERVAL = 30  # seconds
+DEFAULT_INTERVAL = 30  # seconds (local development)
+
+def _get_check_interval():
+    """Get the appropriate check interval based on environment."""
+    import os
+    if os.getenv('CLOUD_RUN'):
+        from lib.config import CLOUD_CHECK_INTERVAL
+        return CLOUD_CHECK_INTERVAL  # 180 seconds for Cloud Run
+    return DEFAULT_INTERVAL  # 30 seconds for local
 
 
 def _record_check_failure(error_message, failure_type):
@@ -67,11 +75,12 @@ def _record_check_failure(error_message, failure_type):
         print(f"  Failed to record failure in cache")
 
 
-def check_status(should_write_cache=False):
+def check_status(should_write_cache=False, interval_seconds=None):
     """Download image and detect status.
 
     Args:
         should_write_cache: If True, write result to cache file
+        interval_seconds: Check interval in seconds for analytics logging
 
     Returns:
         bool: True if successful, False otherwise
@@ -253,7 +262,8 @@ def check_status(should_write_cache=False):
                 status=detection['status'],
                 best_status=reported_status['status'],  # Use hysteresis-smoothed status
                 detection_data=detection.get('detection', {}),
-                timestamp=new_status['timestamp']
+                timestamp=new_status['timestamp'],
+                interval_seconds=interval_seconds
             )
             print(f"  Analytics logged (check_id={check_id}, raw={detection['status']}, reported={reported_status['status']})")
 
@@ -298,7 +308,7 @@ def generate_analytics_reports():
         results = generate_all_reports()
         for days, result in results.items():
             if result['success']:
-                print(f"  {days}-day report: {result['total_checks']} checks, {result['delayed_checks']} delays")
+                print(f"  {days}-day report: {result['total_minutes']:.1f} min monitored, {result['delayed_minutes']:.1f} min delays")
             else:
                 print(f"  {days}-day report: FAILED")
         return True
@@ -321,14 +331,14 @@ def main():
         generate_analytics_reports()
         return
 
-    # Parse interval
-    interval = DEFAULT_INTERVAL
+    # Parse interval (use environment-appropriate default)
+    interval = _get_check_interval()
     if '--interval' in sys.argv:
         try:
             idx = sys.argv.index('--interval')
             interval = int(sys.argv[idx + 1])
         except (IndexError, ValueError):
-            print("Warning: Invalid --interval value, using default (30 seconds)")
+            print(f"Warning: Invalid --interval value, using default ({interval} seconds)")
 
     print("=" * 60)
     print("Muni Status Checker (OpenCV Detection)")
@@ -344,7 +354,7 @@ def main():
 
     if not continuous:
         # Single check
-        check_status(should_write_cache=should_write_cache)
+        check_status(should_write_cache=should_write_cache, interval_seconds=interval)
     else:
         # Continuous checking
         count = 0
@@ -359,7 +369,7 @@ def main():
                 print(f"Check #{count}")
                 print(f"{'='*60}")
 
-                if check_status(should_write_cache=should_write_cache):
+                if check_status(should_write_cache=should_write_cache, interval_seconds=interval):
                     successful += 1
                 else:
                     failed += 1

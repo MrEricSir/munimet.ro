@@ -260,7 +260,8 @@ STALENESS_STALE = 1800       # 15-30 min: stale
 STALENESS_EXPIRED = 3600     # >60 min: expired (was incorrectly 1800)
 
 # Status check interval
-DEFAULT_CHECK_INTERVAL = 30  # seconds
+DEFAULT_CHECK_INTERVAL = 30  # seconds (local development)
+CLOUD_CHECK_INTERVAL = 180   # seconds (Cloud Run - matches Cloud Scheduler)
 
 # Analytics report cache
 REPORT_CACHE_MAX_AGE = 1800  # 30 minutes
