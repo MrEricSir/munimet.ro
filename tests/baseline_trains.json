@@ -135,7 +135,7 @@
       ["W2022LL", 1194],
       ["M2049KK", 1198, {"note": "Second of two KK trains at Embarcadero lower - now detected with validated splitting"}],
       ["W2024MM", 1435],
-      ["B2047TT", 1825, {"optional": true, "note": "TT train past Yerba Buena - label cut off at image edge, undetectable"}],
+      ["B2047TT", 1729, {"ocr_override": "B2047T", "note": "TT train at USR (Yerba Buena siding) - OCR drops final T"}],
       ["B2167TT", 1567]
     ],
     "muni_snapshot_20260211_094211.jpg": [
@@ -146,7 +146,7 @@
       ["W2050MM", 461],
       ["M2130KK", 486],
       ["D2129NN", 585],
-      ["M2172LL", 681, {"optional": true, "note": "LL train between Church and Van Ness lower - not currently detected"}],
+      ["M2172LL", 700, {"ocr_override": "M2112LL", "note": "LL train between Church and Van Ness lower - OCR misreads 7 as 1"}],
       ["D2021J", 804, {"ocr_override": "1711L", "note": "OCR severely misreads - J train on upper track"}],
       ["F2014NN", 807, {"ocr_override": "F2044NN", "note": "OCR misreads 1 as 4"}],
       ["M2034MM", 974, {"ocr_override": "M2054MM", "note": "OCR misreads 3 as 5"}],
@@ -160,17 +160,16 @@
     "muni_snapshot_20260211_094811.jpg": [
       ["W2050MM", 59],
       ["M2188MM", 188],
-      ["M2074LL", 350, {"optional": true, "note": "LL train at Castro lower - not currently detected"}],
+      ["M2074LL", 350, {"optional": true, "note": "LL train at Castro lower - BLUE text, requires color-aware detection"}],
       ["F2083NN", 664, {"ocr_override": "F2089NN", "note": "OCR misreads 8 as 9"}],
       ["W2110LL", 671],
-      ["W2073KK", 800, {"optional": true, "note": "KK train between Powell and Civic Center upper - not currently detected"}],
       ["M2155KK", 807, {"ocr_override": "M2155KK", "note": "Lower track at Powell"}],
       ["M2048J", 910, {"ocr_override": "M2048J", "note": "J train at Powell lower"}],
       ["M2130KK", 973],
       ["D2032NN", 1045],
       ["M2172LL", 1054, {"ocr_override": "M2112LL", "note": "OCR misreads 7 as 1"}],
-      ["F2003NN", 1100, {"optional": true, "note": "NN train at Embarcadero lower - not currently detected"}],
-      ["M2034MM", 1130, {"optional": true, "note": "MM train at Embarcadero lower - not currently detected"}],
+      ["F2044NN", 1179, {"note": "NN train at Embarcadero lower - baseline corrected from F2003NN"}],
+      ["M2054MM", 1198, {"note": "MM train at Embarcadero lower - baseline corrected from M2034MM"}],
       ["W2051MM", 1173],
       ["W2086LL", 1204],
       ["B2135TT", 1567]
