@@ -226,7 +226,9 @@ class TrainDetector:
                         continue
 
                     if width > 20:
-                        sub_cols = self._split_wide_group(x1, x2, col_sums)
+                        sub_cols = self._split_wide_group(
+                            x1, x2, col_sums, band, dark_mask, band_h, track
+                        )
                     else:
                         sub_cols = [(x1, x2)]
 
@@ -481,7 +483,9 @@ class TrainDetector:
                     # Groups 20+ pixels wide may contain multiple trains
                     if width > 20:
                         # Try to find the best split point (largest internal gap)
-                        sub_cols = self._split_wide_group(x1, x2, col_sums)
+                        sub_cols = self._split_wide_group(
+                            x1, x2, col_sums, band, dark_mask, band_h, track
+                        )
                     else:
                         sub_cols = [(x1, x2)]
 
@@ -532,11 +536,14 @@ class TrainDetector:
 
         return self._deduplicate(trains)
 
-    def _split_wide_group(self, x1, x2, col_sums):
+    def _split_wide_group(self, x1, x2, col_sums, band=None, dark_mask=None, band_h=None, track=None):
         """Split a wide column group at the best split point.
 
         For groups that may contain multiple trains, find the column with
         the minimum sum (gap between trains) and split there.
+
+        If band/dark_mask/band_h/track are provided, validates the split by
+        comparing OCR results from split vs unsplit interpretations.
         """
         width = x2 - x1
         if width <= 20:
@@ -559,13 +566,44 @@ class TrainDetector:
                 min_sum = col_sums[x]
                 split_x = x
 
-        # Only split if we found a true gap (zero column sum)
-        # Gaps within train IDs typically have sum > 0
-        # Gaps between adjacent trains typically have sum = 0
+        # Always split if we found a true gap (zero column sum)
         if split_x and min_sum == 0:
             return [(x1, split_x), (split_x + 1, x2)]
+
+        # For non-zero gaps in wide groups, validate split with OCR
+        # Only attempt if we have the necessary context for OCR validation
+        if split_x and width > 30 and band is not None and dark_mask is not None:
+            max_sum = max(col_sums[mid_start:mid_end])
+            # Only consider splitting if there's a significant valley
+            # (min is less than 20% of max - indicates potential gap between trains)
+            if min_sum < max_sum * 0.20:
+                split_result = self._validate_split_with_ocr(
+                    x1, x2, split_x, band, dark_mask, band_h, track
+                )
+                if split_result is not None:
+                    return split_result
+
+        return [(x1, x2)]
+
+    def _validate_split_with_ocr(self, x1, x2, split_x, band, dark_mask, band_h, track):
+        """Validate a potential split by comparing OCR results.
+
+        Returns split boundaries if splitting produces more valid train IDs,
+        otherwise returns None to indicate the group should not be split.
+        """
+        # OCR the unsplit group
+        unsplit_ids = self._ocr_column(band, dark_mask, x1, x2, band_h, track)
+
+        # OCR both parts of the split
+        left_ids = self._ocr_column(band, dark_mask, x1, split_x, band_h, track)
+        right_ids = self._ocr_column(band, dark_mask, split_x + 1, x2, band_h, track)
+        split_ids = left_ids + right_ids
+
+        # Choose the interpretation that produces more valid train IDs
+        if len(split_ids) > len(unsplit_ids):
+            return [(x1, split_x), (split_x + 1, x2)]
         else:
-            return [(x1, x2)]
+            return None  # Don't split
 
     def _group_columns(self, columns, gap_threshold=7):
         """Group adjacent columns. Gap threshold determines when to split groups."""
@@ -881,17 +919,21 @@ class TrainDetector:
         # First try to match without aggressive corrections
         matches = TRAIN_ID_PATTERN.findall(combined)
         if matches:
+            # Clean suffixes first, then filter out invalid train IDs
+            # (cleaning must happen before validation since contamination like
+            # "W2131KE" should clean to "W2131K" before checking suffix validity)
+            cleaned_matches = [_clean_suffix(m) for m in matches]
             # Filter out invalid train IDs with:
             # - repeated digits (e.g., 1111II, 0000MM)
             # - invalid prefixes (e.g., A4111I - 'A' is not a valid Muni line)
             # - invalid suffixes (e.g., 2117XJ, 2111FX - X not used in combinations)
             # - suspicious digit patterns (e.g., 8566MK - starts with 8)
-            matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)
-                       and not _has_invalid_prefix(m)
-                       and not _has_invalid_suffix(m)
-                       and not _has_suspicious_digits(m)]
-            if matches:
-                return [_clean_suffix(m) for m in matches]
+            cleaned_matches = [m for m in cleaned_matches if not INVALID_REPEATED_DIGITS.search(m)
+                               and not _has_invalid_prefix(m)
+                               and not _has_invalid_suffix(m)
+                               and not _has_suspicious_digits(m)]
+            if cleaned_matches:
+                return cleaned_matches
 
         # Position-based corrections for vertical text OCR errors
         # Find where digits likely start (first digit or letter that looks like a digit)
