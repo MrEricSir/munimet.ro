@@ -99,12 +99,12 @@
       ["F2179NN", 871, {"ocr_override": "2179NN", "note": "OCR drops leading F"}],
       ["D2004NN", 879],
       ["D2099J", 1054],
-      ["W2075K", 1174, {"ocr_override": "7052K", "note": "Two bunched trains at Embarcadero; OCR merges W2075K and W2202X"}],
-      ["W2202X", 1180, {"optional": true, "note": "Bunched with W2075K - currently detected as merged 7052K"}],
+      ["W2075K", 1164, {"note": "Faint text at Embarcadero - now detected with gamma correction fallback"}],
+      ["W2202X", 1182, {"note": "Now correctly detected after gap_threshold fix"}],
       ["C2145TT", 1676]
     ],
     "muni_snapshot_20260202_122209.jpg": [
-      ["*2170KK", 37, {"optional": true, "note": "Blue text label - not currently detected by OCR"}],
+      ["*2170KK", 37, {"ocr_override": "2110KK", "note": "Blue text in lower band - OCR misreads 7 as 1 and drops asterisk"}],
       ["W2010MM", 233],
       ["W2082KK", 625],
       ["M2058J", 674],
@@ -160,7 +160,7 @@
     "muni_snapshot_20260211_094811.jpg": [
       ["W2050MM", 59],
       ["M2188MM", 188],
-      ["M2074LL", 350, {"optional": true, "note": "LL train at Castro lower - BLUE text, requires color-aware detection"}],
+      ["M2074LL", 356, {"ocr_override": "M2004LL", "note": "Blue text at Castro lower - OCR misreads 7 as 0"}],
       ["F2083NN", 664, {"ocr_override": "F2089NN", "note": "OCR misreads 8 as 9"}],
       ["W2110LL", 671],
       ["M2155KK", 807, {"ocr_override": "M2155KK", "note": "Lower track at Powell"}],

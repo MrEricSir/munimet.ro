@@ -605,7 +605,7 @@ class TrainDetector:
         else:
             return None  # Don't split
 
-    def _group_columns(self, columns, gap_threshold=7):
+    def _group_columns(self, columns, gap_threshold=6):
         """Group adjacent columns. Gap threshold determines when to split groups."""
         if len(columns) == 0:
             return []
@@ -661,6 +661,25 @@ class TrainDetector:
 
         try:
             text = pytesseract.image_to_string(roi_bin, config=OCR_CONFIG)
+            train_ids = self._extract_train_ids(text)
+            if train_ids:
+                return train_ids
+
+            # Fallback 1: try CLAHE enhancement for faint text
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(roi_large)
+            _, roi_bin_clahe = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            text = pytesseract.image_to_string(roi_bin_clahe, config=OCR_CONFIG)
+            train_ids = self._extract_train_ids(text)
+            if train_ids:
+                return train_ids
+
+            # Fallback 2: try gamma correction for low-contrast text
+            gamma = 0.7
+            lut = np.array([((i / 255.0) ** gamma) * 255 for i in range(256)]).astype(np.uint8)
+            gamma_corrected = cv2.LUT(roi_large, lut)
+            _, roi_bin_gamma = cv2.threshold(gamma_corrected, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            text = pytesseract.image_to_string(roi_bin_gamma, config=OCR_CONFIG)
             return self._extract_train_ids(text)
         except Exception:
             return []
@@ -674,6 +693,7 @@ class TrainDetector:
         # Green text (H=35-85)
         green = cv2.inRange(band_hsv, np.array([35, 80, 120]), np.array([85, 255, 255]))
 
+        # Process yellow/green together (they don't overlap with blue)
         colored_mask = yellow | green
 
         # Find columns with colored text
@@ -730,6 +750,54 @@ class TrainDetector:
                     'track': track,
                     'confidence': 'high'
                 })
+
+        # Also detect blue text separately (blue station indicators can interfere with yellow/green)
+        blue = cv2.inRange(band_hsv, np.array([100, 100, 80]), np.array([130, 255, 255]))
+        blue_col_sums = blue.sum(axis=0)
+        blue_cols = np.where(blue_col_sums > 100)[0]
+
+        if len(blue_cols) > 0:
+            blue_groups = self._group_columns(blue_cols)
+            for x1, x2 in blue_groups:
+                width = x2 - x1
+                if width < 5 or width > 50:
+                    continue
+
+                col_region = blue[:, x1:x2+1]
+                row_sums = col_region.sum(axis=1)
+                text_rows = np.where(row_sums > 0)[0]
+                if len(text_rows) < 10:
+                    continue
+
+                y1 = max(0, text_rows[0] - 2)
+                y2 = min(band_h, text_rows[-1] + 2)
+
+                if track == 'lower':
+                    station_cutoff = int(band_h * 0.15)
+                    if y1 < station_cutoff:
+                        y1 = station_cutoff
+
+                if y2 - y1 < 20:
+                    continue
+
+                pad = 3
+                roi_x1 = max(0, x1 - pad)
+                roi_x2 = min(band_gray.shape[1], x2 + pad)
+                blue_roi = blue[y1:y2, roi_x1:roi_x2]
+
+                if blue_roi.size == 0:
+                    continue
+
+                train_id = self._ocr_color_mask(blue_roi)
+                if train_id:
+                    center_x = (x1 + x2) // 2
+                    trains.append({
+                        'id': train_id,
+                        'x': center_x,
+                        'y': y_offset + (y1 + y2) // 2,
+                        'track': track,
+                        'confidence': 'high'
+                    })
 
         return trains
 
