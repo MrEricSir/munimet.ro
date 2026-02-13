@@ -19,11 +19,24 @@ jobs:
 
       - name: Install system dependencies
         run: |
+          set -e  # Exit on any error
           apt-get update
           apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng curl
+
           # Use tessdata_best for higher accuracy (matches production Docker image)
-          curl -L -o /usr/share/tesseract-ocr/5/tessdata/eng.traineddata \
+          echo "Downloading tessdata_best eng.traineddata..."
+          curl -fL -o /usr/share/tesseract-ocr/5/tessdata/eng.traineddata \
             https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
+
+          # Verify download succeeded (tessdata_best is ~4.3MB, standard is ~1MB)
+          FILESIZE=$(stat -c%s /usr/share/tesseract-ocr/5/tessdata/eng.traineddata)
+          echo "Downloaded eng.traineddata: $FILESIZE bytes"
+          if [ "$FILESIZE" -lt 4000000 ]; then
+            echo "ERROR: tessdata_best download failed or incomplete (expected >4MB, got $FILESIZE bytes)"
+            exit 1
+          fi
+          echo "tessdata_best download verified successfully"
+
           tesseract --version  # Log version for debugging
 
       - name: Install Python dependencies
