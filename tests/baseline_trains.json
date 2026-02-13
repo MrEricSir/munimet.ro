@@ -160,7 +160,7 @@
     "muni_snapshot_20260211_094811.jpg": [
       ["W2050MM", 59],
       ["M2188MM", 188],
-      ["M2074LL", 356, {"ocr_override": "M2004LL", "note": "Blue text at Castro lower - OCR misreads 7 as 0"}],
+      ["M2074LL", 356, {"ocr_override": "M2004LL", "note": "Blue text"}],
       ["F2083NN", 664, {"ocr_override": "F2089NN", "note": "OCR misreads 8 as 9"}],
       ["W2110LL", 671],
       ["M2155KK", 807, {"ocr_override": "M2155KK", "note": "Lower track at Powell"}],

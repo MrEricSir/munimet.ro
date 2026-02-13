@@ -20,7 +20,11 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
+          apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng curl
+          # Use tessdata_best for higher accuracy (matches production Docker image)
+          curl -L -o /usr/share/tesseract-ocr/5/tessdata/eng.traineddata \
+            https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
+          tesseract --version  # Log version for debugging
 
       - name: Install Python dependencies
         run: |
