@@ -67,6 +67,8 @@ def read_cache():
     """
     Read cached status from local file or Cloud Storage.
 
+    Uses retry with exponential backoff for GCS operations.
+
     Returns:
         dict: Cached status data, or None if not found
     """
@@ -74,22 +76,17 @@ def read_cache():
 
     try:
         if cache_path.startswith('gs://'):
-            # Read from Cloud Storage
-            from google.cloud import storage
+            # Read from Cloud Storage with retry
+            from lib.gcs_utils import parse_gcs_path, gcs_download_as_string
 
-            # Parse gs://bucket/path
-            parts = cache_path[5:].split('/', 1)
-            bucket_name = parts[0]
-            blob_name = parts[1] if len(parts) > 1 else 'latest_status.json'
+            bucket_name, blob_name = parse_gcs_path(cache_path)
+            if not blob_name:
+                blob_name = 'latest_status.json'
 
-            client = storage.Client()
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob(blob_name)
-
-            if not blob.exists():
+            content = gcs_download_as_string(bucket_name, blob_name)
+            if content is None:
                 return None
 
-            content = blob.download_as_string()
             return json.loads(content)
         else:
             # Read from local file
@@ -107,6 +104,8 @@ def write_cache(data):
     """
     Write status data to local file or Cloud Storage.
 
+    Uses retry with exponential backoff for GCS operations.
+
     Args:
         data: Dict containing status data to cache
 
@@ -117,20 +116,16 @@ def write_cache(data):
 
     try:
         if cache_path.startswith('gs://'):
-            # Write to Cloud Storage
-            from google.cloud import storage
+            # Write to Cloud Storage with retry
+            from lib.gcs_utils import parse_gcs_path, gcs_upload_from_string
 
-            # Parse gs://bucket/path
-            parts = cache_path[5:].split('/', 1)
-            bucket_name = parts[0]
-            blob_name = parts[1] if len(parts) > 1 else 'latest_status.json'
+            bucket_name, blob_name = parse_gcs_path(cache_path)
+            if not blob_name:
+                blob_name = 'latest_status.json'
 
-            client = storage.Client()
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob(blob_name)
-
-            # Upload with content type
-            blob.upload_from_string(
+            gcs_upload_from_string(
+                bucket_name,
+                blob_name,
                 json.dumps(data, indent=2),
                 content_type='application/json'
             )
@@ -150,6 +145,8 @@ def write_cached_image(image_path):
     """
     Write the analyzed image to cache (local file or Cloud Storage).
 
+    Uses retry with exponential backoff for GCS operations.
+
     Args:
         image_path: Path to the local image file
 
@@ -160,19 +157,17 @@ def write_cached_image(image_path):
 
     try:
         if cache_path.startswith('gs://'):
-            # Write to Cloud Storage
-            from google.cloud import storage
+            # Write to Cloud Storage with retry
+            from lib.gcs_utils import parse_gcs_path, gcs_upload_from_file
 
-            # Parse gs://bucket/path to get bucket name
-            parts = cache_path[5:].split('/', 1)
-            bucket_name = parts[0]
+            bucket_name, _ = parse_gcs_path(cache_path)
 
-            client = storage.Client()
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob('latest_image.jpg')
-
-            # Upload image
-            blob.upload_from_filename(image_path, content_type='image/jpeg')
+            gcs_upload_from_file(
+                bucket_name,
+                'latest_image.jpg',
+                image_path,
+                content_type='image/jpeg'
+            )
             return True
         else:
             # Local development - just keep the file where it is
@@ -186,6 +181,8 @@ def read_cached_image():
     """
     Read the cached image from local file or Cloud Storage.
 
+    Uses retry with exponential backoff for GCS operations.
+
     Returns:
         bytes: Image data, or None if not found
     """
@@ -193,21 +190,12 @@ def read_cached_image():
 
     try:
         if cache_path.startswith('gs://'):
-            # Read from Cloud Storage
-            from google.cloud import storage
+            # Read from Cloud Storage with retry
+            from lib.gcs_utils import parse_gcs_path, gcs_download_as_bytes
 
-            # Parse gs://bucket/path to get bucket name
-            parts = cache_path[5:].split('/', 1)
-            bucket_name = parts[0]
+            bucket_name, _ = parse_gcs_path(cache_path)
 
-            client = storage.Client()
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob('latest_image.jpg')
-
-            if not blob.exists():
-                return None
-
-            return blob.download_as_bytes()
+            return gcs_download_as_bytes(bucket_name, 'latest_image.jpg')
         else:
             # Local development - read from cache directory
             cache_dir = os.path.dirname(cache_path)
@@ -270,13 +258,15 @@ from lib.notifiers import post_to_bluesky
 
 def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True, max_retries=3):
     """
-    Download a single Muni subway status image with retry logic.
+    Download a single Muni subway status image with retry logic and circuit breaker.
 
     The SF Muni Central page uses JavaScript to update the image every 5 seconds,
     but we can access the actual image URL directly.
 
-    Implements exponential backoff for transient errors (timeouts, connection errors,
-    server errors). Non-retryable errors (4xx, invalid dimensions) fail immediately.
+    Implements:
+    - Circuit breaker pattern to fail fast when service is down
+    - Exponential backoff for transient errors (timeouts, connection errors, server errors)
+    - Non-retryable errors (4xx, invalid dimensions) fail immediately
 
     Args:
         output_folder: Directory to save the image
@@ -291,11 +281,27 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
             'height': int or None,
             'error': str or None,
             'attempts': int (number of attempts made),
-            'retried': bool (whether retries were needed)
+            'retried': bool (whether retries were needed),
+            'circuit_open': bool (whether circuit breaker blocked the request)
         }
     """
     import random
     import time
+    from lib.circuit_breaker import image_source_breaker, CircuitState
+
+    # Check circuit breaker before attempting download
+    if not image_source_breaker.can_execute():
+        time_until_retry = image_source_breaker.time_until_retry()
+        return {
+            'success': False,
+            'filepath': None,
+            'width': None,
+            'height': None,
+            'error': f"Circuit breaker open: service temporarily unavailable (retry in {time_until_retry:.0f}s)",
+            'attempts': 0,
+            'retried': False,
+            'circuit_open': True,
+        }
 
     # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
@@ -326,6 +332,8 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
                     time.sleep(delay)
                     continue
                 else:
+                    # Server error after all retries - record failure
+                    image_source_breaker.record_failure()
                     return {
                         'success': False,
                         'filepath': None,
@@ -333,7 +341,8 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
                         'height': None,
                         'error': last_error,
                         'attempts': attempts,
-                        'retried': attempts > 1
+                        'retried': attempts > 1,
+                        'circuit_open': False,
                     }
 
             # Non-retryable HTTP errors (4xx)
@@ -354,7 +363,8 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
 
             if validate_dimensions and (width != EXPECTED_WIDTH or height != EXPECTED_HEIGHT):
                 os.remove(filepath)
-                # Invalid dimensions are not retryable
+                # Invalid dimensions - service is responding, just with bad data
+                # Don't count as circuit breaker failure
                 return {
                     'success': False,
                     'filepath': None,
@@ -362,9 +372,12 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
                     'height': height,
                     'error': f"Invalid dimensions: {width}x{height}, expected {EXPECTED_WIDTH}x{EXPECTED_HEIGHT}",
                     'attempts': attempts,
-                    'retried': attempts > 1
+                    'retried': attempts > 1,
+                    'circuit_open': False,
                 }
 
+            # Success - record with circuit breaker
+            image_source_breaker.record_success()
             return {
                 'success': True,
                 'filepath': filepath,
@@ -372,7 +385,8 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
                 'height': height,
                 'error': None,
                 'attempts': attempts,
-                'retried': attempts > 1
+                'retried': attempts > 1,
+                'circuit_open': False,
             }
 
         except RETRYABLE_EXCEPTIONS as e:
@@ -384,7 +398,8 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
             continue
 
         except requests.exceptions.HTTPError as e:
-            # Non-retryable HTTP errors (4xx)
+            # Non-retryable HTTP errors (4xx) - service is responding
+            # Don't count as circuit breaker failure (it's not a connectivity issue)
             return {
                 'success': False,
                 'filepath': None,
@@ -392,11 +407,13 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
                 'height': None,
                 'error': str(e),
                 'attempts': attempts,
-                'retried': attempts > 1
+                'retried': attempts > 1,
+                'circuit_open': False,
             }
 
         except Exception as e:
             # Other exceptions (file I/O, PIL errors) - not retryable
+            # Don't count local errors as circuit breaker failures
             return {
                 'success': False,
                 'filepath': None,
@@ -404,10 +421,12 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
                 'height': None,
                 'error': str(e),
                 'attempts': attempts,
-                'retried': attempts > 1
+                'retried': attempts > 1,
+                'circuit_open': False,
             }
 
-    # All retries exhausted
+    # All retries exhausted due to network errors - record failure
+    image_source_breaker.record_failure()
     return {
         'success': False,
         'filepath': None,
@@ -415,7 +434,8 @@ def download_muni_image(output_folder="muni_snapshots", validate_dimensions=True
         'height': None,
         'error': f"Failed after {max_retries} attempts: {last_error}",
         'attempts': attempts,
-        'retried': True
+        'retried': True,
+        'circuit_open': False,
     }
 
 

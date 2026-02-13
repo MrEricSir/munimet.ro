@@ -198,6 +198,105 @@ class TestStatusEndpoint:
         assert data['consecutive_failures'] == 3
         assert data['last_error'] == 'Connection timeout'
 
+    def test_status_graceful_degradation_returns_stale_cache(self, client):
+        """Test graceful degradation: returns stale cache when download fails."""
+        from lib.config import CACHE_MAX_AGE, STALENESS_EXPIRED
+
+        # Create stale cache (older than CACHE_MAX_AGE for fallback trigger,
+        # and older than STALENESS_EXPIRED for 'expired' staleness level)
+        stale_time = (datetime.now() - timedelta(seconds=STALENESS_EXPIRED + 60)).isoformat()
+        mock_cache = {
+            'cached_at': stale_time,
+            'last_successful_check': stale_time,
+            'reported_status': {
+                'status': 'yellow',
+                'description': 'Platform hold at Powell',
+                'confidence': 1.0,
+                'probabilities': {'green': 0.0, 'yellow': 1.0, 'red': 0.0},
+                'timestamp': stale_time,
+            },
+        }
+
+        # Mock download failure
+        mock_download_result = {
+            'success': False,
+            'error': 'Connection timeout',
+            'filepath': None,
+        }
+
+        with patch('api.api.read_cache', return_value=mock_cache):
+            with patch('api.api.ENABLE_FALLBACK', True):
+                with patch('api.api.download_muni_image', return_value=mock_download_result):
+                    response = client.simulate_get('/status')
+
+        # Should return 200 with stale data, not an error
+        assert response.status_code == 200
+        data = response.json
+        assert data['status'] == 'yellow'
+        assert data['source_unavailable'] is True
+        assert 'Connection timeout' in data['source_error']
+        assert data['staleness'] == 'expired'
+
+    def test_status_graceful_degradation_no_cache_returns_503(self, client):
+        """Test that 503 is returned when download fails and no cache exists."""
+        # Mock download failure with no cache
+        mock_download_result = {
+            'success': False,
+            'error': 'Connection refused',
+            'filepath': None,
+        }
+
+        with patch('api.api.read_cache', return_value=None):
+            with patch('api.api.ENABLE_FALLBACK', True):
+                with patch('api.api.download_muni_image', return_value=mock_download_result):
+                    response = client.simulate_get('/status')
+
+        # Should return 503 since no cached data to fall back to
+        assert response.status_code == 503
+        data = response.json
+        assert 'error' in data
+        assert 'Service temporarily unavailable' in data['error']
+        assert 'Connection refused' in data['details']
+
+    def test_status_graceful_degradation_detection_failure(self, client):
+        """Test graceful degradation when detection fails after successful download."""
+        from lib.config import CACHE_MAX_AGE, STALENESS_EXPIRED
+
+        # Create stale cache (older than CACHE_MAX_AGE)
+        stale_time = (datetime.now() - timedelta(seconds=STALENESS_EXPIRED + 60)).isoformat()
+        mock_cache = {
+            'cached_at': stale_time,
+            'last_successful_check': stale_time,
+            'reported_status': {
+                'status': 'green',
+                'description': 'Normal operation',
+                'confidence': 1.0,
+                'probabilities': {'green': 1.0, 'yellow': 0.0, 'red': 0.0},
+                'timestamp': stale_time,
+            },
+        }
+
+        # Mock successful download but failed detection
+        mock_download_result = {
+            'success': True,
+            'filepath': '/tmp/test.jpg',
+            'width': 1860,
+            'height': 800,
+        }
+
+        with patch('api.api.read_cache', return_value=mock_cache):
+            with patch('api.api.ENABLE_FALLBACK', True):
+                with patch('api.api.download_muni_image', return_value=mock_download_result):
+                    with patch('api.api.detect_muni_status', side_effect=Exception('OCR failed')):
+                        response = client.simulate_get('/status')
+
+        # Should return 200 with stale data, not an error
+        assert response.status_code == 200
+        data = response.json
+        assert data['status'] == 'green'
+        assert data['source_unavailable'] is True
+        assert 'OCR failed' in data['source_error']
+
 
 class TestHealthEndpoint:
     """Tests for the /health endpoint."""

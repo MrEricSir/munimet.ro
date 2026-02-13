@@ -61,14 +61,16 @@ def _get_gcs_bucket():
 
 def _get_gcs_client():
     """Get a GCS client (lazy import to avoid issues in local dev)."""
-    from google.cloud import storage
-    return storage.Client()
+    from lib.gcs_utils import get_gcs_client
+    return get_gcs_client()
 
 
 def restore_db_from_gcs():
     """
     Restore the analytics database from GCS if running on Cloud Run.
     Called once at startup to restore persisted data.
+
+    Uses retry with exponential backoff for transient GCS errors.
 
     Returns:
         bool: True if restored, False if no backup exists or not on Cloud Run
@@ -85,12 +87,11 @@ def restore_db_from_gcs():
     blob_path = 'analytics/analytics.db'
 
     try:
-        print(f"Restoring analytics DB from gs://{bucket_name}/{blob_path}...")
-        client = _get_gcs_client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
+        from lib.gcs_utils import gcs_blob_exists, gcs_get_blob_size, gcs_download_to_file
 
-        if not blob.exists():
+        print(f"Restoring analytics DB from gs://{bucket_name}/{blob_path}...")
+
+        if not gcs_blob_exists(bucket_name, blob_path):
             print(f"No analytics DB backup found in GCS (gs://{bucket_name}/{blob_path})")
             _gcs_restored = True
             return False
@@ -99,11 +100,10 @@ def restore_db_from_gcs():
         os.makedirs(LOCAL_DB_PATH.parent, exist_ok=True)
 
         # Get blob size before download
-        blob.reload()
-        gcs_size = blob.size or 0
+        gcs_size = gcs_get_blob_size(bucket_name, blob_path) or 0
 
-        # Download the database
-        blob.download_to_filename(str(LOCAL_DB_PATH))
+        # Download the database with retry
+        gcs_download_to_file(bucket_name, blob_path, str(LOCAL_DB_PATH))
         local_size = LOCAL_DB_PATH.stat().st_size
         print(f"Restored analytics DB from GCS ({gcs_size} bytes downloaded, {local_size} bytes on disk)")
         _gcs_restored = True
@@ -120,6 +120,8 @@ def backup_db_to_gcs():
     """
     Backup the analytics database to GCS if running on Cloud Run.
     Should be called periodically (e.g., after each status check).
+
+    Uses retry with exponential backoff for transient GCS errors.
 
     Safety: Will not overwrite a larger GCS backup with a smaller local file,
     which could indicate data loss from a failed restore.
@@ -140,19 +142,19 @@ def backup_db_to_gcs():
         return False
 
     try:
+        from lib.gcs_utils import gcs_blob_exists, gcs_get_blob_size, gcs_upload_from_file
+
         local_size = LOCAL_DB_PATH.stat().st_size
         print(f"  Backup: Local DB size = {local_size} bytes", flush=True)
 
-        client = _get_gcs_client()
-        bucket = client.bucket(_get_gcs_bucket())
-        blob = bucket.blob('analytics/analytics.db')
+        bucket_name = _get_gcs_bucket()
+        blob_path = 'analytics/analytics.db'
 
         # Safety check: don't overwrite a larger backup with smaller data
         # This prevents data loss if restore failed and we have a fresh DB
-        if blob.exists():
-            blob.reload()  # Refresh metadata
-            gcs_size = blob.size or 0
-            print(f"  Backup: GCS size = {gcs_size} bytes (blob.size raw = {blob.size})", flush=True)
+        if gcs_blob_exists(bucket_name, blob_path):
+            gcs_size = gcs_get_blob_size(bucket_name, blob_path) or 0
+            print(f"  Backup: GCS size = {gcs_size} bytes", flush=True)
             if local_size < gcs_size * 0.9:  # Allow 10% variance for normal fluctuation
                 print(f"  Backup: WARNING - Local ({local_size}) much smaller than GCS ({gcs_size})", flush=True)
                 print("  Backup: Skipping to prevent data loss - investigate restore failure", flush=True)
@@ -162,7 +164,7 @@ def backup_db_to_gcs():
             print("  Backup: No existing GCS backup found", flush=True)
 
         print("  Backup: Uploading...", flush=True)
-        blob.upload_from_filename(str(LOCAL_DB_PATH))
+        gcs_upload_from_file(bucket_name, blob_path, str(LOCAL_DB_PATH))
         print(f"  Backup: Success - uploaded {local_size} bytes to GCS", flush=True)
         sys.stdout.flush()
         return True
@@ -175,16 +177,18 @@ def backup_db_to_gcs():
 
 
 def _read_gcs_json(blob_name):
-    """Read a JSON file from GCS."""
-    try:
-        client = _get_gcs_client()
-        bucket = client.bucket(_get_gcs_bucket())
-        blob = bucket.blob(blob_name)
+    """
+    Read a JSON file from GCS with retry.
 
-        if not blob.exists():
+    Uses exponential backoff for transient GCS errors.
+    """
+    try:
+        from lib.gcs_utils import gcs_download_as_string
+
+        content = gcs_download_as_string(_get_gcs_bucket(), blob_name)
+        if content is None:
             return None
 
-        content = blob.download_as_string()
         return json.loads(content)
     except Exception as e:
         print(f"Error reading {blob_name} from GCS: {e}")
@@ -192,13 +196,17 @@ def _read_gcs_json(blob_name):
 
 
 def _write_gcs_json(blob_name, data):
-    """Write a JSON file to GCS."""
-    try:
-        client = _get_gcs_client()
-        bucket = client.bucket(_get_gcs_bucket())
-        blob = bucket.blob(blob_name)
+    """
+    Write a JSON file to GCS with retry.
 
-        blob.upload_from_string(
+    Uses exponential backoff for transient GCS errors.
+    """
+    try:
+        from lib.gcs_utils import gcs_upload_from_string
+
+        gcs_upload_from_string(
+            _get_gcs_bucket(),
+            blob_name,
             json.dumps(data),
             content_type='application/json'
         )

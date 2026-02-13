@@ -13,11 +13,19 @@ Usage:
 
 import falcon
 import hashlib
+import logging
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
 from whitenoise import WhiteNoise
+
+# Configure logging for GCP Cloud Logging
+# In Cloud Run, logs to stdout/stderr are automatically captured
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s: %(message)s'
+)
 
 # Path resolution - get absolute paths relative to project root
 API_DIR = Path(__file__).resolve().parent
@@ -70,6 +78,85 @@ else:
     print("Set ENABLE_FALLBACK=true to enable live detection fallback")
 
 
+def _build_cached_response(cache_data, source_unavailable=False, download_error=None):
+    """
+    Build a response from cached data.
+
+    Args:
+        cache_data: The cache data dict
+        source_unavailable: If True, indicates the image source is unavailable
+        download_error: Error message from failed download attempt
+
+    Returns:
+        dict: Response data ready to be sent as JSON
+    """
+    # Check cache age based on last_successful_check (preferred) or cached_at
+    last_success = cache_data.get('last_successful_check', cache_data.get('cached_at'))
+    last_success_dt = datetime.fromisoformat(last_success)
+    data_age = (datetime.now() - last_success_dt).total_seconds()
+
+    # Also get cached_at for cache staleness check
+    cached_at = datetime.fromisoformat(cache_data['cached_at'])
+    cache_age = (datetime.now() - cached_at).total_seconds()
+
+    # Determine staleness level
+    staleness_level, staleness_message = _get_staleness_level(data_age)
+
+    # Get reported status (hysteresis-smoothed) with fallback chain
+    best = cache_data.get('reported_status') or cache_data.get('best_status', cache_data.get('statuses', [{}])[0])
+
+    # Build response with best status
+    response_data = {
+        'status': best['status'],
+        'description': best['description'],
+        'confidence': round(best['confidence'], 4),
+        'probabilities': {
+            'green': round(best['probabilities']['green'], 4),
+            'yellow': round(best['probabilities']['yellow'], 4),
+            'red': round(best['probabilities']['red'], 4)
+        },
+        'image_path': best.get('image_path'),
+        'image_dimensions': best.get('image_dimensions'),
+        'timestamp': best['timestamp'],
+        'cached': True,
+        'cache_age': round(cache_age, 1),
+        # Staleness info for frontend
+        'data_age': round(data_age, 1),
+        'staleness': staleness_level,
+        'staleness_message': staleness_message
+    }
+
+    # Add source unavailable flag for graceful degradation
+    if source_unavailable:
+        response_data['source_unavailable'] = True
+        if download_error:
+            response_data['source_error'] = download_error
+
+    # Add failure tracking info if present
+    consecutive_failures = cache_data.get('consecutive_failures', 0)
+    if consecutive_failures > 0:
+        response_data['consecutive_failures'] = consecutive_failures
+        last_error = cache_data.get('last_error')
+        if last_error:
+            response_data['last_error'] = last_error
+
+    # Add detection details if available
+    if 'detection' in best:
+        response_data['detection'] = best['detection']
+
+    # Add status history info if available
+    if 'statuses' in cache_data and len(cache_data['statuses']) > 1:
+        response_data['status_history'] = [
+            {
+                'status': s['status'],
+                'timestamp': s['timestamp']
+            } for s in cache_data['statuses']
+        ]
+        response_data['is_best_of_two'] = True
+
+    return response_data
+
+
 class StatusResource:
     """API endpoint for checking current Muni status."""
 
@@ -87,6 +174,10 @@ class StatusResource:
         - cached: whether result came from cache
         - cache_age: age of cache in seconds (if cached)
         - detection: detailed detection data (trains, delays, etc.)
+
+        Graceful degradation: If the image source is unavailable but we have
+        cached data, returns the stale cached data with source_unavailable=true
+        instead of returning an error.
         """
         timestamp = datetime.now().isoformat()
 
@@ -95,72 +186,18 @@ class StatusResource:
 
         if cache_data:
             try:
-                # Check cache age based on last_successful_check (preferred) or cached_at
-                last_success = cache_data.get('last_successful_check', cache_data.get('cached_at'))
-                last_success_dt = datetime.fromisoformat(last_success)
-                data_age = (datetime.now() - last_success_dt).total_seconds()
-
-                # Also get cached_at for cache staleness check
                 cached_at = datetime.fromisoformat(cache_data['cached_at'])
                 cache_age = (datetime.now() - cached_at).total_seconds()
 
-                # Determine staleness level
-                staleness_level, staleness_message = _get_staleness_level(data_age)
-
                 # Use cache if it's fresh enough (based on cached_at for fallback decision)
                 if cache_age < CACHE_MAX_AGE:
-                    # Get reported status (hysteresis-smoothed) with fallback chain
-                    best = cache_data.get('reported_status') or cache_data.get('best_status', cache_data.get('statuses', [{}])[0])
-
-                    # Build response with best status
-                    response_data = {
-                        'status': best['status'],
-                        'description': best['description'],
-                        'confidence': round(best['confidence'], 4),
-                        'probabilities': {
-                            'green': round(best['probabilities']['green'], 4),
-                            'yellow': round(best['probabilities']['yellow'], 4),
-                            'red': round(best['probabilities']['red'], 4)
-                        },
-                        'image_path': best.get('image_path'),
-                        'image_dimensions': best.get('image_dimensions'),
-                        'timestamp': best['timestamp'],
-                        'cached': True,
-                        'cache_age': round(cache_age, 1),
-                        # Staleness info for frontend
-                        'data_age': round(data_age, 1),
-                        'staleness': staleness_level,
-                        'staleness_message': staleness_message
-                    }
-
-                    # Add failure tracking info if present
-                    consecutive_failures = cache_data.get('consecutive_failures', 0)
-                    if consecutive_failures > 0:
-                        response_data['consecutive_failures'] = consecutive_failures
-                        last_error = cache_data.get('last_error')
-                        if last_error:
-                            response_data['last_error'] = last_error
-
-                    # Add detection details if available
-                    if 'detection' in best:
-                        response_data['detection'] = best['detection']
-
-                    # Add status history info if available
-                    if 'statuses' in cache_data and len(cache_data['statuses']) > 1:
-                        response_data['status_history'] = [
-                            {
-                                'status': s['status'],
-                                'timestamp': s['timestamp']
-                            } for s in cache_data['statuses']
-                        ]
-                        response_data['is_best_of_two'] = True
-
                     resp.status = falcon.HTTP_200
-                    resp.media = response_data
+                    resp.media = _build_cached_response(cache_data)
                     return
             except (KeyError, ValueError) as e:
                 # Cache is corrupted, fall through to download + detect
-                print(f"Cache read failed: {e}")
+                logging.warning(f"Cache read failed: {e}")
+                cache_data = None  # Mark as unusable for graceful degradation
 
         # Cache miss or stale - check if fallback is enabled
         if not ENABLE_FALLBACK:
@@ -179,10 +216,29 @@ class StatusResource:
         )
 
         if not download_result['success']:
-            resp.status = falcon.HTTP_500
+            error_msg = download_result.get('error', 'Unknown error')
+
+            # Graceful degradation: if we have stale cached data, return it
+            # instead of an error
+            if cache_data:
+                logging.error(
+                    f"Image source unavailable: {error_msg}. "
+                    f"Returning stale cached data (graceful degradation)."
+                )
+                resp.status = falcon.HTTP_200
+                resp.media = _build_cached_response(
+                    cache_data,
+                    source_unavailable=True,
+                    download_error=error_msg
+                )
+                return
+
+            # No cached data available - must return error
+            logging.error(f"Image source unavailable and no cached data: {error_msg}")
+            resp.status = falcon.HTTP_503
             resp.media = {
-                'error': 'Failed to download image',
-                'details': download_result['error'],
+                'error': 'Service temporarily unavailable',
+                'details': f'Image source unavailable: {error_msg}',
                 'timestamp': timestamp
             }
             return
@@ -191,10 +247,28 @@ class StatusResource:
         try:
             detection = detect_muni_status(download_result['filepath'])
         except Exception as e:
-            resp.status = falcon.HTTP_500
+            error_msg = str(e)
+
+            # Graceful degradation: if we have stale cached data, return it
+            if cache_data:
+                logging.error(
+                    f"Detection failed: {error_msg}. "
+                    f"Returning stale cached data (graceful degradation)."
+                )
+                resp.status = falcon.HTTP_200
+                resp.media = _build_cached_response(
+                    cache_data,
+                    source_unavailable=True,
+                    download_error=f"Detection failed: {error_msg}"
+                )
+                return
+
+            # No cached data available - must return error
+            logging.error(f"Detection failed and no cached data: {error_msg}")
+            resp.status = falcon.HTTP_503
             resp.media = {
-                'error': 'Failed to detect status',
-                'details': str(e),
+                'error': 'Service temporarily unavailable',
+                'details': f'Detection failed: {error_msg}',
                 'image_path': download_result['filepath'],
                 'timestamp': timestamp
             }

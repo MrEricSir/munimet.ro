@@ -27,6 +27,7 @@ __MACOSX/
 
 # Generated artifacts - runtime data (not version controlled)
 artifacts/runtime/
+muni_snapshots/
 
 # Reference data (managed via GCS - use sync scripts)
 artifacts/reference_data/
