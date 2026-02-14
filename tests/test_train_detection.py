@@ -7,20 +7,13 @@ Test images are in tests/images/.
 Baseline format supports optional override for OCR issues:
   ["train_id", x_position]  -- normal entry
   ["train_id", x_position, {"ocr_override": "alt_id", "note": "reason"}]  -- with override
-
-Note: OCR results vary between environments (macOS Homebrew Tesseract vs Debian Tesseract).
-Tests in this file are skipped in CI and run locally only.
 """
 
 import json
-import os
 import pytest
 import cv2
 import sys
 from pathlib import Path
-
-# Detect if running in CI environment
-IS_CI = os.environ.get("CI", "").lower() == "true" or os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -75,14 +68,8 @@ def detector():
     return TrainDetector()
 
 
-@pytest.mark.skipif(IS_CI, reason="OCR results vary between environments - run locally only")
 class TestTrainDetectionBaseline:
-    """Tests to ensure we don't regress from current detection baseline.
-
-    These tests are skipped in CI because Tesseract OCR produces different results
-    on different platforms (macOS Homebrew vs Debian packages) even with the same
-    version and tessdata files.
-    """
+    """Tests to ensure we don't regress from current detection baseline."""
 
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
     @pytest.mark.parametrize("img_path,baseline", IMAGES_WITH_TRAINS)
@@ -185,12 +172,8 @@ class TestTrainDetectionBaseline:
             )
 
 
-@pytest.mark.skipif(IS_CI, reason="OCR results vary between environments - run locally only")
 class TestFalsePositives:
-    """Tests to ensure false positives don't increase.
-
-    Skipped in CI - false positive counts vary between Tesseract builds.
-    """
+    """Tests to ensure false positives don't increase."""
 
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
     @pytest.mark.parametrize("img_path,max_allowed", TRAIN_FREE_IMAGES)

@@ -8,52 +8,20 @@ on:
 
 jobs:
   test:
-    name: Run Tests (ARM64)
-    runs-on: ubuntu-24.04-arm
-    # Run in same container as production for consistent Tesseract OCR results
-    # Python publishes multi-arch images, so this works on ARM64
-    container:
-      image: python:3.13-slim-bookworm
+    name: Run Tests
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Build production Docker image
         run: |
-          set -e  # Exit on any error
-          apt-get update
-          apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng curl
+          docker build -t munimetro-test .
 
-          # Use tessdata_best for higher accuracy (matches production Docker image)
-          echo "Downloading tessdata_best eng.traineddata..."
-          curl -fL -o /usr/share/tesseract-ocr/5/tessdata/eng.traineddata \
-            https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
-
-          # Verify download succeeded (tessdata_best is ~4.3MB, standard is ~1MB)
-          FILESIZE=$(stat -c%s /usr/share/tesseract-ocr/5/tessdata/eng.traineddata)
-          echo "Downloaded eng.traineddata: $FILESIZE bytes"
-          if [ "$FILESIZE" -lt 4000000 ]; then
-            echo "ERROR: tessdata_best download failed or incomplete (expected >4MB, got $FILESIZE bytes)"
-            exit 1
-          fi
-          echo "tessdata_best download verified successfully"
-
-          tesseract --version  # Log version for debugging
-
-      - name: Install Python dependencies
+      - name: Run tests in production container
         run: |
-          pip install --upgrade pip
-          pip install -r api/requirements.txt
-          pip install pytest
-
-      - name: Print package versions (for debugging)
-        run: |
-          echo "=== Architecture ==="
-          uname -m
-          python -c "import platform; print(f'Python platform: {platform.machine()}')"
-          echo "=== Package versions ==="
-          pip show opencv-python-headless numpy pillow pytesseract | grep -E "^(Name|Version):"
-          python -c "import cv2; print(f'OpenCV build info: {cv2.getBuildInformation()[:500]}...')"
-
-      - name: Run unit tests
-        run: python -m pytest tests/test_system_status.py tests/test_train_detection.py -v --tb=short
+          docker run --rm \
+            -v ${{ github.workspace }}/tests:/app/tests:ro \
+            -e CI=true \
+            munimetro-test \
+            sh -c "pip install pytest && python -m pytest tests/test_system_status.py tests/test_train_detection.py -v --tb=short"
