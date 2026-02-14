@@ -2,15 +2,16 @@ name: test
 
 on:
   push:
-    branches: [main]
+    branches: [main, arm64-ci]
   pull_request:
     branches: [main]
 
 jobs:
   test:
-    name: Run Tests
-    runs-on: ubuntu-latest
+    name: Run Tests (ARM64)
+    runs-on: ubuntu-24.04-arm
     # Run in same container as production for consistent Tesseract OCR results
+    # Python publishes multi-arch images, so this works on ARM64
     container:
       image: python:3.13-slim-bookworm
     steps:
@@ -47,6 +48,9 @@ jobs:
 
       - name: Print package versions (for debugging)
         run: |
+          echo "=== Architecture ==="
+          uname -m
+          python -c "import platform; print(f'Python platform: {platform.machine()}')"
           echo "=== Package versions ==="
           pip show opencv-python-headless numpy pillow pytesseract | grep -E "^(Name|Version):"
           python -c "import cv2; print(f'OpenCV build info: {cv2.getBuildInformation()[:500]}...')"
