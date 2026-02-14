@@ -2,7 +2,7 @@ name: test
 
 on:
   push:
-    branches: [main, arm64-ci]
+    branches: [main]
   pull_request:
     branches: [main]
 
