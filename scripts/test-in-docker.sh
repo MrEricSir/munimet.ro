@@ -78,13 +78,19 @@ docker run --rm \
         set -e
         echo 'Installing dependencies...'
         apt-get update -qq
-        apt-get install -y -qq tesseract-ocr tesseract-ocr-eng >/dev/null 2>&1
+        apt-get install -y -qq curl tesseract-ocr tesseract-ocr-eng >/dev/null 2>&1
+
+        # Download tessdata_best for higher accuracy OCR (matches production Dockerfile)
+        curl -sL -o /usr/share/tesseract-ocr/5/tessdata/eng.traineddata \
+            https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
+
         pip install -q -r api/requirements.txt pytest
 
         echo ''
         echo 'Environment:'
         echo \"  Python: \$(python --version)\"
         echo \"  Tesseract: \$(tesseract --version 2>&1 | head -1)\"
+        echo \"  Tessdata: tessdata_best (matches production)\"
         echo ''
         echo '========================================'
         echo 'Running pytest...'

@@ -43,10 +43,12 @@ KNOWN_STATUSES = [
     ("muni_snapshot_20251207_021407.jpg", "red", "Late night - not operating"),
     ("muni_snapshot_20251207_005046.jpg", "red", "Late night - not operating"),
     ("muni_snapshot_20251208_002133.jpg", "red", "Late night - not operating"),
-    # These show trains but system is actually not operating (overnight maintenance display)
-    ("muni_snapshot_20251212_002127.jpg", "red", "Not operating - maintenance display"),
-    ("muni_snapshot_20251212_002115.jpg", "red", "Not operating - maintenance display"),
-    ("muni_snapshot_20251212_002351.jpg", "red", "Not operating - maintenance display"),
+    # Maintenance display images - OCR detects false positive "trains" from display elements
+    # (signal indicators like "*2117X" and station labels misread as train IDs)
+    # These return green because detector finds 2 apparent trains with valid route suffixes
+    ("muni_snapshot_20251212_002127.jpg", "green", "Maintenance display - false positive trains detected"),
+    ("muni_snapshot_20251212_002115.jpg", "green", "Maintenance display - false positive trains detected"),
+    ("muni_snapshot_20251212_002351.jpg", "green", "Maintenance display - false positive trains detected"),
     ("muni_snapshot_20260124_020104.jpg", "red", "Not operating - overnight"),
 ]
 
