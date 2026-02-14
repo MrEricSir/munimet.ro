@@ -8,15 +8,16 @@ whitenoise>=6.0.0
 
 # Image processing and HTTP
 requests>=2.32.0
-pillow>=10.0.0
+pillow==12.1.0
 
 # Cloud storage and secrets (for Cloud Run deployment)
 google-cloud-storage>=2.10.0
 google-cloud-secret-manager>=2.16.0
 
 # OpenCV for image processing and detection
-opencv-python-headless>=4.8.0
-numpy>=1.24.0
+# Pinned versions to ensure consistent OCR results across environments
+opencv-python-headless==4.13.0.92
+numpy==2.4.2
 
 # OCR for train ID detection (optional - requires tesseract-ocr system package)
 pytesseract>=0.3.10
