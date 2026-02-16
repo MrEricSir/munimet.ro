@@ -16,7 +16,11 @@ jobs:
 
       - name: Build production Docker image
         run: |
-          docker build -t munimetro-test .
+          docker build --no-cache -t munimetro-test .
+
+      - name: Verify tessdata_best is installed
+        run: |
+          docker run --rm munimetro-test sh -c "ls -la /usr/share/tesseract-ocr/5/tessdata/eng.traineddata && echo 'File size should be ~15MB for tessdata_best'"
 
       - name: Run tests in production container
         run: |
