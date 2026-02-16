@@ -85,26 +85,23 @@ if [ "$RUN_LINT" = true ]; then
     echo ""
 fi
 
-# 2. Unit tests
+# 2. Unit tests (run in Docker for environment parity with CI/production)
 if [ "$RUN_TESTS" = true ]; then
-    echo "[2/3] Running unit tests..."
+    echo "[2/3] Running unit tests in Docker..."
     echo "----------------------------------------------"
+    echo "(Using Docker ensures OCR results match CI and production)"
+    echo ""
 
-    # Install pytest if not present
-    if ! python -c "import pytest" &> /dev/null; then
-        pip install pytest --quiet
-    fi
-
+    # Use test-in-docker.sh which has tessdata_best like production
     if [ "$QUICK_MODE" = true ]; then
-        echo "(Quick mode: skipping train detection tests)"
-        if python -m pytest tests/test_system_status.py -v --tb=short; then
+        if ./scripts/test-in-docker.sh --quick; then
             echo -e "${GREEN}✓ Unit tests passed${NC}"
         else
             echo -e "${RED}✗ Unit tests failed${NC}"
             ERRORS=$((ERRORS + 1))
         fi
     else
-        if python -m pytest tests/test_system_status.py tests/test_train_detection.py -v --tb=short; then
+        if ./scripts/test-in-docker.sh; then
             echo -e "${GREEN}✓ All tests passed${NC}"
         else
             echo -e "${RED}✗ Tests failed${NC}"
