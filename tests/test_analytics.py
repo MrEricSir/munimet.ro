@@ -360,7 +360,7 @@ class TestDelayFrequencyQuery:
                     base_time = datetime.now() - timedelta(days=3)
 
                     for i in range(100):
-                        ts = (base_time + timedelta(minutes=i * 30)).isoformat()
+                        ts = (base_time + timedelta(seconds=i * 30)).isoformat()
 
                         if i < 70:  # 70% green
                             status = 'green'
@@ -833,13 +833,17 @@ class TestIntervalHandling:
         assert result['total_minutes'] == 7.0
 
     def test_mixed_intervals_in_station_delays(self, test_db):
-        """Test that station delay minutes are calculated correctly with mixed intervals."""
+        """Test that station delay minutes are calculated correctly.
+
+        Note: Station delays use a fixed 60-second estimate per incident
+        rather than stored intervals (which may be inaccurate).
+        """
         with patch.object(analytics, 'LOCAL_DB_PATH', test_db):
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 with patch.object(analytics, 'backup_db_to_gcs', return_value=False):
                     base_time = datetime.now() - timedelta(hours=1)
 
-                    # 1 delay at Powell with 30-second interval = 0.5 minutes
+                    # 2 delays at Powell (60 seconds each = 2 minutes total)
                     analytics.log_status_check(
                         status='yellow',
                         best_status='yellow',
@@ -853,7 +857,6 @@ class TestIntervalHandling:
                         interval_seconds=30
                     )
 
-                    # 1 delay at Powell with 180-second interval = 3 minutes
                     analytics.log_status_check(
                         status='yellow',
                         best_status='yellow',
@@ -869,14 +872,17 @@ class TestIntervalHandling:
 
                     result = analytics.get_delays_by_station(days=1)
 
-        # Powell should have 0.5 + 3 = 3.5 minutes of delay
+        # Powell should have 2 incidents × 60 seconds = 2 minutes of delay
         powell = next(s for s in result if s['station'] == 'PO')
-        assert powell['minutes'] == 3.5
+        assert powell['minutes'] == 2.0
 
     def test_null_interval_uses_default_in_queries(self, test_db):
-        """Test that NULL interval_seconds values use default in calculations."""
-        from lib.config import DEFAULT_CHECK_INTERVAL
+        """Test that timestamp-based calculation handles records correctly.
 
+        Note: With timestamp-based calculation, time is computed from gaps
+        between consecutive records. A single record has no gap, so it
+        contributes 0 to total time. This is expected behavior.
+        """
         # Manually insert a record with NULL interval (simulating pre-migration data)
         conn = sqlite3.connect(str(test_db))
         cursor = conn.cursor()
@@ -891,9 +897,9 @@ class TestIntervalHandling:
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delay_frequency(days=1)
 
-        # Should use DEFAULT_CHECK_INTERVAL (30 seconds = 0.5 minutes)
-        expected_minutes = DEFAULT_CHECK_INTERVAL / 60.0
-        assert result['total_minutes'] == expected_minutes
+        # Single record has no previous timestamp to calculate gap from
+        # so it contributes 0 to total time (expected behavior)
+        assert result['total_minutes'] == 0.0
 
     def test_cloud_run_interval_constant_exists(self):
         """Test that CLOUD_CHECK_INTERVAL is defined in config."""
