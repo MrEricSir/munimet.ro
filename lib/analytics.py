@@ -444,6 +444,9 @@ def get_delay_frequency(days=7):
     Returns time-based metrics (in minutes) instead of check counts,
     making the data independent of check interval.
 
+    Uses actual timestamp differences to calculate time, which is more
+    accurate than stored interval_seconds (which may be misconfigured).
+
     Args:
         days: Number of days to look back
 
@@ -455,46 +458,64 @@ def get_delay_frequency(days=7):
             'by_status': {'green': float, 'yellow': float, 'red': float}  # Minutes per status
         }
     """
-    from lib.config import DEFAULT_CHECK_INTERVAL
-
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cutoff = (datetime.now() - timedelta(days=days)).isoformat()
 
-    # Get total time by summing intervals (in seconds, then convert to minutes)
-    # Use COALESCE to handle records from before the interval column was added
-    cursor.execute('''
-        SELECT SUM(COALESCE(interval_seconds, ?)) as total_seconds
-        FROM status_checks WHERE timestamp >= ?
-    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
-    row = cursor.fetchone()
-    total_seconds = row['total_seconds'] or 0
-    total_minutes = total_seconds / 60.0
+    # Calculate actual time coverage using timestamp differences
+    # This is more accurate than stored interval_seconds which may be wrong
+    # Cap individual gaps at 5 minutes to handle overnight/restart gaps
+    MAX_GAP_SECONDS = 300  # 5 minutes - any gap larger is considered a break in monitoring
 
-    # Time per status (what users actually see on dashboard)
     cursor.execute('''
-        SELECT best_status, SUM(COALESCE(interval_seconds, ?)) as seconds
+        SELECT timestamp, best_status, status
         FROM status_checks
         WHERE timestamp >= ?
-        GROUP BY best_status
-    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
+        ORDER BY timestamp
+    ''', (cutoff,))
 
-    by_status = {'green': 0.0, 'yellow': 0.0, 'red': 0.0}
-    for row in cursor.fetchall():
-        by_status[row['best_status']] = round(row['seconds'] / 60.0, 1)
+    rows = cursor.fetchall()
+    conn.close()
 
-    # Delay time uses raw status (actual delay detections, regardless of smoothing)
-    cursor.execute('''
-        SELECT SUM(COALESCE(interval_seconds, ?)) as seconds
-        FROM status_checks
-        WHERE timestamp >= ? AND status = 'yellow'
-    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
-    row = cursor.fetchone()
-    delayed_seconds = row['seconds'] or 0
+    if not rows:
+        return {
+            'total_minutes': 0.0,
+            'delayed_minutes': 0.0,
+            'delay_rate': 0.0,
+            'by_status': {'green': 0.0, 'yellow': 0.0, 'red': 0.0}
+        }
+
+    total_seconds = 0.0
+    delayed_seconds = 0.0
+    by_status_seconds = {'green': 0.0, 'yellow': 0.0, 'red': 0.0}
+
+    prev_timestamp = None
+    for row in rows:
+        current_timestamp = datetime.fromisoformat(row['timestamp'])
+
+        if prev_timestamp is not None:
+            gap = (current_timestamp - prev_timestamp).total_seconds()
+            # Cap the gap to handle breaks in monitoring
+            effective_gap = min(gap, MAX_GAP_SECONDS)
+
+            total_seconds += effective_gap
+
+            # Attribute time to the status that was active during this period
+            best_status = row['best_status']
+            if best_status in by_status_seconds:
+                by_status_seconds[best_status] += effective_gap
+
+            # Track actual delay detections (raw status)
+            if row['status'] == 'yellow':
+                delayed_seconds += effective_gap
+
+        prev_timestamp = current_timestamp
+
+    total_minutes = total_seconds / 60.0
     delayed_minutes = delayed_seconds / 60.0
 
-    conn.close()
+    by_status = {s: round(secs / 60.0, 1) for s, secs in by_status_seconds.items()}
 
     delay_rate = delayed_minutes / total_minutes if total_minutes > 0 else 0.0
 
@@ -522,12 +543,14 @@ def get_delays_by_station(days=7):
         ]
         Sorted by minutes descending.
     """
-    from lib.config import DEFAULT_CHECK_INTERVAL
-
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+
+    # Use 60 seconds as default - this matches actual observed check intervals
+    # (stored interval_seconds may be incorrect)
+    ACTUAL_CHECK_INTERVAL = 60
 
     # Join with status_checks to get interval for each incident
     # Each incident represents one check interval of delay at that station
@@ -536,19 +559,20 @@ def get_delays_by_station(days=7):
             di.station,
             di.station_name,
             di.type,
-            SUM(COALESCE(sc.interval_seconds, ?)) as seconds
+            COUNT(*) as count
         FROM delay_incidents di
         JOIN status_checks sc ON di.check_id = sc.id
         WHERE di.timestamp >= ? AND di.station IS NOT NULL
         GROUP BY di.station, di.type
         ORDER BY di.station
-    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
+    ''', (cutoff,))
 
-    # Aggregate by station
+    # Aggregate by station - multiply count by actual interval
     stations = {}
     for row in cursor.fetchall():
         station = row['station']
-        minutes = row['seconds'] / 60.0
+        # Each incident represents one check interval
+        minutes = (row['count'] * ACTUAL_CHECK_INTERVAL) / 60.0
         if station not in stations:
             stations[station] = {
                 'station': station,
@@ -584,30 +608,33 @@ def get_delays_by_time(days=7):
             'by_day': {0: minutes, ..., 6: minutes}  # 0=Monday
         }
     """
-    from lib.config import DEFAULT_CHECK_INTERVAL
-
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cutoff = (datetime.now() - timedelta(days=days)).isoformat()
 
-    # Join with status_checks to get interval for each incident
+    # Use 60 seconds as default - this matches actual observed check intervals
+    ACTUAL_CHECK_INTERVAL = 60
+
+    # Get delay incidents with timestamps
     cursor.execute('''
-        SELECT di.timestamp, COALESCE(sc.interval_seconds, ?) as interval_seconds
+        SELECT di.timestamp
         FROM delay_incidents di
         JOIN status_checks sc ON di.check_id = sc.id
         WHERE di.timestamp >= ?
-    ''', (DEFAULT_CHECK_INTERVAL, cutoff))
+    ''', (cutoff,))
 
     by_hour = {h: 0.0 for h in range(24)}
     by_day = {d: 0.0 for d in range(7)}
 
+    # Each incident represents one check interval of delay
+    minutes_per_incident = ACTUAL_CHECK_INTERVAL / 60.0
+
     for row in cursor.fetchall():
         try:
             dt = datetime.fromisoformat(row['timestamp'])
-            minutes = row['interval_seconds'] / 60.0
-            by_hour[dt.hour] += minutes
-            by_day[dt.weekday()] += minutes
+            by_hour[dt.hour] += minutes_per_incident
+            by_day[dt.weekday()] += minutes_per_incident
         except ValueError:
             continue
 
