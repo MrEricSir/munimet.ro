@@ -20,6 +20,9 @@ See [CONFIGURATION.md](../CONFIGURATION.md) for actual deployment configuration 
 
 # Stop services
 ./deploy/local/stop.sh       # Stop all services
+
+# Manual tasks
+./deploy/local/run-reports.sh  # Regenerate analytics reports
 ```
 
 Access: http://localhost:8000
@@ -36,6 +39,9 @@ Access: http://localhost:8000
 
 # Verify deployment
 ./deploy/cloud/verify.sh                  # Check all services, logs, permissions
+
+# Manual tasks
+./deploy/cloud/run-reports.sh             # Regenerate analytics reports
 ```
 
 Access: See service URL in [CONFIGURATION.md](../CONFIGURATION.md)
@@ -107,6 +113,18 @@ Checks:
 ```
 
 Gracefully stops both services, falling back to force kill if needed.
+
+### Running Analytics Reports
+
+```bash
+./deploy/local/run-reports.sh
+```
+
+Regenerates cached analytics reports (1-day, 7-day, 30-day periods). Reports are cached to `artifacts/runtime/cache/` and served by the analytics dashboard.
+
+Run this after:
+- Making changes to analytics calculation logic
+- Wanting to see updated analytics immediately (instead of waiting for scheduled refresh)
 
 ### Troubleshooting
 
@@ -268,7 +286,7 @@ export GCP_REGION="REGION"
 ./deploy/cloud/setup-scheduler.sh
 ```
 
-**Manual trigger:**
+**Manual trigger (status checker):**
 ```bash
 # Option 1: Via scheduler
 gcloud scheduler jobs run SCHEDULER_JOB_NAME --location=REGION
@@ -276,6 +294,17 @@ gcloud scheduler jobs run SCHEDULER_JOB_NAME --location=REGION
 # Option 2: Run job directly (faster for testing)
 gcloud run jobs execute CHECKER_JOB_NAME --region=REGION
 ```
+
+**Manual trigger (analytics reports):**
+```bash
+# Regenerate analytics reports (waits for completion)
+./deploy/cloud/run-reports.sh
+
+# Run in background (don't wait)
+./deploy/cloud/run-reports.sh --async
+```
+
+Run this after deploying changes to analytics calculation logic, or to refresh reports immediately.
 
 ### Monitoring
 
