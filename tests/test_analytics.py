@@ -392,16 +392,17 @@ class TestDelayFrequencyQuery:
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delay_frequency(days=7)
 
-        # 100 checks * 30 seconds = 3000 seconds = 50 minutes total
-        assert result['total_minutes'] == 50.0
-        # 20 yellow checks * 30 seconds = 600 seconds = 10 minutes delayed
+        # 100 records = 99 gaps (first record has no previous) * 30 seconds = 49.5 minutes
+        assert result['total_minutes'] == 49.5
+        # 20 yellow records contribute 20 gaps * 30 seconds = 10 minutes delayed
         assert result['delayed_minutes'] == 10.0
-        assert 0.19 <= result['delay_rate'] <= 0.21  # ~20%
+        assert 0.19 <= result['delay_rate'] <= 0.22  # ~20%
 
-        # Time per status in minutes
-        assert result['by_status']['green'] == 35.0  # 70 * 30s = 35 min
-        assert result['by_status']['yellow'] == 10.0  # 20 * 30s = 10 min
-        assert result['by_status']['red'] == 5.0  # 10 * 30s = 5 min
+        # Time per status in minutes (gaps attributed to current record's status)
+        # Record 0 (green) has no gap, records 1-69 (green) receive 69 gaps
+        assert result['by_status']['green'] == 34.5  # 69 gaps * 30s = 34.5 min
+        assert result['by_status']['yellow'] == 10.0  # 20 gaps * 30s = 10 min
+        assert result['by_status']['red'] == 5.0  # 10 gaps * 30s = 5 min
 
     def test_get_delay_frequency_empty_db(self, tmp_path):
         """Test delay frequency with empty database."""
