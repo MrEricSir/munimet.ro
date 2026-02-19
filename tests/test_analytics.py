@@ -392,15 +392,16 @@ class TestDelayFrequencyQuery:
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delay_frequency(days=7)
 
-        # 100 records = 99 gaps (first record has no previous) * 30 seconds = 49.5 minutes
-        assert result['total_minutes'] == 49.5
+        # 100 records at 30s intervals = 99 inter-record gaps * 30s = 49.5 min
+        # Plus gap from cutoff (7 days ago) to first record (3 days ago), capped at 5 min
+        assert result['total_minutes'] == 54.5
         # 20 yellow records contribute 20 gaps * 30 seconds = 10 minutes delayed
         assert result['delayed_minutes'] == 10.0
-        assert 0.19 <= result['delay_rate'] <= 0.22  # ~20%
+        assert 0.17 <= result['delay_rate'] <= 0.20  # ~18%
 
-        # Time per status in minutes (gaps attributed to current record's status)
-        # Record 0 (green) has no gap, records 1-69 (green) receive 69 gaps
-        assert result['by_status']['green'] == 34.5  # 69 gaps * 30s = 34.5 min
+        # Time per status in minutes
+        # First record (green) gets capped 5-min gap from cutoff, records 1-69 get 69 * 30s
+        assert result['by_status']['green'] == 39.5  # (69 gaps * 30s) + 5 min cutoff gap
         assert result['by_status']['yellow'] == 10.0  # 20 gaps * 30s = 10 min
         assert result['by_status']['red'] == 5.0  # 10 gaps * 30s = 5 min
 
@@ -830,8 +831,9 @@ class TestIntervalHandling:
 
                     result = analytics.get_delay_frequency(days=1)
 
-        # Total should be 1 + 6 = 7 minutes
-        assert result['total_minutes'] == 7.0
+        # Inter-record gaps: 1 + 6 = 7 minutes
+        # Plus gap from cutoff (1 day ago) to first record (1 hour ago), capped at 5 min
+        assert result['total_minutes'] == 12.0
 
     def test_mixed_intervals_in_station_delays(self, test_db):
         """Test that station delay minutes are calculated correctly.
@@ -878,11 +880,10 @@ class TestIntervalHandling:
         assert powell['minutes'] == 2.0
 
     def test_null_interval_uses_default_in_queries(self, test_db):
-        """Test that timestamp-based calculation handles records correctly.
+        """Test that timestamp-based calculation handles a single record.
 
-        Note: With timestamp-based calculation, time is computed from gaps
-        between consecutive records. A single record has no gap, so it
-        contributes 0 to total time. This is expected behavior.
+        A single record gets the gap from cutoff to its timestamp,
+        capped at MAX_GAP_SECONDS (5 min).
         """
         # Manually insert a record with NULL interval (simulating pre-migration data)
         conn = sqlite3.connect(str(test_db))
@@ -898,9 +899,8 @@ class TestIntervalHandling:
             with patch.object(analytics, '_is_cloud_run', return_value=False):
                 result = analytics.get_delay_frequency(days=1)
 
-        # Single record has no previous timestamp to calculate gap from
-        # so it contributes 0 to total time (expected behavior)
-        assert result['total_minutes'] == 0.0
+        # Single record gets capped gap from cutoff (1 day ago) = 5 min
+        assert result['total_minutes'] == 5.0
 
     def test_cloud_run_interval_constant_exists(self):
         """Test that CLOUD_CHECK_INTERVAL is defined in config."""

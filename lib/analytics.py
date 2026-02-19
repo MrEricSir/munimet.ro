@@ -490,25 +490,25 @@ def get_delay_frequency(days=7):
     delayed_seconds = 0.0
     by_status_seconds = {'green': 0.0, 'yellow': 0.0, 'red': 0.0}
 
-    prev_timestamp = None
+    cutoff_dt = datetime.fromisoformat(cutoff)
+    prev_timestamp = cutoff_dt
     for row in rows:
         current_timestamp = datetime.fromisoformat(row['timestamp'])
 
-        if prev_timestamp is not None:
-            gap = (current_timestamp - prev_timestamp).total_seconds()
-            # Cap the gap to handle breaks in monitoring
-            effective_gap = min(gap, MAX_GAP_SECONDS)
+        gap = (current_timestamp - prev_timestamp).total_seconds()
+        # Cap the gap to handle breaks in monitoring
+        effective_gap = min(gap, MAX_GAP_SECONDS)
 
-            total_seconds += effective_gap
+        total_seconds += effective_gap
 
-            # Attribute time to the status that was active during this period
-            best_status = row['best_status']
-            if best_status in by_status_seconds:
-                by_status_seconds[best_status] += effective_gap
+        # Attribute time to the status that was active during this period
+        best_status = row['best_status']
+        if best_status in by_status_seconds:
+            by_status_seconds[best_status] += effective_gap
 
-            # Track actual delay detections (raw status)
-            if row['status'] == 'yellow':
-                delayed_seconds += effective_gap
+        # Track actual delay detections (raw status)
+        if row['status'] == 'yellow':
+            delayed_seconds += effective_gap
 
         prev_timestamp = current_timestamp
 
