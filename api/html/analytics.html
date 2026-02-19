@@ -272,6 +272,9 @@
             const yellowPct = ((freq.by_status.yellow / totalMinutes) * 100).toFixed(1);
             const redPct = ((freq.by_status.red / totalMinutes) * 100).toFixed(1);
 
+            const periodLabels = {1: '24 Hours', 7: '7 Days', 30: '30 Days', 365: '1 Year'};
+            const periodLabel = periodLabels[currentDays] || `${currentDays} Days`;
+
             const cacheInfo = data.from_cache
                 ? `Data cached ${Math.round(data.cache_age / 60)} min ago`
                 : `Generated ${new Date(data.generated_at).toLocaleTimeString()}`;
@@ -279,8 +282,8 @@
             document.getElementById('content').innerHTML = `
                 <div class="stats-summary">
                     <div class="stat-card">
-                        <div class="stat-value">${formatDuration(totalMinutes)}</div>
-                        <div class="stat-label">Monitored</div>
+                        <div class="stat-value">${periodLabel}</div>
+                        <div class="stat-label">${formatDuration(totalMinutes)} monitored</div>
                     </div>
                     <div class="stat-card green">
                         <div class="stat-value">${greenPct}%</div>
