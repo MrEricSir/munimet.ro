@@ -228,15 +228,17 @@
         }
 
         function formatDuration(minutes) {
-            if (minutes < 60) {
-                return `${Math.round(minutes)} min`;
-            } else if (minutes < 1440) {
-                const hours = Math.floor(minutes / 60);
-                const mins = Math.round(minutes % 60);
+            // Round to whole minutes first to avoid overflow from rounding parts
+            const total = Math.round(minutes);
+            if (total < 60) {
+                return `${total} min`;
+            } else if (total < 1440) {
+                const hours = Math.floor(total / 60);
+                const mins = total % 60;
                 return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
             } else {
-                const days = Math.floor(minutes / 1440);
-                const hours = Math.round((minutes % 1440) / 60);
+                const days = Math.floor(total / 1440);
+                const hours = Math.floor((total % 1440) / 60);
                 return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
             }
         }

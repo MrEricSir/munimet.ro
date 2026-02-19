@@ -394,16 +394,18 @@ class TestDelayFrequencyQuery:
 
         # 100 records at 30s intervals = 99 inter-record gaps * 30s = 49.5 min
         # Plus gap from cutoff (7 days ago) to first record (3 days ago), capped at 5 min
-        assert result['total_minutes'] == 54.5
+        # Plus trailing gap from last record (3 days ago) to now, capped at 5 min
+        assert result['total_minutes'] == 59.5
         # 20 yellow records contribute 20 gaps * 30 seconds = 10 minutes delayed
         assert result['delayed_minutes'] == 10.0
-        assert 0.17 <= result['delay_rate'] <= 0.20  # ~18%
+        assert 0.15 <= result['delay_rate'] <= 0.18  # ~17%
 
         # Time per status in minutes
         # First record (green) gets capped 5-min gap from cutoff, records 1-69 get 69 * 30s
+        # Last record (red) gets capped 5-min trailing gap to now
         assert result['by_status']['green'] == 39.5  # (69 gaps * 30s) + 5 min cutoff gap
         assert result['by_status']['yellow'] == 10.0  # 20 gaps * 30s = 10 min
-        assert result['by_status']['red'] == 5.0  # 10 gaps * 30s = 5 min
+        assert result['by_status']['red'] == 10.0  # (10 gaps * 30s) + 5 min trailing gap
 
     def test_get_delay_frequency_empty_db(self, tmp_path):
         """Test delay frequency with empty database."""
@@ -833,7 +835,8 @@ class TestIntervalHandling:
 
         # Inter-record gaps: 1 + 6 = 7 minutes
         # Plus gap from cutoff (1 day ago) to first record (1 hour ago), capped at 5 min
-        assert result['total_minutes'] == 12.0
+        # Plus trailing gap from last record (50 min ago) to now, capped at 5 min
+        assert result['total_minutes'] == 17.0
 
     def test_mixed_intervals_in_station_delays(self, test_db):
         """Test that station delay minutes are calculated correctly.

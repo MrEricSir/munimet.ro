@@ -511,6 +511,18 @@ def get_delay_frequency(days=7):
             delayed_seconds += effective_gap
 
         prev_timestamp = current_timestamp
+        last_row = row
+
+    # Include trailing gap from last record to now (capped like all gaps)
+    trailing_gap = (datetime.now() - prev_timestamp).total_seconds()
+    effective_trailing = min(max(trailing_gap, 0), MAX_GAP_SECONDS)
+    total_seconds += effective_trailing
+    # Attribute trailing time to the last record's status
+    best_status = last_row['best_status']
+    if best_status in by_status_seconds:
+        by_status_seconds[best_status] += effective_trailing
+    if last_row['status'] == 'yellow':
+        delayed_seconds += effective_trailing
 
     total_minutes = total_seconds / 60.0
     delayed_minutes = delayed_seconds / 60.0
