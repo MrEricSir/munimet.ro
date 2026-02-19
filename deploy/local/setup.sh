@@ -25,26 +25,26 @@ echo ""
 
 # Create virtual environment
 echo "[2/4] Creating Python virtual environment..."
-if [ -d "api/venv" ]; then
-    echo "⚠️  Virtual environment already exists: api/venv"
+if [ -d ".venv" ]; then
+    echo "⚠️  Virtual environment already exists: .venv"
     read -p "Recreate? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf api/venv
-        python3 -m venv api/venv
+        rm -rf .venv
+        python3 -m venv .venv
         echo "✓ Virtual environment recreated"
     else
         echo "  Skipping..."
     fi
 else
-    python3 -m venv api/venv
-    echo "✓ Virtual environment created: api/venv"
+    python3 -m venv .venv
+    echo "✓ Virtual environment created: .venv"
 fi
 echo ""
 
 # Install dependencies
 echo "[3/4] Installing Python dependencies..."
-source api/venv/bin/activate
+source .venv/bin/activate
 pip install --upgrade pip --quiet
 pip install -r api/requirements.txt
 echo "✓ Dependencies installed"
@@ -81,6 +81,6 @@ echo "  2. Verify status:   ./deploy/local/verify.sh"
 echo "  3. Stop services:   ./deploy/local/stop.sh"
 echo ""
 echo "Or run individual components:"
-echo "  Activate venv:      source api/venv/bin/activate"
+echo "  Activate venv:      source .venv/bin/activate"
 echo "  Run checker:        python api/check_status.py --write-cache --continuous"
 echo "  Run API:            python -m gunicorn api:app --bind 0.0.0.0:8000"

@@ -165,7 +165,13 @@ munimet.ro/
 ├── tests/                 # Test suite
 │   ├── images/            # Test images (~2MB)
 │   ├── test_system_status.py   # Status detection tests
-│   └── test_train_detection.py # Train detection tests
+│   ├── test_train_detection.py # Train detection tests
+│   ├── test_api.py             # API endpoint tests
+│   ├── test_analytics.py       # Analytics module tests
+│   ├── test_notifiers.py       # Notification system tests
+│   ├── test_check_status.py    # Status checker tests
+│   ├── test_circuit_breaker.py # Circuit breaker tests
+│   └── test_frontend.py        # Frontend integration tests
 │
 └── artifacts/             # Generated data (synced via GCS)
     ├── reference_data/     # Reference images (~270MB)

@@ -15,8 +15,8 @@ echo "=========================================="
 echo ""
 
 # Check if venv exists
-if [ ! -d "api/venv" ]; then
-    echo "Error: Virtual environment not found: api/venv"
+if [ ! -d ".venv" ]; then
+    echo "Error: Virtual environment not found: .venv"
     echo "  Run: ./deploy/local/setup.sh"
     exit 1
 fi
@@ -30,7 +30,7 @@ if [ ! -f "artifacts/runtime/analytics.db" ]; then
 fi
 
 # Activate virtual environment
-source api/venv/bin/activate
+source .venv/bin/activate
 
 echo "Generating analytics reports..."
 echo ""

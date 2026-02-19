@@ -55,14 +55,14 @@ echo ""
 ERRORS=0
 
 # Check for virtual environment
-if [ ! -d "api/venv" ]; then
+if [ ! -d ".venv" ]; then
     echo -e "${RED}Error: Virtual environment not found${NC}"
     echo "Run: ./deploy/local/setup.sh"
     exit 1
 fi
 
 # Activate virtual environment
-source api/venv/bin/activate
+source .venv/bin/activate
 
 # 1. Linting
 if [ "$RUN_LINT" = true ]; then

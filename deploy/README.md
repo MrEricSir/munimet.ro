@@ -77,7 +77,7 @@ Browser: http://localhost:8000
 
 This script:
 1. Checks Python version
-2. Creates virtual environment: `api/venv`
+2. Creates virtual environment: `.venv`
 3. Installs dependencies from `api/requirements.txt`
 4. Creates runtime directories
 

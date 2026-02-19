@@ -12,8 +12,8 @@ echo "=========================================="
 echo ""
 
 # Check if venv exists
-if [ ! -d "api/venv" ]; then
-    echo "❌ Virtual environment not found: api/venv"
+if [ ! -d ".venv" ]; then
+    echo "❌ Virtual environment not found: .venv"
     echo "   Run: ./deploy/local/setup.sh"
     exit 1
 fi
@@ -22,7 +22,25 @@ fi
 mkdir -p artifacts/runtime/pids
 
 # Activate virtual environment
-source api/venv/bin/activate
+source .venv/bin/activate
+
+# Verify required packages are installed
+echo "Checking dependencies..."
+MISSING=0
+for pkg in falcon gunicorn cv2 numpy requests PIL pytesseract; do
+    if ! python -c "import $pkg" 2>/dev/null; then
+        echo "  ❌ Missing: $pkg"
+        MISSING=$((MISSING + 1))
+    fi
+done
+if [ $MISSING -gt 0 ]; then
+    echo ""
+    echo "❌ $MISSING required package(s) missing from .venv"
+    echo "   Run: ./deploy/local/setup.sh"
+    exit 1
+fi
+echo "✓ All dependencies available"
+echo ""
 
 echo "[1/2] Starting cache writer..."
 # Start cache writer in background

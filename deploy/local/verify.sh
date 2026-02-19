@@ -16,11 +16,11 @@ RUNTIME_DIR="artifacts/runtime"
 ISSUES=0
 
 echo "[1/5] Checking Python environment..."
-if [ -d "api/venv" ]; then
-    echo "✓ Virtual environment exists: api/venv"
+if [ -d ".venv" ]; then
+    echo "✓ Virtual environment exists: .venv"
 
     # Check if venv has dependencies (falcon, cv2, numpy for OpenCV-based detection)
-    if source api/venv/bin/activate 2>/dev/null && python -c "import falcon, cv2, numpy" 2>/dev/null; then
+    if source .venv/bin/activate 2>/dev/null && python -c "import falcon, cv2, numpy" 2>/dev/null; then
         echo "✓ Dependencies installed"
         deactivate
     else

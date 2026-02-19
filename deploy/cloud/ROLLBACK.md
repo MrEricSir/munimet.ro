@@ -185,9 +185,9 @@ To avoid needing rollbacks, test deployments before they go live:
 
 ### 1. Local Testing
 ```bash
-# Run API locally with production model
-cd api
-gunicorn api:app --bind 0.0.0.0:8000
+# Run API locally
+source .venv/bin/activate
+python -m gunicorn api.api:app --bind 0.0.0.0:8000
 
 # Test in another terminal
 curl http://localhost:8000/status

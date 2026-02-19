@@ -133,10 +133,9 @@ Reference data is synced with Google Cloud Storage using `gsutil rsync`:
 - **Downloads**: `artifacts/runtime/downloads/`
 - **Logs**: `artifacts/runtime/*.log`
 
-### Virtual Environments
+### Virtual Environment
 
-- **API**: `api/venv/`
-- **Tests**: `tests/venv/`
+- **All components**: `.venv/`
 
 ## File Locations
 
@@ -220,7 +219,7 @@ The system status is determined by:
 
 ### Detection Parameters
 
-**HSV Color Ranges** (`scripts/station_detector.py`):
+**HSV Color Ranges** (`lib/station_detector.py`):
 - Platform blue (normal): H=95-115, S=100-255, V=100-255
 - Platform yellow (hold): H=20-35, S=150-255, V=150-255
 - Track cyan (normal): H=80-100, S=100-255, V=100-255

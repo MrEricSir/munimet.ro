@@ -35,12 +35,13 @@ See [deploy/cloud/README.md](../deploy/cloud/README.md) for complete cloud deplo
 For manual local development without deployment scripts:
 
 ```bash
+# From project root:
 # Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r api/requirements.txt
 
 # Run status checker (single execution)
 python check_status.py
@@ -439,6 +440,5 @@ No undeclared or unused dependencies detected.
 
 - **Deployment Guide**: [deploy/README.md](../deploy/README.md) - Local and cloud deployment
 - **Cloud Deployment**: [deploy/cloud/README.md](../deploy/cloud/README.md) - Google Cloud Run
-- **Training Guide**: [training/README.md](../training/README.md) - Model training workflow
 - **Testing Guide**: [tests/README.md](../tests/README.md) - Automated test suite
 - **Configuration**: [CONFIGURATION.md](../CONFIGURATION.md) - System configuration values

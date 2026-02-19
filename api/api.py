@@ -381,9 +381,14 @@ class LatestImageResource:
         # Try to get image path from cache (works for local development)
         cache_data = read_cache()
         if cache_data:
-            statuses = cache_data.get('statuses', [])
-            if statuses and 'image_path' in statuses[0]:
-                image_path = statuses[0]['image_path']
+            # Prefer reported_status image to stay in sync with /status train positions
+            reported = cache_data.get('reported_status') or cache_data.get('best_status')
+            if reported and 'image_path' in reported:
+                image_path = reported['image_path']
+            else:
+                statuses = cache_data.get('statuses', [])
+                if statuses and 'image_path' in statuses[0]:
+                    image_path = statuses[0]['image_path']
 
         # Check if cached path exists locally
         if image_path and os.path.exists(image_path):

@@ -259,77 +259,41 @@ After installing Docker Desktop, start it manually from the Start menu.
 
 ## Python Environment Setup
 
-After installing base dependencies, set up isolated Python virtual environments for each project component.
-
-### Understanding Project Components
-
-The project has three separate Python environments:
-
-- **scripts/** - Detection scripts and utilities
-- **api/** - Production web API and prediction service
-- **tests/** - Automated test suite
-
-Each has its own `requirements.txt` and virtual environment.
+After installing base dependencies, set up the Python virtual environment.
 
 ### Automated Setup
 
-Use our setup script to create all environments:
+Use the local deployment setup script:
 
 **macOS/Linux:**
 ```bash
-source scripts/setup/setup-python-env.sh
+./deploy/local/setup.sh
 ```
 
-**Windows:**
-```powershell
-.\scripts\setup\setup-python-env.ps1
+**Windows (via WSL or Git Bash):**
+```bash
+./deploy/local/setup.sh
 ```
 
-The script will prompt you to select which components to set up.
+This creates a `.venv` virtual environment at the project root and installs all dependencies from `api/requirements.txt`.
 
 ### Manual Setup
 
-If you prefer to set up environments manually:
-
-#### API Environment
+If you prefer to set up the environment manually:
 
 ```bash
-cd api
-
-# Create virtual environment
-python3 -m venv venv
+# From the project root
+python3 -m venv .venv
 
 # Activate environment
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate   # Windows
+source .venv/bin/activate  # macOS/Linux
+# .venv\Scripts\activate   # Windows
 
 # Upgrade pip
 python -m pip install --upgrade pip
 
 # Install dependencies
-pip install -r requirements.txt
-
-# Deactivate when done
-deactivate
-```
-
-#### Test Environment
-
-```bash
-cd tests
-
-# Create virtual environment
-python3 -m venv venv
-
-# Activate environment
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate   # Windows
-
-# Upgrade pip
-python -m pip install --upgrade pip
-
-# Install dependencies
-pip install -r requirements.txt
+pip install -r api/requirements.txt
 
 # Deactivate when done
 deactivate
@@ -411,9 +375,8 @@ git --version
 # Check Google Cloud SDK
 gcloud --version
 
-# Check Python environment (from api/)
-cd api
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# Check Python environment (from project root)
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 python -c "import falcon; import cv2; print('Dependencies OK')"
 deactivate
 ```
@@ -442,7 +405,7 @@ python3 --version
 python3.13 --version
 
 # Use specific version for venv
-python3.13 -m venv venv
+python3.13 -m venv .venv
 ```
 
 ### Virtual Environment Activation Issues
@@ -452,14 +415,14 @@ python3.13 -m venv venv
 **Solution:**
 ```bash
 # macOS/Linux: Use dot notation if 'source' doesn't work
-. venv/bin/activate
+. .venv/bin/activate
 
 # Windows: Ensure PowerShell execution policy allows scripts
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 # Windows: Try alternative activation method
-venv\Scripts\activate.bat  # CMD
-venv\Scripts\Activate.ps1  # PowerShell
+.venv\Scripts\activate.bat  # CMD
+.venv\Scripts\Activate.ps1  # PowerShell
 ```
 
 ### pip Install Failures
