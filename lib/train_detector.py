@@ -731,7 +731,13 @@ class TrainDetector:
                 if y1 < station_cutoff:
                     y1 = station_cutoff
 
-            if y2 - y1 < 20:
+            height = y2 - y1
+            if height < 45:
+                continue
+
+            # Colored train IDs are vertical text (tall and narrow).
+            # Platform indicators are short and wide (aspect ~1.5) — reject those.
+            if height / max(width, 1) < 2.5:
                 continue
 
             # Extract and OCR the colored mask region
@@ -780,7 +786,13 @@ class TrainDetector:
                     if y1 < station_cutoff:
                         y1 = station_cutoff
 
-                if y2 - y1 < 20:
+                height = y2 - y1
+                if height < 45:
+                    continue
+
+                # Colored train IDs are vertical text (tall and narrow).
+                # Platform indicators are short and wide (aspect ~1.5) — reject those.
+                if height / max(width, 1) < 2.5:
                     continue
 
                 pad = 3
