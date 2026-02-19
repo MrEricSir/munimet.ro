@@ -43,13 +43,13 @@ KNOWN_STATUSES = [
     ("muni_snapshot_20251207_021407.jpg", "red", "Late night - not operating"),
     ("muni_snapshot_20251207_005046.jpg", "red", "Late night - not operating"),
     ("muni_snapshot_20251208_002133.jpg", "red", "Late night - not operating"),
-    # Maintenance display images - OCR detects false positive "trains" from display elements
-    # (signal indicators like "*2117X" and station labels misread as train IDs)
-    # These return green because detector finds 2 apparent trains with valid route suffixes
-    ("muni_snapshot_20251212_002127.jpg", "green", "Maintenance display - false positive trains detected"),
-    ("muni_snapshot_20251212_002115.jpg", "green", "Maintenance display - false positive trains detected"),
-    ("muni_snapshot_20251212_002351.jpg", "green", "Maintenance display - false positive trains detected"),
+    # Maintenance display images - non-revenue trains (X suffix, *NNN* format)
+    # are now correctly excluded from revenue count, so these return red
+    ("muni_snapshot_20251212_002127.jpg", "red", "Maintenance display - only non-revenue trains detected"),
+    ("muni_snapshot_20251212_002115.jpg", "red", "Maintenance display - only non-revenue trains detected"),
+    ("muni_snapshot_20251212_002351.jpg", "red", "Maintenance display - only non-revenue trains detected"),
     ("muni_snapshot_20260124_020104.jpg", "red", "Not operating - overnight"),
+    ("muni_snapshot_20260218_013611.jpg", "red", "Overnight - non-revenue train 2206X, red track segments"),
 ]
 
 
@@ -161,6 +161,65 @@ class TestStatusCalculationLogic:
             {'id': 'UNKNOWN@700'},
         ]  # Only 1 valid train < 2 threshold
         assert calculate_system_status(trains_one_valid, [], []) == 'red'
+
+
+class TestNonRevenueFiltering:
+    """Tests for non-revenue train filtering in status calculation."""
+
+    def test_x_suffix_only_is_red(self):
+        """Trains with X suffix (non-revenue) should not count as operating."""
+        from lib.detection import calculate_system_status
+
+        trains = [
+            {'id': '2206X'},
+            {'id': 'W2117X'},
+        ]
+        assert calculate_system_status(trains, [], []) == 'red'
+
+    def test_star_format_only_is_red(self):
+        """Trains with *NNN* format (non-revenue) should not count as operating."""
+        from lib.detection import calculate_system_status
+
+        trains = [
+            {'id': '*442*'},
+            {'id': '*471*'},
+        ]
+        assert calculate_system_status(trains, [], []) == 'red'
+
+    def test_non_revenue_mix_below_threshold_is_red(self):
+        """Non-revenue trains + 1 revenue train is still below threshold (red)."""
+        from lib.detection import calculate_system_status
+
+        trains = [
+            {'id': '2206X'},      # non-revenue
+            {'id': '*442*'},      # non-revenue
+            {'id': 'W2010LL'},    # revenue
+        ]
+        assert calculate_system_status(trains, [], []) == 'red'
+
+    def test_non_revenue_mix_above_threshold_is_green(self):
+        """Non-revenue trains + 2 revenue trains meets threshold (green)."""
+        from lib.detection import calculate_system_status
+
+        trains = [
+            {'id': '2206X'},      # non-revenue
+            {'id': '*442*'},      # non-revenue
+            {'id': 'W2010LL'},    # revenue
+            {'id': 'M2089MM'},    # revenue
+        ]
+        assert calculate_system_status(trains, [], []) == 'green'
+
+    def test_non_revenue_with_disabled_tracks_is_red(self):
+        """Non-revenue trains with red track segments should be red, not yellow."""
+        from lib.detection import calculate_system_status
+
+        trains = [
+            {'id': '2206X'},      # non-revenue
+            {'id': '*442*'},      # non-revenue
+        ]
+        track_disabled = [{'from': 'CT', 'to': 'US'}]
+        # Red takes precedence: no revenue trains means not operating
+        assert calculate_system_status(trains, [], track_disabled) == 'red'
 
 
 class TestTrainBunchingDetection:

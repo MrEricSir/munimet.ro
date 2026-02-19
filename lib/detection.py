@@ -6,6 +6,7 @@ This module provides the detection API used by the status service,
 combining station detection, train detection, and delay analysis.
 """
 
+import re
 from pathlib import Path
 
 import cv2
@@ -39,6 +40,8 @@ from lib.config import (
     PLATFORM_Y_WESTERN_LOWER_PCT,
     PLATFORM_Y_EASTERN_UPPER_PCT,
     PLATFORM_Y_EASTERN_LOWER_PCT,
+    REVENUE_SINGLE_SUFFIXES,
+    REVENUE_DOUBLE_SUFFIXES,
 )
 
 # Try to import train detector (requires tesseract)
@@ -287,17 +290,19 @@ def calculate_system_status(trains, delays_platforms, delays_segments, bunching_
     """
     Calculate overall system status based on detection data.
 
+    Only revenue trains (those with passenger-service route suffixes) count
+    toward the operating threshold. Non-revenue trains (X suffix, *NNN* format)
+    are detected but don't indicate the system is running.
+
     Returns:
         str: 'red', 'yellow', or 'green'
     """
-    import re
-
     if bunching_incidents is None:
         bunching_incidents = []
 
-    # Check how many trains have valid route suffixes
+    # Check how many trains have revenue route suffixes
     suffix_pattern = re.compile(r'\d{4}([A-Z]{1,2})$')
-    trains_with_routes = 0
+    revenue_trains = 0
 
     for train in trains:
         train_id = train.get('id', '')
@@ -305,10 +310,15 @@ def calculate_system_status(trains, delays_platforms, delays_segments, bunching_
             continue
         match = suffix_pattern.search(train_id)
         if match:
-            trains_with_routes += 1
+            suffix = match.group(1)
+            if len(suffix) == 1 and suffix in REVENUE_SINGLE_SUFFIXES:
+                revenue_trains += 1
+            elif len(suffix) == 2 and suffix in REVENUE_DOUBLE_SUFFIXES:
+                revenue_trains += 1
+            # else: non-revenue suffix (X, etc.) — detected but not counted
 
-    # Red: Fewer than MIN_TRAINS_OPERATING trains with route suffixes (not operating)
-    if trains_with_routes < MIN_TRAINS_OPERATING:
+    # Red: Fewer than MIN_TRAINS_OPERATING revenue trains (not operating)
+    if revenue_trains < MIN_TRAINS_OPERATING:
         return 'red'
 
     # Yellow: 2+ platforms in hold OR any track sections disabled OR bunching
@@ -595,15 +605,24 @@ def detect_system_status(image_path):
     # Detect trains
     trains = []
     train_detector = _get_train_detector()
+    suffix_pattern = re.compile(r'\d{4}([A-Z]{1,2})$')
     if train_detector is not None:
         raw_trains = train_detector.detect_trains(img)
         for t in raw_trains:
+            # Extract route suffix for informational purposes
+            route = None
+            match = suffix_pattern.search(t['id'])
+            if match:
+                suffix = match.group(1)
+                if suffix in REVENUE_SINGLE_SUFFIXES or suffix in REVENUE_DOUBLE_SUFFIXES:
+                    route = suffix
             trains.append({
                 'id': t['id'],
                 'x': int(t['x']),
                 'y': int(t['y']),
                 'track': t['track'],
                 'confidence': t.get('confidence', 'high'),
+                'route': route,
             })
 
     # Detect train bunching

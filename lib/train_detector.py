@@ -25,6 +25,9 @@ OCR_CONFIG = '--oem 3 --psm 6'
 # Train ID pattern
 TRAIN_ID_PATTERN = re.compile(r'[A-Z]?\d{4}[A-Z*X]{1,2}')
 
+# Non-revenue train ID pattern (e.g., *442*, *471*, *2206X)
+NON_REVENUE_PATTERN = re.compile(r'\*\d{3,4}[X*]')
+
 # Pattern to detect invalid train IDs with all identical digits (e.g., 1111, 0000)
 # Real Muni train numbers never have 4 identical digits
 INVALID_REPEATED_DIGITS = re.compile(r'(\d)\1{3}')
@@ -1044,6 +1047,11 @@ class TrainDetector:
                            and not _has_suspicious_digits(m)]
                 if matches:
                     return [_clean_suffix(m) for m in matches]
+
+        # Fallback: try non-revenue pattern (e.g., *442*, *471*, *2206X)
+        non_revenue = NON_REVENUE_PATTERN.findall(combined)
+        if non_revenue:
+            return non_revenue
 
         return []
 

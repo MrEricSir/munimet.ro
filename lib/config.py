@@ -168,6 +168,12 @@ VALID_TRAIN_PREFIXES = set('MBCDEFIJKLNRSTW')
 VALID_SINGLE_SUFFIXES = set('JKLMNSTX*')
 VALID_DOUBLE_SUFFIXES = {'JJ', 'KK', 'LL', 'MM', 'NN', 'SS', 'TT'}
 
+# Revenue route classification (for status calculation, not OCR validation)
+# Revenue trains are in passenger service; non-revenue are maintenance/deadhead
+REVENUE_SINGLE_SUFFIXES = set('JKLMNST')
+REVENUE_DOUBLE_SUFFIXES = {'JJ', 'KK', 'LL', 'MM', 'NN', 'SS', 'TT'}
+NON_REVENUE_MARKERS = {'X', '*'}
+
 # Text column detection
 TEXT_COLUMN_GAP_THRESHOLD = 7  # Pixels between separate columns
 TEXT_MIN_ROWS = 5  # Min rows to consider valid text
