@@ -289,3 +289,11 @@ HTTP_MAX_RETRIES = 3
 
 CONFIDENCE_CACHE_VALID = 0.7     # Min confidence to use cached detection
 CONFIDENCE_DETECTION_VALID = 0.7  # Min confidence for valid detection
+
+
+# =============================================================================
+# IMAGE ARCHIVAL
+# =============================================================================
+
+DEFAULT_ARCHIVE_BUCKET = 'munimetro-image-archive'
+BASELINE_ARCHIVE_INTERVAL = 3600  # 1 hour between baseline archives

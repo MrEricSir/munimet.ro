@@ -333,3 +333,24 @@ def gcs_get_blob_size(bucket_name: str, blob_name: str) -> Optional[int]:
 
     blob.reload()  # Fetch metadata
     return blob.size
+
+
+@retry_with_backoff(retryable_exceptions=RETRYABLE_EXCEPTIONS)
+def gcs_list_blobs(bucket_name: str, prefix: str = '') -> list[str]:
+    """
+    List blob names in a GCS bucket with an optional prefix filter.
+
+    Args:
+        bucket_name: Name of the GCS bucket
+        prefix: Optional prefix to filter blobs (e.g., '2026/02/21/')
+
+    Returns:
+        List of blob name strings
+    """
+    from google.cloud import storage
+
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blobs = bucket.list_blobs(prefix=prefix)
+
+    return [blob.name for blob in blobs]

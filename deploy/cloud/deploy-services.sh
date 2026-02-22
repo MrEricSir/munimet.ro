@@ -8,6 +8,7 @@ set -e  # Exit on error
 PROJECT_ID="${GCP_PROJECT_ID:-munimetro}"
 REGION="${GCP_REGION:-us-west1}"
 BUCKET_NAME="${GCS_BUCKET:-munimetro-cache}"
+ARCHIVE_BUCKET="${GCS_ARCHIVE_BUCKET:-munimetro-image-archive}"
 SERVICE_ACCOUNT_NAME="munimetro-api"
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
@@ -137,7 +138,7 @@ gcloud run jobs deploy "$CHECKER_JOB" \
     --cpu 1 \
     --task-timeout 120s \
     --max-retries 3 \
-    --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME}" \
+    --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME},GCS_ARCHIVE_BUCKET=${ARCHIVE_BUCKET}" \
     $SECRETS_FLAG \
     --command="python" \
     --args="-m,api.check_status_job"

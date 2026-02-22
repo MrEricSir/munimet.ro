@@ -23,6 +23,62 @@ This document records the actual configuration values used for this deployment.
   - `latest_image.jpg`, `latest_status.json`: Keep only current version
   - `analytics/*`: Keep 10 most recent versions
 
+#### Image Archive Bucket
+- **Bucket Name**: `munimetro-image-archive`
+- **Region**: `us-west1`
+- **Storage Class**: Standard
+- **Purpose**: Archived snapshot images for debugging and auditing
+- **Access**: Private (service account only)
+- **Lifecycle Policy**: 30-day auto-delete
+- **Path Structure**: `YYYY/MM/DD/muni_snapshot_YYYYMMDD_HHMMSS_<reason>.jpg`
+- **Archive Reasons**:
+  - `transition` — reported status changed (after hysteresis)
+  - `override` — hysteresis overrode raw detection status
+  - `baseline` — periodic green-status snapshot (once per hour)
+- **Environment Variable**: `GCS_ARCHIVE_BUCKET` (checker job only)
+
+##### Downloading Archived Images
+
+When investigating false positives, missed detections, or other detection issues,
+use `scripts/download-archive-images.py` to pull archived snapshots locally:
+
+```bash
+# Download today's archived images
+python scripts/download-archive-images.py
+
+# Download images from a specific date
+python scripts/download-archive-images.py --date 2026-02-21
+
+# Download a date range
+python scripts/download-archive-images.py --from 2026-02-01 --to 2026-02-07
+
+# Only status transitions (most useful for investigating false positives)
+python scripts/download-archive-images.py --date 2026-02-21 --reason transition
+
+# Only hysteresis overrides (raw detection disagreed with reported status)
+python scripts/download-archive-images.py --date 2026-02-21 --reason override
+
+# List what's available without downloading
+python scripts/download-archive-images.py --date 2026-02-21 --list
+
+# Download to a custom directory
+python scripts/download-archive-images.py --date 2026-02-21 --output-dir ./investigation
+```
+
+Images download to `artifacts/runtime/archive/` by default. Each filename encodes
+the timestamp and reason, e.g. `muni_snapshot_20260221_083000_transition.jpg`.
+
+**Typical workflow**: When a user reports a false status change, find the approximate
+time, download that day's `transition` images, and re-run detection locally on
+the downloaded snapshot to reproduce and diagnose the issue:
+
+```bash
+python scripts/download-archive-images.py --date 2026-02-21 --reason transition
+python lib/detection.py artifacts/runtime/archive/muni_snapshot_20260221_083000_transition.jpg
+```
+
+**Requirements**: Requires `gcloud auth login` with access to the archive bucket.
+
 #### Reference Data and Models Bucket
 - **Bucket Name**: `munimetro-annex`
 - **Region**: `us-west1`
@@ -154,6 +210,7 @@ Reference data is synced with Google Cloud Storage using `gsutil rsync`:
 ```bash
 CLOUD_RUN=true
 GCS_BUCKET=munimetro-cache
+GCS_ARCHIVE_BUCKET=munimetro-image-archive  # Checker job only
 ENABLE_FALLBACK=false  # Don't download+predict on API, read cache only
 PORT=8000
 ```

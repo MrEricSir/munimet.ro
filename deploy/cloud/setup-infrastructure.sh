@@ -8,6 +8,7 @@ set -e  # Exit on error
 PROJECT_ID="${GCP_PROJECT_ID:-munimetro}"
 REGION="${GCP_REGION:-us-west1}"
 BUCKET_NAME="${GCS_BUCKET:-munimetro-cache}"
+ARCHIVE_BUCKET="${GCS_ARCHIVE_BUCKET:-munimetro-image-archive}"
 SERVICE_ACCOUNT_NAME="munimetro-api"
 ALERT_EMAIL="${ALERT_EMAIL:-}"  # Set via environment variable
 
@@ -17,6 +18,7 @@ echo "=========================================="
 echo "Project: $PROJECT_ID"
 echo "Region: $REGION"
 echo "Bucket: gs://$BUCKET_NAME"
+echo "Archive Bucket: gs://$ARCHIVE_BUCKET"
 echo "=========================================="
 echo ""
 
@@ -64,6 +66,37 @@ gsutil iam ch -d allUsers:objectViewer "gs://$BUCKET_NAME" 2>/dev/null || true
 echo "✓ Bucket access restricted"
 echo ""
 
+# Create archive bucket for image archival (30-day lifecycle)
+echo "[3b/9] Creating image archive bucket..."
+if gsutil ls -b "gs://$ARCHIVE_BUCKET" &> /dev/null; then
+    echo "⚠️  Bucket already exists: gs://$ARCHIVE_BUCKET"
+else
+    gsutil mb -p "$PROJECT_ID" -l "$REGION" "gs://$ARCHIVE_BUCKET"
+    echo "✓ Bucket created: gs://$ARCHIVE_BUCKET"
+fi
+
+# Ensure archive bucket is private
+echo "  - Ensuring archive bucket is private..."
+gsutil iam ch -d allUsers:objectViewer "gs://$ARCHIVE_BUCKET" 2>/dev/null || true
+
+# Set 30-day lifecycle policy
+echo "  - Setting 30-day lifecycle policy..."
+LIFECYCLE_JSON=$(mktemp)
+cat > "$LIFECYCLE_JSON" <<'LIFECYCLE_EOF'
+{
+  "rule": [
+    {
+      "action": {"type": "Delete"},
+      "condition": {"age": 30}
+    }
+  ]
+}
+LIFECYCLE_EOF
+gsutil lifecycle set "$LIFECYCLE_JSON" "gs://$ARCHIVE_BUCKET"
+rm -f "$LIFECYCLE_JSON"
+echo "✓ Archive bucket configured (30-day auto-delete)"
+echo ""
+
 # Create service account
 echo "[4/9] Creating service account..."
 SERVICE_ACCOUNT_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -84,6 +117,11 @@ gsutil iam ch \
     "serviceAccount:${SERVICE_ACCOUNT_EMAIL}:roles/storage.objectAdmin" \
     "gs://$BUCKET_NAME"
 echo "✓ Service account has objectAdmin access to gs://$BUCKET_NAME"
+
+gsutil iam ch \
+    "serviceAccount:${SERVICE_ACCOUNT_EMAIL}:roles/storage.objectAdmin" \
+    "gs://$ARCHIVE_BUCKET"
+echo "✓ Service account has objectAdmin access to gs://$ARCHIVE_BUCKET"
 echo ""
 
 # Grant service account access to Secret Manager (for social media credentials)

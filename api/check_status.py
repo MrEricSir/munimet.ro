@@ -27,6 +27,7 @@ from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, wr
 from lib.detection import apply_status_hysteresis
 from lib.notifiers import notify_status_change
 from lib.analytics import log_status_check
+from lib.image_archive import archive_image, should_archive_baseline
 
 # Configuration
 SNAPSHOT_DIR = str(PROJECT_ROOT / "artifacts" / "runtime" / "downloads")
@@ -252,6 +253,20 @@ def check_status(should_write_cache=False, interval_seconds=None):
                 print(f"  Image cached")
             else:
                 print(f"  Image cache failed")
+
+            # Archive image for debugging/auditing (cloud only, best-effort)
+            archive_reasons = []
+            if hysteresis_result.get('status_changed') and previous_reported_status is not None:
+                archive_reasons.append('transition')
+            if detection['status'] != reported_status['status']:
+                archive_reasons.append('override')
+            if should_archive_baseline(cache_data, reported_status['status']):
+                archive_reasons.append('baseline')
+                cache_data['last_baseline_archive'] = now.isoformat()
+                write_cache(cache_data)
+            for reason in archive_reasons:
+                if archive_image(result['filepath'], new_status['timestamp'], reason):
+                    print(f"  Image archived ({reason})")
         else:
             print(f"\nCache write failed")
 
