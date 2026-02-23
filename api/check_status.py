@@ -265,7 +265,8 @@ def check_status(should_write_cache=False, interval_seconds=None):
                 cache_data['last_baseline_archive'] = now.isoformat()
                 write_cache(cache_data)
             for reason in archive_reasons:
-                if archive_image(result['filepath'], new_status['timestamp'], reason):
+                raw = detection['status'] if reason == 'override' else None
+                if archive_image(result['filepath'], new_status['timestamp'], reason, raw_status=raw):
                     print(f"  Image archived ({reason})")
         else:
             print(f"\nCache write failed")

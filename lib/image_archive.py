@@ -16,24 +16,30 @@ from lib.gcs_utils import gcs_upload_from_file
 logger = logging.getLogger(__name__)
 
 
-def _build_archive_path(timestamp_str: str, reason: str) -> str:
+def _build_archive_path(timestamp_str: str, reason: str, raw_status: str = None) -> str:
     """
     Build the GCS object path for an archived image.
 
     Args:
         timestamp_str: ISO format timestamp (e.g., '2026-02-21T08:30:00')
         reason: Archive reason ('transition', 'override', or 'baseline')
+        raw_status: For overrides, the raw detection status before hysteresis
+                    (e.g., 'yellow'). Encoded in filename as '_rawYellow'.
 
     Returns:
-        GCS object path like '2026/02/21/muni_snapshot_20260221_083000_transition.jpg'
+        GCS object path like '2026/02/21/muni_snapshot_20260221_083000_override_rawYellow.jpg'
     """
     dt = datetime.fromisoformat(timestamp_str)
     date_prefix = dt.strftime('%Y/%m/%d')
-    filename = dt.strftime(f'muni_snapshot_%Y%m%d_%H%M%S_{reason}.jpg')
+    suffix = reason
+    if reason == 'override' and raw_status:
+        suffix = f'{reason}_raw{raw_status.capitalize()}'
+    filename = dt.strftime(f'muni_snapshot_%Y%m%d_%H%M%S_{suffix}.jpg')
     return f'{date_prefix}/{filename}'
 
 
-def archive_image(image_path: str, timestamp_str: str, reason: str) -> bool:
+def archive_image(image_path: str, timestamp_str: str, reason: str,
+                  raw_status: str = None) -> bool:
     """
     Upload an image to the GCS archive bucket.
 
@@ -44,6 +50,7 @@ def archive_image(image_path: str, timestamp_str: str, reason: str) -> bool:
         image_path: Local path to the image file
         timestamp_str: ISO format timestamp for the image
         reason: Archive reason ('transition', 'override', or 'baseline')
+        raw_status: For overrides, the raw detection status before hysteresis
 
     Returns:
         True if uploaded successfully, False otherwise
@@ -53,7 +60,7 @@ def archive_image(image_path: str, timestamp_str: str, reason: str) -> bool:
 
     try:
         bucket = os.getenv('GCS_ARCHIVE_BUCKET', DEFAULT_ARCHIVE_BUCKET)
-        blob_name = _build_archive_path(timestamp_str, reason)
+        blob_name = _build_archive_path(timestamp_str, reason, raw_status=raw_status)
         gcs_upload_from_file(bucket, blob_name, image_path, content_type='image/jpeg')
         logger.info(f"Archived image: gs://{bucket}/{blob_name}")
         return True

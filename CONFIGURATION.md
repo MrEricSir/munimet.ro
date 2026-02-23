@@ -68,9 +68,33 @@ python scripts/download-archive-images.py --date 2026-02-21 --output-dir ./inves
 Images download to `artifacts/runtime/archive/` by default. Each filename encodes
 the timestamp and reason, e.g. `muni_snapshot_20260221_083000_transition.jpg`.
 
-**Typical workflow**: When a user reports a false status change, find the approximate
-time, download that day's `transition` images, and re-run detection locally on
-the downloaded snapshot to reproduce and diagnose the issue:
+##### Reviewing Archived Images
+
+For a quicker workflow, `scripts/review-archive.py` downloads images, runs
+detection on each, and opens a visual HTML report in your browser:
+
+```bash
+# Review today's archives
+python scripts/review-archive.py
+
+# Review a specific date
+python scripts/review-archive.py --date 2026-02-21
+
+# Review only transitions for a date range
+python scripts/review-archive.py --from 2026-02-01 --to 2026-02-07 --reason transition
+
+# Re-run detection on already-downloaded images (no GCS fetch)
+python scripts/review-archive.py --skip-download
+
+# Generate the report without opening it
+python scripts/review-archive.py --date 2026-02-21 --no-open
+```
+
+The report is a self-contained HTML file at `artifacts/runtime/archive_review.html`.
+Each image is shown alongside its detected status, train count, and delay details.
+Click any image to expand it to full width.
+
+For single-image investigation, you can also download and analyze manually:
 
 ```bash
 python scripts/download-archive-images.py --date 2026-02-21 --reason transition

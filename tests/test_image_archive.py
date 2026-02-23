@@ -28,9 +28,22 @@ class TestBuildArchivePath:
         path = _build_archive_path('2026-02-21T08:30:00', 'transition')
         assert path == '2026/02/21/muni_snapshot_20260221_083000_transition.jpg'
 
-    def test_override_reason(self):
+    def test_override_reason_without_raw_status(self):
         path = _build_archive_path('2026-02-21T14:05:30', 'override')
         assert path == '2026/02/21/muni_snapshot_20260221_140530_override.jpg'
+
+    def test_override_reason_with_raw_status(self):
+        path = _build_archive_path('2026-02-21T14:05:30', 'override', raw_status='yellow')
+        assert path == '2026/02/21/muni_snapshot_20260221_140530_override_rawYellow.jpg'
+
+    def test_override_reason_with_raw_red(self):
+        path = _build_archive_path('2026-02-21T14:05:30', 'override', raw_status='red')
+        assert path == '2026/02/21/muni_snapshot_20260221_140530_override_rawRed.jpg'
+
+    def test_non_override_ignores_raw_status(self):
+        """raw_status is only encoded for override reason."""
+        path = _build_archive_path('2026-02-21T08:30:00', 'transition', raw_status='yellow')
+        assert path == '2026/02/21/muni_snapshot_20260221_083000_transition.jpg'
 
     def test_baseline_reason(self):
         path = _build_archive_path('2026-01-01T00:00:00', 'baseline')
@@ -99,6 +112,22 @@ class TestArchiveImage:
         mock_upload.assert_called_once_with(
             'munimetro-image-archive',
             '2026/02/21/muni_snapshot_20260221_083000_transition.jpg',
+            '/tmp/test.jpg',
+            content_type='image/jpeg'
+        )
+
+    def test_override_with_raw_status_encodes_in_path(self):
+        """Override with raw_status should encode it in the GCS path."""
+        with patch.dict('os.environ', {'CLOUD_RUN': 'true'}):
+            with patch('lib.image_archive.gcs_upload_from_file') as mock_upload:
+                mock_upload.return_value = True
+                result = archive_image('/tmp/test.jpg', '2026-02-21T08:30:00', 'override',
+                                       raw_status='yellow')
+
+        assert result is True
+        mock_upload.assert_called_once_with(
+            'munimetro-image-archive',
+            '2026/02/21/muni_snapshot_20260221_083000_override_rawYellow.jpg',
             '/tmp/test.jpg',
             content_type='image/jpeg'
         )
