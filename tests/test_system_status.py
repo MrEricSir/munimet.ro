@@ -50,6 +50,7 @@ KNOWN_STATUSES = [
     ("muni_snapshot_20251212_002351.jpg", "red", "Maintenance display - only non-revenue trains detected"),
     ("muni_snapshot_20260124_020104.jpg", "red", "Not operating - overnight"),
     ("muni_snapshot_20260218_013611.jpg", "red", "Overnight - non-revenue train 2206X, red track segments"),
+    ("muni_snapshot_20260224_082751.jpg", "red", "Overnight 12:27am - no revenue trains, false positive at YBR area"),
 ]
 
 

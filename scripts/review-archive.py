@@ -504,8 +504,7 @@ def main():
         print(f'No images directory found at {image_dir}')
         sys.exit(1)
 
-    filter_reason = effective_reason if args.skip_download else None
-    entries = collect_images(image_dir, reason_filter=filter_reason)
+    entries = collect_images(image_dir, reason_filter=effective_reason)
     if not entries:
         print('No archive images found.')
         sys.exit(0)

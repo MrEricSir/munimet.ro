@@ -862,7 +862,8 @@ class TrainDetector:
         candidate_mask = cv2.bitwise_and(candidate_mask, cv2.bitwise_not(cyan_mask))
         candidate_mask = cv2.bitwise_and(candidate_mask, cv2.bitwise_not(red_mask))
 
-        # Morphology
+        # Morphology — keep pre-close mask to verify symbol solidity
+        pre_close_mask = candidate_mask.copy()
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         candidate_mask = cv2.morphologyEx(candidate_mask, cv2.MORPH_CLOSE, kernel)
 
@@ -885,6 +886,14 @@ class TrainDetector:
 
             aspect = cw / max(ch, 1)
             if aspect < 1.5 or aspect > 3.5:
+                continue
+
+            # Reject noise connected by morphological closing: real train symbols
+            # are solidly colored (fill ≥ 0.7 before closing), while noise from
+            # scattered pixels has much lower fill (~0.3-0.4).
+            pre_pixels = cv2.countNonZero(pre_close_mask[y:y+ch, x:x+cw])
+            fill_ratio = pre_pixels / max(cw * ch, 1)
+            if fill_ratio < 0.7:
                 continue
 
             cx, cy = x + cw // 2, y + ch // 2

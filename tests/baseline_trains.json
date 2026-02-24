@@ -217,6 +217,7 @@
   "train_free_images": {
     "muni_snapshot_20260124_015604.jpg": {"max_false_positives": 10},
     "muni_snapshot_20260124_041839.jpg": {"max_false_positives": 20},
-    "muni_snapshot_20260219_closed.jpg": {"max_false_positives": 1}
+    "muni_snapshot_20260219_closed.jpg": {"max_false_positives": 1},
+    "muni_snapshot_20260224_082751.jpg": {"max_false_positives": 0}
   }
 }

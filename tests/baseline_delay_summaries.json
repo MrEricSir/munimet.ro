@@ -121,6 +121,10 @@
         "Eastbound service not running between Montgomery and Embarcadero",
         "Eastbound backup at Civic Center (4 trains)"
       ]
+    },
+    "muni_snapshot_20260224_082751.jpg": {
+      "status": "red",
+      "delay_summaries": []
     }
   }
 }
