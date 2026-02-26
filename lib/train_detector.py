@@ -1250,6 +1250,16 @@ class TrainDetector:
                     if cleaned:
                         return cleaned
 
+        # Fallback: suffixless train ID (car number only, route suffix not readable)
+        # A train without a readable suffix still occupies space on the track
+        suffixless = re.search(r'([A-Z]?)(\d{4})(?=[A-Z]{2,}|$)', combined)
+        if suffixless:
+            prefix, digits = suffixless.group(1), suffixless.group(2)
+            if (digits[0] in '12'
+                    and len(set(digits)) > 1
+                    and (not prefix or prefix in VALID_TRAIN_PREFIXES)):
+                return [prefix + digits]
+
         # Fallback: try non-revenue pattern (e.g., *442*, *471*, *2206X)
         non_revenue = NON_REVENUE_PATTERN.findall(combined)
         if non_revenue:

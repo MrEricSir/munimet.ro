@@ -31,6 +31,10 @@ KNOWN_STATUSES = [
     ("muni_snapshot_20260211_084511.jpg", "green", "Normal morning operation - 13+ trains including KK at Embarcadero, TT at Union Square"),
     ("muni_snapshot_20260211_094211.jpg", "green", "Normal morning operation - 16 trains, missing LL between Church and Van Ness lower"),
     ("muni_snapshot_20260211_094811.jpg", "green", "Normal morning operation - missing LL at Castro, NN+MM at Embarcadero, KK between Powell and Civic Center"),
+    ("muni_snapshot_20260223_000137_baseline.jpg", "green", "Normal late night operation - 12 trains, 1 hold at Chinatown"),
+    ("muni_snapshot_20260223_000434_baseline.jpg", "green", "Normal late night operation - 13 trains, 1 hold at Chinatown"),
+    ("muni_snapshot_20260223_010732_baseline.jpg", "green", "Normal late night operation - 16 trains"),
+    ("muni_snapshot_20260223_011620_baseline.jpg", "green", "Normal late night operation - 13 trains, 1 hold at Chinatown"),
 
     # Delays detected (yellow)
     ("muni_snapshot_20251207_092107.jpg", "yellow", "2 platforms in hold"),
@@ -38,6 +42,7 @@ KNOWN_STATUSES = [
     ("muni_snapshot_20251207_122227.jpg", "yellow", "2 platforms in hold"),
     ("IMG_9794.jpg", "yellow", "Multiple platforms in hold"),
     ("muni-westbound-castro-red-track.jpg", "yellow", "Westbound red track segment at Castro"),
+    ("muni_snapshot_20260223_004333_baseline.jpg", "yellow", "2 platforms in hold - Van Ness and Embarcadero"),
 
     # Not operating (red)
     ("muni_snapshot_20251207_021407.jpg", "red", "Late night - not operating"),
@@ -413,16 +418,12 @@ class TestOCRImprovementCandidates:
     and will pass once OCR is improved.
     """
 
-    @pytest.mark.xfail(reason="Environment-sensitive: passes with some Tesseract versions but not others")
     def test_civic_center_pileup(self):
         """Westbound pileup at Civic Center should be detected as yellow.
 
         Image shows 4+ trains clustered on the upper track near Civic Center
-        (around x=800-970). Selective component-based detection correctly
-        identifies trains in this dense pileup area, triggering bunching detection.
-
-        Note: This test is environment-sensitive - OCR results vary between
-        Tesseract versions. Passes locally but may fail in Docker.
+        (around x=800-970). Hybrid OCR+symbol detection correctly identifies
+        trains in this dense pileup area, triggering bunching detection.
         """
         result = detect_system_status(str(IMAGES_DIR / "muni-pileup-westbound-at-civic-center.jpg"))
 
@@ -520,6 +521,10 @@ class TestDelaySummaryBaseline:
         ("muni_snapshot_20251207_092107.jpg", ["Eastbound delay from Civic Center to Powell"]),
         ("muni_snapshot_20251207_122227.jpg", ["Eastbound delay from Castro to Church"]),
         ("muni_snapshot_20251216_190936.jpg", ["Eastbound delay from Powell to Montgomery"]),
+        ("muni_snapshot_20260223_000137_baseline.jpg", ["Southbound delay at Chinatown"]),
+        ("muni_snapshot_20260223_000434_baseline.jpg", ["Southbound delay at Chinatown"]),
+        ("muni_snapshot_20260223_004333_baseline.jpg", ["Eastbound delay at Van Ness", "Westbound delay at Embarcadero"]),
+        ("muni_snapshot_20260223_011620_baseline.jpg", ["Southbound delay at Chinatown"]),
     ])
     def test_delay_summaries_match_baseline(self, image_name, expected):
         """Test that delay summaries match baseline for images with delays.
@@ -556,6 +561,7 @@ class TestDelaySummaryBaseline:
         "muni_snapshot_20251209_000943.jpg",
         "muni_snapshot_20251228_071410.jpg",
         "muni_snapshot_20260130_233157.jpg",
+        "muni_snapshot_20260223_010732_baseline.jpg",
     ])
     def test_green_status_no_delays(self, image_name):
         """Test that green status images have no delay summaries."""

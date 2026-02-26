@@ -129,6 +129,47 @@
     "muni_snapshot_20260211_084511.jpg": {
       "status": "green",
       "delay_summaries": []
+    },
+    "Mimic1_A7SE582P_020126_014806.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "latest-image-jan-31-190306.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260130_233157.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260223_000137_baseline.jpg": {
+      "status": "green",
+      "delay_summaries": [
+        "Southbound delay at Chinatown"
+      ]
+    },
+    "muni_snapshot_20260223_000434_baseline.jpg": {
+      "status": "green",
+      "delay_summaries": [
+        "Southbound delay at Chinatown"
+      ]
+    },
+    "muni_snapshot_20260223_004333_baseline.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay at Van Ness",
+        "Westbound delay at Embarcadero"
+      ]
+    },
+    "muni_snapshot_20260223_010732_baseline.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260223_011620_baseline.jpg": {
+      "status": "green",
+      "delay_summaries": [
+        "Southbound delay at Chinatown"
+      ]
     }
   }
 }
