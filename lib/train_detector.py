@@ -275,7 +275,8 @@ class TrainDetector:
 
         When a symbol is detected on the track but no OCR train matches it,
         this method crops a narrow column from the corresponding text band
-        and attempts OCR to identify the train.
+        and attempts OCR to identify the train. Tries dark text first, then
+        colored text approaches (saturation channel, masked grayscale).
         """
         sym_x = symbol['x']
         track = symbol['track']
@@ -289,12 +290,14 @@ class TrainDetector:
         y_min = int(h * band_start)
         y_max = int(h * band_end)
         band = gray[y_min:y_max, :]
+        band_hsv = hsv[y_min:y_max, :]
         band_h = y_max - y_min
 
         col_half_width = 15
         x1 = max(0, sym_x - col_half_width)
         x2 = min(w - 1, sym_x + col_half_width)
 
+        # Try dark text OCR first
         dark_mask = (band < 120).astype(np.uint8)
         train_ids = self._ocr_column(band, dark_mask, x1, x2, band_h, track)
         if train_ids:
@@ -306,7 +309,92 @@ class TrainDetector:
                 'confidence': 'high'
             } for tid in train_ids]
 
+        # Try colored text OCR (for yellow/green/blue labels)
+        train_id = self._ocr_colored_at_position(
+            band, band_hsv, band_h, x1, x2)
+        if train_id:
+            return [{
+                'id': train_id,
+                'x': sym_x,
+                'y': y_min + band_h // 2,
+                'track': track,
+                'confidence': 'high'
+            }]
+
         return []
+
+    def _ocr_colored_at_position(self, band_gray, band_hsv, band_h, x1, x2):
+        """Try colored text OCR at a specific column position.
+
+        Uses saturation and masked grayscale approaches to read colored
+        (yellow/green/blue) train labels that dark text OCR can't detect.
+        """
+        scale = 4
+
+        # Build color mask for the column region
+        yellow = cv2.inRange(band_hsv, np.array([15, 80, 120]),
+                             np.array([40, 255, 255]))
+        green = cv2.inRange(band_hsv, np.array([35, 80, 120]),
+                            np.array([85, 255, 255]))
+        blue = cv2.inRange(band_hsv, np.array([100, 100, 80]),
+                           np.array([130, 255, 255]))
+        color_mask = yellow | green | blue
+
+        col_roi = color_mask[:, x1:x2+1]
+        col_sums = col_roi.sum(axis=1)
+        text_rows = np.where(col_sums > 0)[0]
+        if len(text_rows) < 10:
+            return None
+
+        y1 = max(0, text_rows[0] - 2)
+        y2 = min(band_h, text_rows[-1] + 2)
+        if (y2 - y1) < 45:
+            return None
+
+        pad = 3
+        roi_x1 = max(0, x1 - pad)
+        roi_x2 = min(band_gray.shape[1], x2 + pad)
+
+        gray_roi = band_gray[y1:y2, roi_x1:roi_x2]
+        hsv_roi = band_hsv[y1:y2, roi_x1:roi_x2]
+        mask_roi = color_mask[y1:y2, roi_x1:roi_x2]
+
+        if gray_roi.size == 0:
+            return None
+
+        # Approach 1: Saturation channel (colored text has high saturation,
+        # dark text has near-zero — naturally filters non-colored text)
+        sat = hsv_roi[:, :, 1]
+        roi_large = cv2.resize(sat, None, fx=scale, fy=scale,
+                               interpolation=cv2.INTER_LANCZOS4)
+        _, roi_bin = cv2.threshold(roi_large, 0, 255,
+                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        try:
+            text = pytesseract.image_to_string(roi_bin, config=OCR_CONFIG)
+            train_id = self._extract_train_id(text)
+            if train_id:
+                return train_id
+        except Exception:
+            pass
+
+        # Approach 2: Inverted grayscale masked by dilated color region
+        inv = 255 - gray_roi
+        mask_dilated = cv2.dilate(mask_roi, np.ones((5, 5), np.uint8),
+                                  iterations=1)
+        masked_inv = np.where(mask_dilated > 0, inv, 0)
+        roi_large = cv2.resize(masked_inv, None, fx=scale, fy=scale,
+                               interpolation=cv2.INTER_LANCZOS4)
+        _, roi_bin = cv2.threshold(roi_large, 0, 255,
+                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        try:
+            text = pytesseract.image_to_string(roi_bin, config=OCR_CONFIG)
+            train_id = self._extract_train_id(text)
+            if train_id:
+                return train_id
+        except Exception:
+            pass
+
+        return None
 
     def _detect_by_ocr(self, gray, h, w, hsv):
         """Detect trains via OCR with selective component detection for pileups.
@@ -400,7 +488,7 @@ class TrainDetector:
 
             trains.extend(track_trains)
 
-            # Also detect colored text labels (yellow, green)
+            # Also detect colored text labels (yellow, green, blue)
             colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
             trains.extend(colored_trains)
 
@@ -647,7 +735,7 @@ class TrainDetector:
 
                     trains.extend(found_from_splits)
 
-            # Also detect colored text labels (yellow, green)
+            # Also detect colored text labels (yellow, green, blue)
             colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
             trains.extend(colored_trains)
 
