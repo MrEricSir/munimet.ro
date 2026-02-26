@@ -24,12 +24,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from lib.baseline_writer import update_baseline_trains, update_baseline_delays
 from lib.detection import detect_system_status
 
 TESTS_DIR = PROJECT_ROOT / 'tests'
 IMAGES_DIR = TESTS_DIR / 'images'
-BASELINE_TRAINS_PATH = TESTS_DIR / 'baseline_trains.json'
-BASELINE_DELAYS_PATH = TESTS_DIR / 'baseline_delay_summaries.json'
 KNOWN_STATUSES_PATH = TESTS_DIR / 'test_system_status.py'
 
 FLAG_DESCRIPTIONS = {
@@ -79,30 +78,6 @@ def display_detection(det: dict, image_name: str):
             if track_trains:
                 ids = ', '.join(t['id'] for t in sorted(track_trains, key=lambda t: t['x']))
                 print(f'  {track_name}: {ids}')
-
-
-def update_baseline_trains(image_name: str, trains: list[dict]):
-    """Add or update an entry in baseline_trains.json."""
-    data = json.loads(BASELINE_TRAINS_PATH.read_text())
-
-    train_entries = [[t['id'], t['x']] for t in sorted(trains, key=lambda t: t['x'])]
-    data['images_with_trains'][image_name] = train_entries
-
-    BASELINE_TRAINS_PATH.write_text(json.dumps(data, indent=2) + '\n')
-    print(f'    Updated baseline_trains.json ({len(train_entries)} trains)')
-
-
-def update_baseline_delays(image_name: str, status: str, summaries: list[str]):
-    """Add or update an entry in baseline_delay_summaries.json."""
-    data = json.loads(BASELINE_DELAYS_PATH.read_text())
-
-    data['images'][image_name] = {
-        'status': status,
-        'delay_summaries': summaries,
-    }
-
-    BASELINE_DELAYS_PATH.write_text(json.dumps(data, indent=2) + '\n')
-    print(f'    Updated baseline_delay_summaries.json')
 
 
 def update_known_statuses(image_name: str, status: str, notes: str):
@@ -194,8 +169,10 @@ def process_image(entry: dict, auto_yes: bool) -> bool:
 
     # Update test files
     if trains:
-        update_baseline_trains(image_name, trains)
+        count = update_baseline_trains(image_name, trains)
+        print(f'    Updated baseline_trains.json ({count} trains)')
     update_baseline_delays(image_name, status, summaries)
+    print(f'    Updated baseline_delay_summaries.json')
     update_known_statuses(image_name, status, description)
 
     return True

@@ -6,6 +6,7 @@ Optimized for speed with single preprocessing pass per text column.
 """
 
 import cv2
+import dataclasses
 import numpy as np
 import re
 
@@ -48,6 +49,41 @@ VALID_SUFFIX_LETTERS = set('JKLMNSTX*')  # Common suffix characters
 # Double letters: doubled designators (JJ, KK, LL, MM, NN, SS, TT)
 VALID_SINGLE_SUFFIXES = set('JKLMNSTX*')
 VALID_DOUBLE_SUFFIXES = {'JJ', 'KK', 'LL', 'MM', 'NN', 'SS', 'TT'}
+
+
+@dataclasses.dataclass
+class ContourDiagnostic:
+    """Per-contour diagnostic data from symbol detection."""
+    x: int
+    y: int
+    width: int
+    height: int
+    area: float
+    bounding_area: int
+    aspect_ratio: float
+    rectangularity: float
+    fill_ratio: float
+    accepted: bool
+    rejection_reason: str
+    track: str
+
+
+@dataclasses.dataclass
+class SymbolDiagnostics:
+    """Full diagnostic output from _detect_symbols()."""
+    contours: list
+    track_band: tuple
+    accepted_symbols: list
+
+
+@dataclasses.dataclass
+class DetectionDiagnostics:
+    """Full pipeline diagnostics from detect_trains()."""
+    ocr_trains: list
+    symbol_diagnostics: object  # SymbolDiagnostics or None
+    symbols_were_run: bool
+    merged_trains: list
+    detection_method: str  # 'ocr_only' | 'symbols_fallback' | 'hybrid'
 
 
 def _clean_suffix(train_id):
@@ -172,9 +208,15 @@ class TrainDetector:
             'WPL', 'WPR', 'BPL', 'BPR', 'FSL', 'FSR', 'GLL', 'GLR'
         }
 
-    def detect_trains(self, image):
+    def detect_trains(self, image, diagnostics=False):
         """Detect trains in the image using OCR."""
         if not TESSERACT_AVAILABLE:
+            if diagnostics:
+                return DetectionDiagnostics(
+                    ocr_trains=[], symbol_diagnostics=None,
+                    symbols_were_run=False, merged_trains=[],
+                    detection_method='ocr_only'
+                )
             return []
 
         h, w = image.shape[:2]
@@ -184,15 +226,87 @@ class TrainDetector:
         # Step 1: OCR-based detection (primary method)
         ocr_trains = self._detect_by_ocr(gray, h, w, hsv)
 
-        # Step 2: Symbol detection only if OCR found no trains
-        # This reduces false positives from track signals and other visual elements
-        if len(ocr_trains) == 0:
-            symbols = self._detect_symbols(hsv, h, w, gray)
-            trains = self._merge(ocr_trains, symbols)
+        # Step 2: Always run symbol detection to supplement OCR
+        symbols_were_run = True
+        if diagnostics:
+            symbols, symbol_diag = self._detect_symbols(hsv, h, w, gray, diagnostics=True)
         else:
-            trains = ocr_trains
+            symbol_diag = None
+            symbols = self._detect_symbols(hsv, h, w, gray)
+
+        if len(ocr_trains) == 0:
+            trains = self._merge(ocr_trains, symbols)
+            detection_method = 'symbols_fallback'
+        else:
+            trains = list(ocr_trains)
+            # Supplement: find symbols without a nearby OCR match on same track
+            supplemented = False
+            for sym in symbols:
+                if not any(abs(sym['x'] - t['x']) < 50 and sym['track'] == t['track'] for t in trains):
+                    # Try targeted OCR at this symbol's x-position
+                    supplemental = self._ocr_at_symbol(gray, hsv, h, w, sym)
+                    if supplemental:
+                        trains.extend(supplemental)
+                        supplemented = True
+                    else:
+                        trains.append({
+                            'id': f'UNKNOWN@{sym["x"]}',
+                            'x': sym['x'], 'y': sym['y'],
+                            'track': sym['track'], 'confidence': 'low'
+                        })
+                        supplemented = True
+            if supplemented:
+                trains = self._deduplicate(trains)
+            detection_method = 'hybrid' if supplemented else 'ocr_only'
+
+        if diagnostics:
+            return DetectionDiagnostics(
+                ocr_trains=ocr_trains,
+                symbol_diagnostics=symbol_diag,
+                symbols_were_run=symbols_were_run,
+                merged_trains=trains,
+                detection_method=detection_method
+            )
 
         return trains
+
+    def _ocr_at_symbol(self, gray, hsv, h, w, symbol):
+        """Try targeted OCR at a symbol's x-position to identify the train.
+
+        When a symbol is detected on the track but no OCR train matches it,
+        this method crops a narrow column from the corresponding text band
+        and attempts OCR to identify the train.
+        """
+        sym_x = symbol['x']
+        track = symbol['track']
+
+        # Look in the text band that corresponds to this symbol's track
+        if track == 'upper':
+            band_start, band_end = UPPER_TRAIN_BAND
+        else:
+            band_start, band_end = LOWER_TRAIN_BAND
+
+        y_min = int(h * band_start)
+        y_max = int(h * band_end)
+        band = gray[y_min:y_max, :]
+        band_h = y_max - y_min
+
+        col_half_width = 15
+        x1 = max(0, sym_x - col_half_width)
+        x2 = min(w - 1, sym_x + col_half_width)
+
+        dark_mask = (band < 120).astype(np.uint8)
+        train_ids = self._ocr_column(band, dark_mask, x1, x2, band_h, track)
+        if train_ids:
+            return [{
+                'id': tid,
+                'x': sym_x,
+                'y': y_min + band_h // 2,
+                'track': track,
+                'confidence': 'high'
+            } for tid in train_ids]
+
+        return []
 
     def _detect_by_ocr(self, gray, h, w, hsv):
         """Detect trains via OCR with selective component detection for pileups.
@@ -839,7 +953,7 @@ class TrainDetector:
         except Exception:
             return None
 
-    def _detect_symbols(self, hsv, h, w, gray):
+    def _detect_symbols(self, hsv, h, w, gray, diagnostics=False):
         """Detect train symbols on tracks."""
         track_y_min = int(h * 0.48)
         track_y_max = int(h * 0.62)
@@ -870,34 +984,47 @@ class TrainDetector:
         contours, _ = cv2.findContours(candidate_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         symbols = []
+        diag_contours = [] if diagnostics else None
+
         for cnt in contours:
             x, y, cw, ch = cv2.boundingRect(cnt)
             area = cv2.contourArea(cnt)
 
-            # Strict filters to reduce false positives from track signals
-            if area < 200 or cw * ch < 250:
-                continue
-            if cw < 18 or cw > 45 or ch < 10 or ch > 20:
-                continue
-
-            rectangularity = area / max(cw * ch, 1)
-            if rectangularity < 0.5:
-                continue
-
+            # Compute all metrics upfront for diagnostics
+            bounding_area = cw * ch
+            rectangularity = area / max(bounding_area, 1)
             aspect = cw / max(ch, 1)
-            if aspect < 1.5 or aspect > 3.5:
-                continue
-
-            # Reject noise connected by morphological closing: real train symbols
-            # are solidly colored (fill ≥ 0.7 before closing), while noise from
-            # scattered pixels has much lower fill (~0.3-0.4).
             pre_pixels = cv2.countNonZero(pre_close_mask[y:y+ch, x:x+cw])
-            fill_ratio = pre_pixels / max(cw * ch, 1)
-            if fill_ratio < 0.7:
-                continue
-
+            fill_ratio = pre_pixels / max(bounding_area, 1)
             cx, cy = x + cw // 2, y + ch // 2
             track = 'upper' if cy < upper_track_y else 'lower'
+
+            # Apply filters, recording rejection reason for diagnostics
+            rejection = ''
+            if area < 200:
+                rejection = f'area({area:.0f}<200)'
+            elif bounding_area < 250:
+                rejection = f'bbox({bounding_area}<250)'
+            elif cw < 18 or cw > 45 or ch < 10 or ch > 20:
+                rejection = f'size(w={cw},h={ch})'
+            elif rectangularity < 0.5:
+                rejection = f'rect({rectangularity:.2f}<0.5)'
+            elif aspect < 1.5 or aspect > 3.5:
+                rejection = f'aspect({aspect:.2f})'
+            elif fill_ratio < 0.7:
+                rejection = f'fill({fill_ratio:.2f}<0.7)'
+
+            if diagnostics:
+                diag_contours.append(ContourDiagnostic(
+                    x=x, y=y, width=cw, height=ch, area=area,
+                    bounding_area=bounding_area, aspect_ratio=aspect,
+                    rectangularity=rectangularity, fill_ratio=fill_ratio,
+                    accepted=not rejection, rejection_reason=rejection,
+                    track=track
+                ))
+
+            if rejection:
+                continue
 
             symbols.append({
                 'x': cx,
@@ -914,6 +1041,13 @@ class TrainDetector:
         for s in symbols:
             if not any(abs(s['x'] - u['x']) < 30 and s['track'] == u['track'] for u in unique):
                 unique.append(s)
+
+        if diagnostics:
+            return unique, SymbolDiagnostics(
+                contours=diag_contours,
+                track_band=(track_y_min, track_y_max),
+                accepted_symbols=unique
+            )
 
         return unique
 
@@ -1061,13 +1195,60 @@ class TrainDetector:
                         fixed[i] = 'O'
             matches = TRAIN_ID_PATTERN.findall(''.join(fixed))
             if matches:
-                # Filter out invalid train IDs with repeated digits, invalid prefixes, invalid suffixes, and suspicious digits
-                matches = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)
-                           and not _has_invalid_prefix(m)
-                           and not _has_invalid_suffix(m)
-                           and not _has_suspicious_digits(m)]
-                if matches:
-                    return [_clean_suffix(m) for m in matches]
+                # Filter out invalid train IDs (validate before cleaning to preserve
+                # digit-position characters that _clean_suffix might misinterpret)
+                valid = [m for m in matches if not INVALID_REPEATED_DIGITS.search(m)
+                         and not _has_invalid_prefix(m)
+                         and not _has_invalid_suffix(m)
+                         and not _has_suspicious_digits(m)]
+                if valid:
+                    return [_clean_suffix(m) for m in valid]
+
+                # If all matches were rejected for invalid suffix, try stripping
+                # trailing contamination (e.g., "D2073JF" where F is from station "FPL")
+                for m in matches:
+                    suffix_match = re.search(r'\d{4}([A-Z*X]{1,2})$', m)
+                    if suffix_match and len(suffix_match.group(1)) == 2:
+                        suf = suffix_match.group(1)
+                        if suf[0] in VALID_SINGLE_SUFFIXES and suf[1] not in VALID_SINGLE_SUFFIXES:
+                            trimmed = m[:-1]
+                            if (not INVALID_REPEATED_DIGITS.search(trimmed)
+                                    and not _has_invalid_prefix(trimmed)
+                                    and not _has_invalid_suffix(trimmed)
+                                    and not _has_suspicious_digits(trimmed)):
+                                return [_clean_suffix(trimmed)]
+
+            # Fallback alternative: I could be 7 in digit positions (ambiguous in vertical text)
+            if 'I' in combined[digit_start:digit_start + 4]:
+                alt_fixed = list(combined)
+                for i in range(len(alt_fixed)):
+                    if digit_start <= i < digit_start + 4:
+                        if alt_fixed[i] == 'T':
+                            alt_fixed[i] = '7'
+                        elif alt_fixed[i] == 'I':
+                            alt_fixed[i] = '7'  # I→7 instead of I→1
+                        elif alt_fixed[i] == 'F':
+                            alt_fixed[i] = '7'
+                        elif alt_fixed[i] == 'L':
+                            alt_fixed[i] = '1'
+                        elif alt_fixed[i] == 'S':
+                            alt_fixed[i] = '5'
+                    elif i >= digit_start + 4:
+                        if alt_fixed[i] == '7':
+                            alt_fixed[i] = 'T'
+                        elif alt_fixed[i] == '1':
+                            alt_fixed[i] = 'L'
+                        elif alt_fixed[i] == '0':
+                            alt_fixed[i] = 'O'
+                alt_matches = TRAIN_ID_PATTERN.findall(''.join(alt_fixed))
+                if alt_matches:
+                    cleaned = [_clean_suffix(m) for m in alt_matches]
+                    cleaned = [m for m in cleaned if not INVALID_REPEATED_DIGITS.search(m)
+                               and not _has_invalid_prefix(m)
+                               and not _has_invalid_suffix(m)
+                               and not _has_suspicious_digits(m)]
+                    if cleaned:
+                        return cleaned
 
         # Fallback: try non-revenue pattern (e.g., *442*, *471*, *2206X)
         non_revenue = NON_REVENUE_PATTERN.findall(combined)
