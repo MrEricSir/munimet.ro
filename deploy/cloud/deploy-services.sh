@@ -136,7 +136,7 @@ gcloud run jobs deploy "$CHECKER_JOB" \
     --service-account "$SERVICE_ACCOUNT_EMAIL" \
     --memory 512Mi \
     --cpu 1 \
-    --task-timeout 120s \
+    --task-timeout 300s \
     --max-retries 3 \
     --set-env-vars="CLOUD_RUN=true,GCS_BUCKET=${BUCKET_NAME},GCS_ARCHIVE_BUCKET=${ARCHIVE_BUCKET}" \
     $SECRETS_FLAG \

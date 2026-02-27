@@ -228,6 +228,9 @@ def check_status(should_write_cache=False, interval_seconds=None):
         # Keep only last 3 statuses (~1.5 min window at 30s intervals)
         statuses = statuses[:3]
 
+        # Preserve last_notified_status from previous cache
+        previous_last_notified = cache_data.get('last_notified_status') if cache_data else None
+
         # Write cache with status history, hysteresis state, and tracking fields
         cache_data = {
             'statuses': statuses,
@@ -240,7 +243,9 @@ def check_status(should_write_cache=False, interval_seconds=None):
             'last_successful_check': now.isoformat(),
             # Reset failure counter on success
             'consecutive_failures': 0,
-            'last_error': None
+            'last_error': None,
+            # Track last successfully notified status for recovery
+            'last_notified_status': previous_last_notified,
         }
 
         if write_cache(cache_data):
@@ -253,6 +258,40 @@ def check_status(should_write_cache=False, interval_seconds=None):
                 print(f"  Image cached")
             else:
                 print(f"  Image cache failed")
+
+            # Notify all channels — done early so notifications aren't lost to timeouts.
+            # Determines whether to notify due to a new transition or a missed previous notification.
+            should_notify = False
+            current_reported = reported_status['status']
+            previous_reported = None
+
+            if hysteresis_result['status_changed'] and previous_reported_status is not None:
+                should_notify = True
+                previous_reported = previous_reported_status['status']
+                print(f"\nReported status changed: {previous_reported} -> {current_reported}")
+            elif previous_last_notified is not None and previous_last_notified != current_reported:
+                should_notify = True
+                previous_reported = previous_last_notified
+                print(f"\nRecovering missed notification: {previous_reported} -> {current_reported}")
+
+            if should_notify:
+                delay_summaries = reported_status.get('detection', {}).get('delay_summaries', [])
+                notify_results = notify_status_change(
+                    status=current_reported,
+                    previous_status=previous_reported,
+                    delay_summaries=delay_summaries,
+                    timestamp=reported_status['timestamp']
+                )
+                all_succeeded = True
+                for channel, notify_result in notify_results.items():
+                    if notify_result['success']:
+                        print(f"  {channel}: OK")
+                    else:
+                        print(f"  {channel}: Failed - {notify_result.get('error', 'Unknown error')}")
+                        all_succeeded = False
+                if all_succeeded:
+                    cache_data['last_notified_status'] = current_reported
+                    write_cache(cache_data)
 
             # Archive image for debugging/auditing (cloud only, best-effort)
             archive_reasons = []
@@ -292,25 +331,6 @@ def check_status(should_write_cache=False, interval_seconds=None):
             print(f"  Analytics log failed: {e}")
             import traceback
             traceback.print_exc()
-
-        # Notify all channels if REPORTED status changed (after hysteresis)
-        # This ensures notifications match what the webapp shows
-        if hysteresis_result['status_changed'] and previous_reported_status is not None:
-            current_reported = reported_status['status']
-            previous_reported = previous_reported_status['status']
-            print(f"\nReported status changed: {previous_reported} -> {current_reported}")
-            delay_summaries = reported_status.get('detection', {}).get('delay_summaries', [])
-            notify_results = notify_status_change(
-                status=current_reported,
-                previous_status=previous_reported,
-                delay_summaries=delay_summaries,
-                timestamp=reported_status['timestamp']
-            )
-            for channel, result in notify_results.items():
-                if result['success']:
-                    print(f"  {channel}: OK")
-                else:
-                    print(f"  {channel}: Failed - {result.get('error', 'Unknown error')}")
 
     return True
 
