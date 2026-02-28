@@ -168,12 +168,10 @@
                 detailsHtml = `<div class="details">${items}</div>`;
             }
 
-            // Build staleness warning banner if data is aging or stale
+            // Build staleness note if data is aging or stale (not for error state)
             let stalenessHtml = '';
-            if (stalenessMessage && (staleness === 'aging' || staleness === 'stale' || staleness === 'expired')) {
-                const warningClass = staleness === 'aging' ? 'staleness-aging' :
-                                    staleness === 'stale' ? 'staleness-stale' : 'staleness-expired';
-                stalenessHtml = `<div class="staleness-warning ${warningClass}">${stalenessMessage}</div>`;
+            if (status !== 'error' && stalenessMessage && (staleness === 'aging' || staleness === 'stale')) {
+                stalenessHtml = `<div class="staleness-note">${stalenessMessage}</div>`;
             }
 
             // Check if status or staleness changed

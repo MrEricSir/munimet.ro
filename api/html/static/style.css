@@ -227,31 +227,14 @@ p.sub-credits {
     opacity: 0.6;
 }
 
-/* Staleness warning banners */
-.staleness-warning {
-    padding: 10px 20px;
-    margin-bottom: 15px;
-    border-radius: 8px;
-    font-size: 0.95em;
-    max-width: 400px;
-}
-
-.staleness-aging {
-    background-color: rgba(237, 137, 54, 0.15);
-    color: #9c4221;
-    border: 1px solid rgba(237, 137, 54, 0.3);
-}
-
-.staleness-stale {
-    background-color: rgba(237, 137, 54, 0.25);
-    color: #7b341e;
-    border: 1px solid rgba(237, 137, 54, 0.5);
-}
-
-.staleness-expired {
-    background-color: rgba(229, 62, 62, 0.2);
-    color: #c53030;
-    border: 1px solid rgba(229, 62, 62, 0.4);
+/* Staleness note - plain centered text matching page style */
+.staleness-note {
+    font-family: "handodle";
+    font-size: 1.2em;
+    color: #4a5568;
+    opacity: 0.6;
+    text-align: center;
+    margin-bottom: 10px;
 }
 
 /* Landscape/desktop adjustments - limit image height */
@@ -287,9 +270,8 @@ p.sub-credits {
         padding: 20px;
     }
 
-    .staleness-warning {
-        font-size: 0.85em;
-        padding: 8px 15px;
+    .staleness-note {
+        font-size: 1.0em;
     }
 }
 
