@@ -251,7 +251,7 @@ class TestTrainBunchingDetection:
         """4+ trains clustered close together on upper track should trigger bunching."""
         from lib.detection import detect_train_bunching
 
-        # Powell (PO) is at x=971
+        # Powell (PO) is at x=976
         # 4 trains clustered (within 70px of each other) to the right of Powell
         # Cluster is at x=1000-1150, approaching Powell from the east (westbound track)
         trains = [
@@ -263,14 +263,14 @@ class TestTrainBunchingDetection:
 
         bunching = detect_train_bunching(trains)
         assert len(bunching) > 0, f"Should detect bunching, got: {bunching}"
-        # Cluster is approaching PO (x=971) from the right
+        # Cluster is approaching PO (x=976) from the right
         assert any(b['station'] == 'PO' for b in bunching), f"Should detect bunching approaching PO, got: {bunching}"
 
     def test_bunching_detected_lower_track(self):
         """4+ trains clustered close together on lower track should trigger bunching."""
         from lib.detection import detect_train_bunching
 
-        # Powell (PO) is at x=971
+        # Powell (PO) is at x=976
         # 4 trains clustered (within 70px of each other) to the left of Powell
         # Cluster is at x=750-900, approaching Powell from the west (eastbound track)
         trains = [
@@ -282,7 +282,7 @@ class TestTrainBunchingDetection:
 
         bunching = detect_train_bunching(trains)
         assert len(bunching) > 0, f"Should detect bunching, got: {bunching}"
-        # Cluster is approaching PO (x=971) from the left
+        # Cluster is approaching PO (x=976) from the left
         assert any(b['station'] == 'PO' for b in bunching), f"Should detect bunching approaching PO, got: {bunching}"
 
     def test_excluded_stations_ignored(self):
@@ -299,27 +299,27 @@ class TestTrainBunchingDetection:
         assert BUNCHING_EXCLUDED_STATIONS == {'MN', 'FP', 'TT'}, \
             f"Expected only internal stations excluded, got: {BUNCHING_EXCLUDED_STATIONS}"
 
-        # CT is at x=1564 - now INCLUDED for upper track with zone length 150px
+        # CT is at x=1558 - now INCLUDED for upper track with zone length 150px
         # Bunch trains right at CT (upper track)
         upper_trains = [
-            {'id': 'W2010LL', 'x': 1580, 'track': 'upper'},
-            {'id': 'M2089MM', 'x': 1630, 'track': 'upper'},  # 50px gap
-            {'id': 'D2099J', 'x': 1680, 'track': 'upper'},   # 50px gap
-            {'id': 'F2164SS', 'x': 1730, 'track': 'upper'},  # 50px gap
+            {'id': 'W2010LL', 'x': 1560, 'track': 'upper'},
+            {'id': 'M2089MM', 'x': 1610, 'track': 'upper'},  # 50px gap
+            {'id': 'D2099J', 'x': 1660, 'track': 'upper'},   # 50px gap
+            {'id': 'F2164SS', 'x': 1710, 'track': 'upper'},  # 50px gap
         ]
 
         bunching = detect_train_bunching(upper_trains)
         # CT should now be detected since it's no longer excluded
         assert any(b['station'] == 'CT' for b in bunching), f"CT should now be included for upper track, got: {bunching}"
 
-        # EM is at x=1182 - now INCLUDED for lower track with zone length 75px
+        # EM is at x=1163 - now INCLUDED for lower track with zone length 75px
         # Bunch trains approaching EM (lower track - trains approach from LEFT, so cluster to the left of station)
         # Cluster front (rightmost train) must be within zone length (75px) of station
         lower_trains = [
-            {'id': 'W2010LL', 'x': 1110, 'track': 'lower'},
-            {'id': 'M2089MM', 'x': 1130, 'track': 'lower'},  # 20px gap
-            {'id': 'D2099J', 'x': 1150, 'track': 'lower'},   # 20px gap
-            {'id': 'F2164SS', 'x': 1170, 'track': 'lower'},  # 20px gap - cluster front at 1170, EM at 1182 (12px away)
+            {'id': 'W2010LL', 'x': 1090, 'track': 'lower'},
+            {'id': 'M2089MM', 'x': 1110, 'track': 'lower'},  # 20px gap
+            {'id': 'D2099J', 'x': 1130, 'track': 'lower'},   # 20px gap
+            {'id': 'F2164SS', 'x': 1150, 'track': 'lower'},  # 20px gap - cluster front at 1150, EM at 1163 (13px away)
         ]
 
         bunching = detect_train_bunching(lower_trains)
@@ -741,6 +741,113 @@ class TestStatusHysteresis:
         result = apply_status_hysteresis(best_red, reported, 'yellow', 1)
         assert result['pending_status'] == 'red'
         assert result['pending_streak'] == 1  # Reset, not 2
+
+
+class TestStationAutoDetection:
+    """Tests for auto-detection of station label positions."""
+
+    def test_label_detection_finds_labels(self):
+        """Label detection should find labels in both Y-bands."""
+        from lib.station_detector import detect_label_positions
+
+        img_path = IMAGES_DIR / "muni_snapshot_20260223_000137_baseline.jpg"
+        if not img_path.exists():
+            pytest.skip(f"Test image not found: {img_path}")
+
+        img = cv2.imread(str(img_path))
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        upper, lower = detect_label_positions(gray)
+
+        # Should find at least 12 labels in each row
+        assert len(upper) >= 12, f"Expected >= 12 upper labels, got {len(upper)}"
+        assert len(lower) >= 12, f"Expected >= 12 lower labels, got {len(lower)}"
+
+    def test_label_assignment_matches_stations(self):
+        """Assigned labels should be within tolerance of hardcoded positions."""
+        from lib.station_detector import (
+            detect_label_positions, assign_labels_to_stations,
+            STATION_X_POSITIONS
+        )
+        from lib.station_constants import STATION_ORDER
+
+        img_path = IMAGES_DIR / "muni_snapshot_20260223_000137_baseline.jpg"
+        if not img_path.exists():
+            pytest.skip(f"Test image not found: {img_path}")
+
+        img = cv2.imread(str(img_path))
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        upper, lower = detect_label_positions(gray)
+
+        positions = assign_labels_to_stations(upper, STATION_ORDER)
+        assert positions is not None, "Assignment should succeed on this image"
+
+        # Each detected position should be within 35px of hardcoded
+        # (accommodates ~30px shift between pre-BP and post-BP layouts)
+        for code, cx in positions.items():
+            expected = STATION_X_POSITIONS[code]
+            assert abs(cx - expected) <= 35, (
+                f"Station {code}: detected={cx}, expected={expected}, "
+                f"delta={cx - expected}"
+            )
+
+    def test_get_positions_returns_valid_dict(self):
+        """get_positions() should return a valid position dict."""
+        from lib.station_detector import StationDetector
+        from lib.station_constants import STATION_ORDER
+
+        img_path = IMAGES_DIR / "muni_snapshot_20260223_000137_baseline.jpg"
+        if not img_path.exists():
+            pytest.skip(f"Test image not found: {img_path}")
+
+        img = cv2.imread(str(img_path))
+        detector = StationDetector()
+        positions = detector.get_positions(img, STATION_ORDER)
+
+        assert 'stations' in positions
+        assert 'track_segments' in positions
+        assert len(positions['stations']) == len(STATION_ORDER)
+
+        # Check that source is auto-detected or hardcoded
+        source = positions['detection_parameters']['source']
+        assert source in ('auto_upper', 'auto_lower', 'hardcoded'), (
+            f"Unexpected source: {source}"
+        )
+
+    def test_get_positions_consistent_with_hardcoded(self):
+        """Auto-detected positions should be close to hardcoded positions."""
+        from lib.station_detector import StationDetector, STATION_X_POSITIONS
+        from lib.station_constants import STATION_ORDER
+
+        img_path = IMAGES_DIR / "muni_snapshot_20260223_000137_baseline.jpg"
+        if not img_path.exists():
+            pytest.skip(f"Test image not found: {img_path}")
+
+        img = cv2.imread(str(img_path))
+        detector = StationDetector()
+        positions = detector.get_positions(img, STATION_ORDER)
+
+        for code in STATION_X_POSITIONS:
+            detected_x = positions['stations'][code]['center_x']
+            hardcoded_x = STATION_X_POSITIONS[code]
+            assert abs(detected_x - hardcoded_x) <= 35, (
+                f"Station {code}: auto={detected_x}, hardcoded={hardcoded_x}"
+            )
+
+    def test_bunching_with_explicit_positions(self):
+        """detect_train_bunching() should accept explicit station_positions."""
+        from lib.detection import detect_train_bunching
+
+        custom_positions = {'PO': 1000, 'MO': 1200, 'CC': 800}
+        # Cluster near custom PO position
+        trains = [
+            {'id': 'W2010LL', 'x': 1010, 'track': 'upper'},
+            {'id': 'M2089MM', 'x': 1060, 'track': 'upper'},
+            {'id': 'D2099J', 'x': 1110, 'track': 'upper'},
+            {'id': 'F2164SS', 'x': 1160, 'track': 'upper'},
+        ]
+        bunching = detect_train_bunching(trains, station_positions=custom_positions)
+        assert len(bunching) > 0, f"Should detect bunching with custom positions"
+        assert bunching[0]['station'] == 'PO'
 
 
 if __name__ == "__main__":

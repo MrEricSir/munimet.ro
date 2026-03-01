@@ -46,26 +46,163 @@ from lib.config import (
 
 # Station X-positions (center of each station) at reference resolution
 # These are specific to the Muni display layout and don't belong in generic config
+# Updated 2026-02-28 from auto-detection on live image (post-BP addition)
 STATION_X_POSITIONS = {
-    'WE': 36,
-    'FH': 178,
-    'CA': 362,
-    'CH': 485,
-    'VN': 802,   # Moved from 540 (was maintenance platform)
-    'CC': 879,
-    'PO': 971,
-    'MO': 1054,
-    'EM': 1182,
-    'MN': 1280,  # internal
-    'FP': 1380,  # internal
-    'TT': 1470,  # internal
-    'CT': 1564,
-    'US': 1732,
-    'YB': 1814,
+    'WE': 34,
+    'FH': 176,
+    'CA': 356,
+    'CH': 477,
+    'VN': 791,
+    'CC': 868,
+    'PO': 960,
+    'MO': 1041,
+    'EM': 1163,
+    'MN': 1258,  # internal
+    'FP': 1420,  # internal (TTL/CTL/FPL merge when close together)
+    'TT': 1519,  # internal (TTL/CTL merge into one blob, not individually detected)
+    'CT': 1558,  # TTL/CTL merge prevents individual detection; 1558 works for both pre/post-BP
+    'US': 1702,
+    'YB': 1786,
 }
+
+# Tolerance for matching detected labels to hardcoded positions (pixels)
+# 65px accommodates the ~60px shift between pre-BP and post-BP layouts
+LABEL_MATCH_TOLERANCE = 65
+
+# Minimum dedup spacing for detected labels (pixels)
+LABEL_DEDUP_SPACING = 50
 
 # Segments that should NOT be created (tracks not connected)
 DISCONNECTED_SEGMENTS = {('EM', 'CT')}
+
+
+def detect_label_positions(gray):
+    """Detect station label bounding boxes from a grayscale image.
+
+    Finds dark text blobs on the gray SCADA background in two Y-bands
+    (upper and lower label rows). Filters by size to match 3-letter
+    station codes and deduplicates nearby detections.
+
+    Args:
+        gray: Grayscale image (numpy array).
+
+    Returns:
+        Tuple of (upper_labels, lower_labels), each a list of
+        (x, y, w, h) bounding boxes sorted by x-position.
+    """
+    h_img = gray.shape[0]
+
+    # Threshold dark text on gray background
+    _, binary = cv2.threshold(gray, 90, 255, cv2.THRESH_BINARY_INV)
+
+    # Dilate horizontally to merge individual characters into label blobs
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (6, 2))
+    dilated = cv2.dilate(binary, kernel, iterations=2)
+
+    contours, _ = cv2.findContours(
+        dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    # Y-band bounds from config
+    upper_y_min = int(h_img * Y_BANDS['upper_labels'][0])
+    upper_y_max = int(h_img * Y_BANDS['upper_labels'][1])
+    lower_y_min = int(h_img * Y_BANDS['lower_labels'][0])
+    lower_y_max = int(h_img * Y_BANDS['lower_labels'][1])
+
+    upper = []
+    lower = []
+
+    for cnt in contours:
+        x, y, w, h = cv2.boundingRect(cnt)
+        cy = y + h // 2
+
+        # Station labels are 3 chars: ~22-50px wide, ~11-15px tall
+        # h >= 11 filters out partial text fragments (h=9-10) like "VAN"
+        # h < 16 filters out the BPL tunnel exit label (h=17) added in 2026
+        if not (22 < w < 50 and 10 < h < 16):
+            continue
+
+        if upper_y_min <= cy <= upper_y_max:
+            upper.append((x, y, w, h))
+        elif lower_y_min <= cy <= lower_y_max:
+            lower.append((x, y, w, h))
+
+    # Sort by x and deduplicate nearby labels
+    upper = _dedup_labels(sorted(upper, key=lambda b: b[0]))
+    lower = _dedup_labels(sorted(lower, key=lambda b: b[0]))
+
+    return upper, lower
+
+
+def _dedup_labels(labels, min_spacing=LABEL_DEDUP_SPACING):
+    """Remove duplicate label detections, preferring taller labels.
+
+    When two labels are within min_spacing pixels of each other,
+    the taller one is kept (real station labels are taller than
+    partial text fragments like "VAN" from "VAN NESS").
+    """
+    if not labels:
+        return []
+
+    result = [labels[0]]
+    for label in labels[1:]:
+        prev = result[-1]
+        if label[0] - prev[0] < min_spacing:
+            # Keep the taller label (more likely to be a real station label)
+            if label[3] > prev[3]:
+                result[-1] = label
+        else:
+            result.append(label)
+    return result
+
+
+def assign_labels_to_stations(labels, station_order, tolerance=LABEL_MATCH_TOLERANCE):
+    """Match detected labels to known station positions by proximity.
+
+    For each station, finds the nearest unmatched label within tolerance
+    of the hardcoded position. Labels that don't match any station are
+    ignored (false positives). Stations without a nearby label keep
+    their hardcoded positions.
+
+    Args:
+        labels: List of (x, y, w, h) label bounding boxes.
+        station_order: List of (code, name) tuples.
+        tolerance: Max pixel distance to match a label to a station.
+
+    Returns:
+        Dict of station_code -> center_x position, or None if too few
+        labels were matched (< 10 of 15 stations).
+    """
+    label_cx = [x + w // 2 for x, y, w, h in labels]
+    used = set()
+    positions = {}
+    matched_count = 0
+
+    for code, _ in station_order:
+        expected = STATION_X_POSITIONS[code]
+        best_idx = None
+        best_dist = tolerance
+
+        for i, cx in enumerate(label_cx):
+            if i in used:
+                continue
+            dist = abs(cx - expected)
+            if dist < best_dist:
+                best_dist = dist
+                best_idx = i
+
+        if best_idx is not None:
+            used.add(best_idx)
+            positions[code] = label_cx[best_idx]
+            matched_count += 1
+        else:
+            positions[code] = expected  # Keep hardcoded
+
+    # Require at least 10 of 15 stations to be matched from labels
+    if matched_count < 10:
+        return None
+
+    return positions
 
 
 class ColorDetector:
@@ -490,6 +627,45 @@ class StationDetector:
         self.cache = PositionCache(cache_path)
         self._cache_loaded = False
 
+    def get_positions(
+        self,
+        image: np.ndarray,
+        station_order: List[Tuple[str, str]]
+    ) -> Dict:
+        """
+        Get station positions, using auto-detection with hardcoded fallback.
+
+        Detects station label positions from the image and uses them to
+        refine hardcoded positions. Falls back to purely hardcoded positions
+        if label detection fails.
+
+        Args:
+            image: BGR image array.
+            station_order: List of (code, name) tuples.
+
+        Returns:
+            Dict with stations and track_segments in cache format.
+        """
+        h, w = image.shape[:2]
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Try auto-detection from both label rows
+        upper_labels, lower_labels = detect_label_positions(gray)
+
+        # Try upper row first (more reliable), then lower
+        x_positions = assign_labels_to_stations(upper_labels, station_order)
+        source = 'auto_upper'
+
+        if x_positions is None:
+            x_positions = assign_labels_to_stations(lower_labels, station_order)
+            source = 'auto_lower'
+
+        if x_positions is None:
+            # Fall back to hardcoded positions
+            return self.get_hardcoded_positions(w, h, station_order)
+
+        return self._build_positions(x_positions, w, h, station_order, source)
+
     def get_hardcoded_positions(
         self,
         img_width: int,
@@ -509,9 +685,39 @@ class StationDetector:
         Returns:
             Dict with stations and track_segments in cache format.
         """
-        # Scale factors for different image sizes
         x_scale = img_width / REFERENCE_IMAGE_WIDTH
-        y_scale = img_height / REFERENCE_IMAGE_HEIGHT
+        x_positions = {
+            code: int(STATION_X_POSITIONS.get(code, 0) * x_scale)
+            for code, _ in station_order
+        }
+        return self._build_positions(
+            x_positions, img_width, img_height, station_order, 'hardcoded'
+        )
+
+    def _build_positions(
+        self,
+        x_positions: Dict[str, int],
+        img_width: int,
+        img_height: int,
+        station_order: List[Tuple[str, str]],
+        source: str
+    ) -> Dict:
+        """
+        Build full position dict from x-positions.
+
+        Shared by get_hardcoded_positions() and get_positions().
+
+        Args:
+            x_positions: Dict of station_code -> center_x pixel position.
+            img_width: Image width.
+            img_height: Image height.
+            station_order: List of (code, name) tuples.
+            source: Detection source label ('hardcoded', 'auto_upper', etc.).
+
+        Returns:
+            Dict with stations and track_segments in cache format.
+        """
+        x_scale = img_width / REFERENCE_IMAGE_WIDTH
 
         # Calculate track Y positions
         upper_track_y = int(img_height * UPPER_TRACK_Y_PCT)
@@ -525,13 +731,10 @@ class StationDetector:
         # Build stations dict
         stations = {}
         for code, name in station_order:
-            base_x = STATION_X_POSITIONS.get(code, 0)
-            scaled_x = int(base_x * x_scale)
-
             stations[code] = {
                 'code': code,
                 'name': name,
-                'center_x': scaled_x,
+                'center_x': x_positions.get(code, 0),
                 'upper_label_y': upper_label_y,
                 'lower_label_y': lower_label_y,
                 'upper_platform': None,
@@ -604,11 +807,11 @@ class StationDetector:
             'version': '1.0',
             'image_dimensions': {'width': img_width, 'height': img_height},
             'calibrated_at': datetime.now().isoformat(),
-            'confidence_score': 1.0,  # Hardcoded positions are 100% confident
+            'confidence_score': 1.0,
             'stations': stations,
             'track_segments': track_segments,
             'detection_parameters': {
-                'source': 'hardcoded',
+                'source': source,
                 'upper_track_y': upper_track_y,
                 'lower_track_y': lower_track_y,
             },

@@ -192,13 +192,23 @@ def detect_segment_color(hsv, bounds):
         return 'unknown', 0
 
 
-def detect_train_bunching(trains, threshold=BUNCHING_THRESHOLD, cluster_distance=BUNCHING_CLUSTER_DISTANCE):
+def detect_train_bunching(trains, station_positions=None, threshold=BUNCHING_THRESHOLD, cluster_distance=BUNCHING_CLUSTER_DISTANCE):
     """
     Detect train bunching (multiple trains clustered close together).
+
+    Args:
+        trains: List of train dicts with 'x', 'track', 'id' keys.
+        station_positions: Dict of station_code -> x_position. If None,
+            uses STATION_X_POSITIONS from hardcoded fallback.
+        threshold: Min trains to count as bunching.
+        cluster_distance: Max pixels between trains in a cluster.
 
     Returns:
         list: List of bunching incidents [{station, track, direction, train_count}]
     """
+    if station_positions is None:
+        station_positions = STATION_X_POSITIONS
+
     def get_zone_length(station_code, track):
         if track == 'upper':
             return BUNCHING_ZONE_LENGTH_UPPER.get(station_code, BUNCHING_DEFAULT_ZONE_LENGTH)
@@ -240,7 +250,7 @@ def detect_train_bunching(trains, threshold=BUNCHING_THRESHOLD, cluster_distance
         cluster_left_x = min(t['x'] for t in cluster)
         nearest_station = None
         min_distance = float('inf')
-        for station_code, station_x in STATION_X_POSITIONS.items():
+        for station_code, station_x in station_positions.items():
             if station_code in BUNCHING_EXCLUDED_STATIONS:
                 continue
             # Find nearest station to cluster front (absolute distance)
@@ -264,7 +274,7 @@ def detect_train_bunching(trains, threshold=BUNCHING_THRESHOLD, cluster_distance
         cluster_right_x = max(t['x'] for t in cluster)
         nearest_station = None
         min_distance = float('inf')
-        for station_code, station_x in STATION_X_POSITIONS.items():
+        for station_code, station_x in station_positions.items():
             if station_code in BUNCHING_EXCLUDED_STATIONS:
                 continue
             # Station must be at or to the right of the cluster front
@@ -525,9 +535,9 @@ def detect_system_status(image_path):
     h, w = img.shape[:2]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-    # Get station detector and positions
+    # Get station detector and positions (auto-detect from image, hardcoded fallback)
     detector = _get_station_detector()
-    positions = detector.get_hardcoded_positions(w, h, STATION_ORDER)
+    positions = detector.get_positions(img, STATION_ORDER)
 
     # Detect stations and platforms
     stations = []
@@ -625,8 +635,12 @@ def detect_system_status(image_path):
                 'route': route,
             })
 
-    # Detect train bunching
-    bunching_incidents = detect_train_bunching(trains)
+    # Detect train bunching using auto-detected station positions
+    bunching_positions = {
+        code: pos['center_x']
+        for code, pos in positions['stations'].items()
+    }
+    bunching_incidents = detect_train_bunching(trains, station_positions=bunching_positions)
 
     # Calculate overall status
     system_status = calculate_system_status(trains, delays_platforms, delays_segments, bunching_incidents)

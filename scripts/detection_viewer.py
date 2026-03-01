@@ -138,8 +138,8 @@ def get_detection_data(image_path):
     h, w = img.shape[:2]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-    # Get hardcoded positions scaled to this image
-    positions = detector.get_hardcoded_positions(w, h, STATION_ORDER)
+    # Get positions (auto-detect from image, hardcoded fallback)
+    positions = detector.get_positions(img, STATION_ORDER)
 
     # Platform Y positions vary by station location
     # Western stations (WE-CH): upper at Y=380, lower at Y=500 in 800px image
@@ -261,8 +261,12 @@ def get_detection_data(image_path):
                 'confidence': t.get('confidence', 'high')
             })
 
-    # Detect train bunching (multiple trains waiting to enter a station)
-    bunching_incidents = detect_train_bunching(trains)
+    # Detect train bunching using auto-detected station positions
+    bunching_positions = {
+        code: pos['center_x']
+        for code, pos in positions['stations'].items()
+    }
+    bunching_incidents = detect_train_bunching(trains, station_positions=bunching_positions)
 
     # Calculate overall system status
     system_status = calculate_system_status(trains, delays_platforms, delays_segments, bunching_incidents)
