@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
-Robust station and track detection using color-based detection with caching.
+Station position detection and platform/track color analysis.
 
-This module provides a more reliable alternative to text-based station label
-detection by identifying station platforms and track lines by their distinctive
-colors (blue/yellow platforms, cyan/red tracks).
+Station positions are auto-detected from the SCADA image by finding dark text
+labels in the upper/lower label Y-bands, then matching them to known station
+codes by proximity. This adapts to layout shifts (e.g., when SFMTA added the
+BP tunnel exit label in Feb 2026, compressing all stations leftward by up to
+30px). If auto-detection fails (<10 of 15 stations matched), hardcoded
+fallback positions are used.
 
-Positions are cached since the display layout is stable, with fallback to
-text detection when color detection fails.
+Auto-detected positions feed into:
+- Platform color detection (blue=normal, yellow=hold) at each station
+- Track segment bounds (red=disabled between station pairs)
+- Train bunching zone calculation
+
+See also: detect_label_positions(), assign_labels_to_stations(),
+StationDetector.get_positions().
 """
 
 import cv2
