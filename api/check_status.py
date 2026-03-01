@@ -23,7 +23,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image, calculate_best_status
+from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, write_cache, write_cached_image, write_cached_badge, calculate_best_status
 from lib.detection import apply_status_hysteresis
 from lib.notifiers import notify_status_change
 from lib.analytics import log_status_check
@@ -253,11 +253,15 @@ def check_status(should_write_cache=False, interval_seconds=None):
             if len(statuses) > 1:
                 history = ' -> '.join(s['status'] for s in statuses)
                 print(f"  History: [{history}], Reported: {reported_status['status']}")
-            # Also cache the image for the dashboard
+            # Also cache the image and badge for the dashboard
             if write_cached_image(result['filepath']):
                 print(f"  Image cached")
             else:
                 print(f"  Image cache failed")
+            if write_cached_badge(reported_status['status']):
+                print(f"  Badge cached")
+            else:
+                print(f"  Badge cache failed")
 
             # Notify all channels — done early so notifications aren't lost to timeouts.
             # Determines whether to notify due to a new transition or a missed previous notification.

@@ -6,6 +6,8 @@ Real-time monitoring of San Francisco's Muni Metro subway using OpenCV-based com
 
 URL: https://munimet.ro
 
+Current status: [![Muni Metro Status](https://munimet.ro/badge.svg)](https://munimet.ro)
+
 This project was "vibe coded" using Anthropic's Claude Code. Uses deterministic computer vision analysis; no ML models or external AI services required.
 
 ## Quick Start
@@ -62,21 +64,19 @@ See [deploy/README.md](deploy/README.md) for detailed deployment instructions.
 
 ### Credentials Setup (Optional)
 
-To enable Bluesky status posting, configure credentials:
+To enable social media posting and webhook notifications:
 
 ```bash
-# Local development - saves to .env file
-python3 scripts/setup/setup-credentials.py
+# Social media credentials (Bluesky, Mastodon)
+python3 scripts/setup/setup-credentials.py           # Local (.env file)
+python3 scripts/setup/setup-credentials.py --cloud    # Google Cloud Secret Manager
 
-# Cloud deployment - saves to Google Cloud Secret Manager
-python3 scripts/setup/setup-credentials.py --cloud
+# Webhook URLs (Slack, Discord, Teams, etc.)
+python3 scripts/setup/manage-webhooks.py              # Local (.env file)
+python3 scripts/setup/manage-webhooks.py --cloud      # Google Cloud Secret Manager
 ```
 
-The setup script will prompt for:
-- **Bluesky handle** - Your account (e.g., `munimetro.bsky.social`)
-- **Bluesky app password** - Generate at [bsky.app/settings/app-passwords](https://bsky.app/settings/app-passwords)
-
-Credentials are optional - the app works without them, but won't post status updates to Bluesky.
+Credentials and webhooks are optional - the app works without them, but won't post status updates or send notifications.
 
 ## Accessing Training Data
 
@@ -140,14 +140,18 @@ munimet.ro/
 │   ├── train_detector.py  # Train ID detection (OCR)
 │   ├── station_constants.py # Station definitions
 │   ├── analytics.py       # SQLite-based delay analytics
-│   └── notifiers/         # Notification channels (Bluesky, RSS)
+│   ├── badge.py           # SVG status badge generator
+│   └── notifiers/         # Notification channels (Bluesky, Mastodon, RSS, webhooks)
 │
 ├── scripts/               # Development and utility scripts
 │   ├── analyze.py         # CLI tool for image analysis
 │   ├── detect_stations.py # Station detection CLI
 │   ├── detection_viewer.py # Interactive detection viewer
 │   ├── validate.sh        # Local validation (lint + tests)
-│   └── install-hooks.sh   # Git hooks installer
+│   ├── install-hooks.sh   # Git hooks installer
+│   └── setup/             # Setup and configuration scripts
+│       ├── setup-credentials.py  # Social media credentials
+│       └── manage-webhooks.py    # Webhook URL manager
 │
 ├── api/                   # Production web API
 │   ├── api.py             # Falcon web server
@@ -243,8 +247,58 @@ Users
 - **Smart Caching** - Best-of-three smoothing reduces false positives (~30ms local response time)
 - **Cloud Native** - Serverless deployment on Google Cloud Run with automatic scaling
 - **No ML Dependencies** - No PyTorch or large model files required
-- **Multi-Channel Notifications** - Status updates via Bluesky and RSS feed
+- **Multi-Channel Notifications** - Status updates via Bluesky, Mastodon, RSS, and webhooks (Slack, Discord, Teams)
 - **Delay Analytics** - SQLite-based tracking with visual dashboard for delay patterns
+
+## Integrations
+
+### Status Badge
+
+Embed a live status badge on any site or README:
+
+```markdown
+[![Muni Metro Status](https://munimet.ro/badge.svg)](https://munimet.ro)
+```
+
+The badge updates automatically and shows the current system status (green/yellow/red).
+
+### Webhooks
+
+Get notified on Slack, Discord, Microsoft Teams, or any HTTP endpoint when the system status changes.
+
+```bash
+# Interactive manager — add, remove, test, list webhooks
+python scripts/setup/manage-webhooks.py           # Local (.env)
+python scripts/setup/manage-webhooks.py --cloud   # Google Cloud Secret Manager
+
+# Non-interactive
+python scripts/setup/manage-webhooks.py --add https://hooks.slack.com/services/T00/B00/xxx
+python scripts/setup/manage-webhooks.py --remove https://hooks.slack.com/services/T00/B00/xxx
+python scripts/setup/manage-webhooks.py --list
+python scripts/setup/manage-webhooks.py --test    # Send a test notification
+```
+
+Slack, Discord, and Teams URLs are auto-detected and receive platform-native payloads (rich embeds, action buttons, etc.). All other URLs receive a generic JSON payload:
+
+```json
+{
+  "status": "yellow",
+  "previous_status": "green",
+  "description": "Uh oh: Muni's not feeling well",
+  "delay_summaries": ["Westbound delay at Powell"],
+  "timestamp": "2026-03-01T12:00:00",
+  "url": "https://munimet.ro",
+  "badge_url": "https://munimet.ro/badge.svg"
+}
+```
+
+### RSS Feed
+
+Subscribe to status changes via RSS at `https://munimet.ro/feed.xml`. Works with any RSS reader, and can be bridged to Slack or Discord using their built-in RSS integrations.
+
+### Social Media
+
+Follow [@munimetro.bsky.social](https://bsky.app/profile/munimetro.bsky.social) on Bluesky or [@MuniMetro@mastodon.social](https://mastodon.social/@MuniMetro) on Mastodon for status updates.
 
 ## Development Workflow
 

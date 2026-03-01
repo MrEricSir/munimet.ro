@@ -25,6 +25,15 @@ from lib.notifiers import (
     read_rss_feed,
     generate_empty_feed,
     notify_status_change,
+    send_webhooks,
+)
+from lib.notifiers.webhooks import (
+    _detect_webhook_type,
+    _build_slack_payload,
+    _build_discord_payload,
+    _build_teams_payload,
+    _build_generic_payload,
+    get_webhook_urls,
 )
 from lib.notifiers.rss import (
     _generate_xml,
@@ -438,3 +447,139 @@ class TestRSSFeedValidation:
 
         # Should have atom namespace
         assert 'atom' in content or 'http://www.w3.org/2005/Atom' in content
+
+
+class TestWebhookTypeDetection:
+    """Tests for webhook URL platform detection."""
+
+    def test_detect_slack(self):
+        assert _detect_webhook_type('https://hooks.slack.com/services/T00/B00/xxx') == 'slack'
+
+    def test_detect_discord(self):
+        assert _detect_webhook_type('https://discord.com/api/webhooks/123/abc') == 'discord'
+
+    def test_detect_discord_legacy(self):
+        assert _detect_webhook_type('https://discordapp.com/api/webhooks/123/abc') == 'discord'
+
+    def test_detect_teams(self):
+        assert _detect_webhook_type('https://outlook.webhook.office.com/webhookb2/xxx') == 'teams'
+
+    def test_detect_teams_logic_app(self):
+        assert _detect_webhook_type('https://prod-01.westus.logic.azure.com/workflows/xxx') == 'teams'
+
+    def test_detect_generic(self):
+        assert _detect_webhook_type('https://example.com/webhook') == 'generic'
+
+
+class TestWebhookPayloads:
+    """Tests for webhook payload formatting."""
+
+    def test_slack_payload_structure(self):
+        payload = _build_slack_payload('green', None, None)
+        assert 'text' in payload
+        assert 'username' in payload
+        assert payload['username'] == 'MuniMetro'
+
+    def test_slack_payload_includes_delays(self):
+        payload = _build_slack_payload('yellow', 'green', ['Delay at Powell'])
+        assert 'Powell' in payload['text']
+
+    def test_discord_payload_has_embed(self):
+        payload = _build_discord_payload('green', None, None)
+        assert 'embeds' in payload
+        assert len(payload['embeds']) == 1
+        assert 'color' in payload['embeds'][0]
+
+    def test_discord_payload_delay_fields(self):
+        payload = _build_discord_payload('yellow', 'green', ['Delay at Powell'])
+        embed = payload['embeds'][0]
+        assert 'fields' in embed
+        assert 'Powell' in embed['fields'][0]['value']
+
+    def test_teams_payload_structure(self):
+        payload = _build_teams_payload('red', 'yellow', None)
+        assert payload['@type'] == 'MessageCard'
+        assert 'themeColor' in payload
+        assert 'potentialAction' in payload
+
+    def test_generic_payload_structure(self):
+        payload = _build_generic_payload('green', 'yellow', ['Delay'], '2026-03-01T12:00:00')
+        assert payload['status'] == 'green'
+        assert payload['previous_status'] == 'yellow'
+        assert payload['delay_summaries'] == ['Delay']
+        assert 'url' in payload
+        assert 'badge_url' in payload
+
+
+class TestWebhookURLConfig:
+    """Tests for webhook URL configuration."""
+
+    def test_no_urls_configured(self):
+        with patch.dict(os.environ, {}, clear=True):
+            assert get_webhook_urls() == []
+
+    def test_empty_env_var(self):
+        with patch.dict(os.environ, {'WEBHOOK_URLS': ''}, clear=True):
+            assert get_webhook_urls() == []
+
+    def test_single_url(self):
+        with patch.dict(os.environ, {'WEBHOOK_URLS': 'https://example.com/hook'}, clear=True):
+            urls = get_webhook_urls()
+            assert urls == ['https://example.com/hook']
+
+    def test_multiple_urls(self):
+        with patch.dict(os.environ, {'WEBHOOK_URLS': 'https://a.com,https://b.com'}, clear=True):
+            urls = get_webhook_urls()
+            assert len(urls) == 2
+
+    def test_urls_stripped(self):
+        with patch.dict(os.environ, {'WEBHOOK_URLS': '  https://a.com , https://b.com  '}, clear=True):
+            urls = get_webhook_urls()
+            assert urls == ['https://a.com', 'https://b.com']
+
+
+class TestWebhookSending:
+    """Tests for webhook delivery."""
+
+    def test_send_no_urls(self):
+        with patch.dict(os.environ, {}, clear=True):
+            result = send_webhooks(status='green')
+        assert result['success'] is False
+        assert result['sent'] == 0
+        assert 'Not configured' in result['error']
+
+    def test_send_successful(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.dict(os.environ, {'WEBHOOK_URLS': 'https://example.com/hook'}, clear=True):
+            with patch('lib.notifiers.webhooks.requests.post', return_value=mock_response):
+                result = send_webhooks(status='green')
+
+        assert result['success'] is True
+        assert result['sent'] == 1
+        assert result['failed'] == 0
+
+    def test_send_partial_failure(self):
+        mock_ok = MagicMock()
+        mock_ok.raise_for_status = MagicMock()
+        mock_fail = MagicMock()
+        mock_fail.raise_for_status.side_effect = Exception('Connection refused')
+
+        with patch.dict(os.environ, {'WEBHOOK_URLS': 'https://a.com,https://b.com'}, clear=True):
+            with patch('lib.notifiers.webhooks.requests.post', side_effect=[mock_ok, mock_fail]):
+                result = send_webhooks(status='green')
+
+        assert result['success'] is False
+        assert result['sent'] == 1
+        assert result['failed'] == 1
+        assert 'Connection refused' in result['error']
+
+    def test_dispatcher_includes_webhooks(self):
+        """Test that the dispatcher includes webhook results."""
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('lib.notifiers.rss.update_rss_feed', return_value={'success': True, 'path': '/test', 'error': None}):
+                result = notify_status_change(status='green', previous_status='yellow')
+
+        assert 'webhooks' in result

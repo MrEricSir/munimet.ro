@@ -33,7 +33,7 @@ PROJECT_ROOT = API_DIR.parent
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, str(PROJECT_ROOT))
-from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, read_cached_image
+from lib.muni_lib import download_muni_image, detect_muni_status, read_cache, read_cached_image, read_cached_badge
 from lib.config import (
     CACHE_MAX_AGE,
     STALENESS_FRESH,
@@ -482,6 +482,33 @@ class AnalyticsResource:
         resp.set_header('Cache-Control', 'public, max-age=1800')
 
 
+class BadgeResource:
+    """Serve a pre-generated SVG status badge for embedding on external sites."""
+
+    def on_get(self, req, resp):
+        """Handle GET request to /badge.svg"""
+        # Serve pre-generated badge from cache (written by checker job)
+        badge_svg = read_cached_badge()
+
+        if not badge_svg:
+            # Fallback: generate on the fly from current status
+            from lib.badge import generate_badge
+
+            status = None
+            cache_data = read_cache()
+            if cache_data:
+                reported = cache_data.get('reported_status') or cache_data.get('best_status')
+                if reported:
+                    status = reported.get('status')
+            badge_svg = generate_badge(status)
+
+        resp.status = falcon.HTTP_200
+        resp.content_type = 'image/svg+xml; charset=utf-8'
+        resp.text = badge_svg
+        # Cache for 1 minute — badge is updated by checker job every 3 min
+        resp.set_header('Cache-Control', 'public, max-age=60')
+
+
 class StaticResource:
     """Serve the frontend HTML files with proper caching."""
     def __init__(self, filename, content_type):
@@ -547,6 +574,7 @@ falcon_app.add_route('/health', HealthResource())
 falcon_app.add_route('/latest-image', LatestImageResource())
 falcon_app.add_route('/feed.xml', RSSFeedResource())
 falcon_app.add_route('/analytics-data', AnalyticsResource())
+falcon_app.add_route('/badge.svg', BadgeResource())
 falcon_app.add_route('/analytics', TextResource('analytics.html'))
 
 # Wrap with WhiteNoise for efficient static file serving with compression and caching

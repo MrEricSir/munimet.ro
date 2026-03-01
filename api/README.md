@@ -181,6 +181,28 @@ Analytics dashboard showing delay statistics.
 - Delays by hour of day (bar chart)
 - Delays by day of week (bar chart)
 
+### GET /badge.svg
+
+Embeddable status badge (shields.io style). Shows current system status as a small SVG image suitable for embedding in READMEs, dashboards, or external sites.
+
+**Response** (200 OK): SVG image
+
+**Example**:
+
+```markdown
+[![Muni Metro Status](https://munimet.ro/badge.svg)](https://munimet.ro)
+```
+
+**Status values**:
+| Status | Label | Color |
+|--------|-------|-------|
+| green | on track | green |
+| yellow | delays | yellow |
+| red | down | red |
+| unknown | unknown | gray |
+
+**Caching**: 1 minute (`Cache-Control: public, max-age=60`)
+
 ### GET /analytics-data
 
 JSON API for delay analytics.
@@ -317,6 +339,23 @@ curl https://munimetro-api-438243686292.us-west1.run.app/status
 - `GCS_BUCKET`: `munimetro-cache` - Cache bucket name
 - `ENABLE_FALLBACK`: `false` - Cache-only mode (no fallback)
 - `PORT`: `8000` - HTTP server port
+
+### Webhooks
+
+- `WEBHOOK_URLS`: Comma-separated list of webhook URLs to notify on status changes
+
+Slack, Discord, and Microsoft Teams URLs are auto-detected and receive platform-native payloads. All other URLs receive a generic JSON payload.
+
+Manage webhooks with the interactive script:
+
+```bash
+python scripts/setup/manage-webhooks.py              # Local (.env)
+python scripts/setup/manage-webhooks.py --cloud       # Secret Manager
+python scripts/setup/manage-webhooks.py --list        # Show current webhooks
+python scripts/setup/manage-webhooks.py --test        # Send test notification
+python scripts/setup/manage-webhooks.py --add URL     # Add a webhook
+python scripts/setup/manage-webhooks.py --remove URL  # Remove a webhook
+```
 
 See [CONFIGURATION.md](../CONFIGURATION.md) for complete configuration reference.
 

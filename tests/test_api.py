@@ -607,6 +607,96 @@ class TestErrorHandling:
         assert response.status_code in [200, 500, 503]
 
 
+class TestBadgeEndpoint:
+    """Tests for the /badge.svg endpoint."""
+
+    def test_badge_serves_cached_svg(self, client):
+        """Test that /badge.svg serves a pre-generated cached badge."""
+        cached_svg = '<svg xmlns="http://www.w3.org/2000/svg"><text>cached</text></svg>'
+
+        with patch('api.api.read_cached_badge', return_value=cached_svg):
+            response = client.simulate_get('/badge.svg')
+
+        assert response.status_code == 200
+        assert 'image/svg+xml' in response.headers.get('content-type')
+        assert 'cached' in response.text
+
+    def test_badge_fallback_generates_on_fly(self, client):
+        """Test that badge falls back to on-the-fly generation when no cache."""
+        mock_cache = {
+            'reported_status': {'status': 'green'},
+        }
+
+        with patch('api.api.read_cached_badge', return_value=None):
+            with patch('api.api.read_cache', return_value=mock_cache):
+                response = client.simulate_get('/badge.svg')
+
+        assert response.status_code == 200
+        assert '<svg' in response.text
+        assert 'on track' in response.text
+        assert 'MuniMet.ro' in response.text
+
+    def test_badge_yellow_status(self, client):
+        """Test badge for yellow status."""
+        mock_cache = {
+            'reported_status': {'status': 'yellow'},
+        }
+
+        with patch('api.api.read_cached_badge', return_value=None):
+            with patch('api.api.read_cache', return_value=mock_cache):
+                response = client.simulate_get('/badge.svg')
+
+        assert response.status_code == 200
+        assert 'delays' in response.text
+        assert '#dfb317' in response.text
+
+    def test_badge_red_status(self, client):
+        """Test badge for red status."""
+        mock_cache = {
+            'reported_status': {'status': 'red'},
+        }
+
+        with patch('api.api.read_cached_badge', return_value=None):
+            with patch('api.api.read_cache', return_value=mock_cache):
+                response = client.simulate_get('/badge.svg')
+
+        assert response.status_code == 200
+        assert 'down' in response.text
+        assert '#e05d44' in response.text
+
+    def test_badge_no_cache(self, client):
+        """Test badge when both badge cache and status cache are unavailable."""
+        with patch('api.api.read_cached_badge', return_value=None):
+            with patch('api.api.read_cache', return_value=None):
+                response = client.simulate_get('/badge.svg')
+
+        assert response.status_code == 200
+        assert 'unknown' in response.text
+
+    def test_badge_cache_headers(self, client):
+        """Test that badge has appropriate cache headers."""
+        with patch('api.api.read_cached_badge', return_value='<svg></svg>'):
+            response = client.simulate_get('/badge.svg')
+
+        cache_control = response.headers.get('Cache-Control')
+        assert cache_control is not None
+        assert 'max-age=60' in cache_control
+
+    def test_badge_accessibility(self, client):
+        """Test that badge SVG has proper accessibility attributes."""
+        mock_cache = {
+            'reported_status': {'status': 'green'},
+        }
+
+        with patch('api.api.read_cached_badge', return_value=None):
+            with patch('api.api.read_cache', return_value=mock_cache):
+                response = client.simulate_get('/badge.svg')
+
+        assert 'role="img"' in response.text
+        assert 'aria-label=' in response.text
+        assert '<title>' in response.text
+
+
 class TestResponseStructure:
     """Tests for API response structure consistency."""
 

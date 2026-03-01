@@ -5,7 +5,7 @@ Dispatches status change notifications to all enabled channels.
 """
 
 import os
-from . import bluesky, mastodon, rss
+from . import bluesky, mastodon, rss, webhooks
 from .messages import STATUS_MESSAGES
 
 
@@ -24,7 +24,8 @@ def notify_status_change(status, previous_status, delay_summaries=None, timestam
             {
                 'bluesky': {'success': bool, 'uri': str, 'error': str},
                 'mastodon': {'success': bool, 'url': str, 'error': str},
-                'rss': {'success': bool, 'path': str, 'error': str}
+                'rss': {'success': bool, 'path': str, 'error': str},
+                'webhooks': {'success': bool, 'sent': int, 'failed': int, 'error': str}
             }
     """
     results = {}
@@ -63,6 +64,14 @@ def notify_status_change(status, previous_status, delay_summaries=None, timestam
     results['rss'] = rss.update_rss_feed(
         status=status,
         description=description,
+        delay_summaries=delay_summaries,
+        timestamp=timestamp
+    )
+
+    # Webhooks (if URLs configured)
+    results['webhooks'] = webhooks.send_webhooks(
+        status=status,
+        previous_status=previous_status,
         delay_summaries=delay_summaries,
         timestamp=timestamp
     )

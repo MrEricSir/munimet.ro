@@ -177,6 +177,74 @@ def write_cached_image(image_path):
         return False
 
 
+def write_cached_badge(status):
+    """
+    Generate and write a status badge SVG to cache (local file or Cloud Storage).
+
+    Args:
+        status: Current status ('green', 'yellow', 'red')
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    from lib.badge import generate_badge
+
+    svg_content = generate_badge(status)
+    cache_path = get_cache_path()
+
+    try:
+        if cache_path.startswith('gs://'):
+            from lib.gcs_utils import parse_gcs_path, gcs_upload_from_string
+
+            bucket_name, _ = parse_gcs_path(cache_path)
+
+            gcs_upload_from_string(
+                bucket_name,
+                'badge.svg',
+                svg_content,
+                content_type='image/svg+xml'
+            )
+            return True
+        else:
+            badge_path = os.path.join(os.path.dirname(cache_path), 'badge.svg')
+            os.makedirs(os.path.dirname(badge_path), exist_ok=True)
+            with open(badge_path, 'w') as f:
+                f.write(svg_content)
+            return True
+    except Exception as e:
+        print(f"Error writing cached badge: {e}")
+        return False
+
+
+def read_cached_badge():
+    """
+    Read the cached badge SVG from local file or Cloud Storage.
+
+    Returns:
+        str: SVG content, or None if not found
+    """
+    cache_path = get_cache_path()
+
+    try:
+        if cache_path.startswith('gs://'):
+            from lib.gcs_utils import parse_gcs_path, gcs_download_as_string
+
+            bucket_name, _ = parse_gcs_path(cache_path)
+            content = gcs_download_as_string(bucket_name, 'badge.svg')
+            if content is not None:
+                return content.decode('utf-8') if isinstance(content, bytes) else content
+            return None
+        else:
+            badge_path = os.path.join(os.path.dirname(cache_path), 'badge.svg')
+            if os.path.exists(badge_path):
+                with open(badge_path, 'r') as f:
+                    return f.read()
+            return None
+    except Exception as e:
+        print(f"Error reading cached badge: {e}")
+        return None
+
+
 def read_cached_image():
     """
     Read the cached image from local file or Cloud Storage.
