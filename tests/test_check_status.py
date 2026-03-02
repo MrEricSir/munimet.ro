@@ -177,3 +177,152 @@ class TestAnalyticsIntervalIntegration:
         # Should be 30/60 + 180/60 = 0.5 + 3 = 3.5 minutes
         # NOT 2 checks * some_default
         assert result['total_minutes'] == 3.5
+
+
+class TestNotificationIdempotency:
+    """Tests that unconfigured notification channels don't block last_notified_status.
+
+    Regression test for a bug where adding webhooks to the dispatcher caused
+    every check to re-trigger notifications. The webhook channel returned
+    success=False with "Not configured" when WEBHOOK_URLS was unset, which
+    prevented last_notified_status from being saved. On subsequent runs, the
+    checker saw last_notified_status != current_reported and entered the
+    "recovering missed notification" path, spamming all channels every 3 minutes.
+    """
+
+    def _make_status(self, status, timestamp='2026-03-01T12:00:00'):
+        """Helper to build a status dict."""
+        return {
+            'status': status,
+            'description': f'{status} description',
+            'confidence': 0.99,
+            'probabilities': {'green': 0.99, 'yellow': 0.005, 'red': 0.005},
+            'detection': {'trains': [{'id': 'TT', 'x': 500}], 'delays_platforms': [],
+                          'delays_segments': [], 'delays_bunching': [], 'delay_summaries': []},
+            'image_path': '/tmp/test.jpg',
+            'image_dimensions': {'width': 1860, 'height': 800},
+            'timestamp': timestamp,
+        }
+
+    def _run_check_status(self, cache_before, notify_results, detection_status='red'):
+        """Run check_status with mocked dependencies and return the final cache.
+
+        Sets up a scenario where the reported status is already `detection_status`
+        (hysteresis has already transitioned), and the new detection also returns
+        `detection_status`, so the notification path can be exercised via the
+        "recovering missed notification" logic.
+        """
+        from api import check_status as cs_module
+
+        saved_caches = []
+
+        def fake_write_cache(data):
+            saved_caches.append(data.copy())
+            return True
+
+        download_result = {
+            'success': True,
+            'filepath': '/tmp/test.jpg',
+            'width': 1860,
+            'height': 800,
+        }
+        detection_result = {
+            'status': detection_status,
+            'description': 'Not operating',
+            'status_confidence': 0.99,
+            'probabilities': {'green': 0.005, 'yellow': 0.005, 'red': 0.99},
+            'detection': {'trains': [], 'delays_platforms': [],
+                          'delays_segments': [], 'delays_bunching': [], 'delay_summaries': []},
+        }
+
+        with patch.object(cs_module, 'download_muni_image', return_value=download_result), \
+             patch.object(cs_module, 'detect_muni_status', return_value=detection_result), \
+             patch.object(cs_module, 'read_cache', return_value=cache_before), \
+             patch.object(cs_module, 'write_cache', side_effect=fake_write_cache), \
+             patch.object(cs_module, 'write_cached_image', return_value=True), \
+             patch.object(cs_module, 'write_cached_badge', return_value=True), \
+             patch.object(cs_module, 'notify_status_change', return_value=notify_results), \
+             patch.object(cs_module, 'log_status_check', return_value=1), \
+             patch('lib.analytics.check_database_health', return_value={'exists': True, 'has_data': True, 'check_count': 1}), \
+             patch.object(cs_module, 'archive_image', return_value=False), \
+             patch.object(cs_module, 'should_archive_baseline', return_value=False):
+            cs_module.check_status(should_write_cache=True)
+
+        return saved_caches
+
+    def _make_cache_with_missed_notification(self):
+        """Build a cache simulating a missed notification.
+
+        The reported status has already transitioned to red (via hysteresis),
+        but last_notified_status is still 'green' because the previous
+        notification run failed to save it. This triggers the "recovering
+        missed notification" path on the next check.
+        """
+        red_status = self._make_status('red', '2026-03-01T12:06:00')
+        return {
+            # 3 consecutive red statuses — hysteresis has already transitioned
+            'statuses': [
+                self._make_status('red', '2026-03-01T12:06:00'),
+                self._make_status('red', '2026-03-01T12:03:00'),
+                self._make_status('red', '2026-03-01T12:00:00'),
+            ],
+            'reported_status': red_status,
+            'best_status': red_status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'cached_at': '2026-03-01T12:06:00',
+            'last_successful_check': '2026-03-01T12:06:00',
+            'consecutive_failures': 0,
+            'last_error': None,
+            # KEY: last_notified_status is still 'green' — the notification was missed
+            'last_notified_status': 'green',
+        }
+
+    def test_unconfigured_channel_does_not_block_last_notified(self):
+        """Unconfigured channels should NOT prevent last_notified_status from being saved.
+
+        This is the core regression test. When a channel returns success=False
+        with "Not configured", it should be treated as a no-op, not a failure.
+        If last_notified_status is not saved, every subsequent check will
+        re-trigger notifications via the "recovering missed notification" path.
+        """
+        cache_before = self._make_cache_with_missed_notification()
+
+        # Dispatcher returns: RSS succeeded, others "Not configured"
+        notify_results = {
+            'rss': {'success': True},
+            'bluesky': {'success': False, 'error': 'Not configured: BLUESKY_HANDLE'},
+            'mastodon': {'success': False, 'error': 'Not configured: MASTODON_ACCESS_TOKEN'},
+            'webhooks': {'success': False, 'error': 'Not configured: no WEBHOOK_URLS'},
+        }
+
+        saved_caches = self._run_check_status(cache_before, notify_results)
+
+        # The final cache write should have last_notified_status updated to 'red'
+        # Bug behavior: last_notified_status stays 'green' because all_succeeded=False
+        final_cache = saved_caches[-1]
+        assert final_cache['last_notified_status'] == 'red', \
+            "last_notified_status should be updated even when unconfigured channels return success=False"
+
+    def test_real_failure_blocks_last_notified(self):
+        """A genuine notification failure SHOULD prevent last_notified_status update.
+
+        This ensures we didn't over-correct — if a configured channel actually
+        fails (network error, auth error, etc.), we should NOT update
+        last_notified_status so recovery is attempted on the next run.
+        """
+        cache_before = self._make_cache_with_missed_notification()
+
+        # Dispatcher returns: RSS succeeded, but Bluesky had a real failure
+        notify_results = {
+            'rss': {'success': True},
+            'bluesky': {'success': False, 'error': 'HTTP 500: Internal Server Error'},
+            'webhooks': {'success': False, 'error': 'Not configured: no WEBHOOK_URLS'},
+        }
+
+        saved_caches = self._run_check_status(cache_before, notify_results)
+
+        # last_notified_status should NOT be updated because Bluesky actually failed
+        final_cache = saved_caches[-1]
+        assert final_cache.get('last_notified_status') != 'red', \
+            "last_notified_status should NOT be updated when a real channel failure occurs"
