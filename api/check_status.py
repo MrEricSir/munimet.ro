@@ -286,14 +286,16 @@ def check_status(should_write_cache=False, interval_seconds=None):
                     delay_summaries=delay_summaries,
                     timestamp=reported_status['timestamp']
                 )
-                all_succeeded = True
+                any_failed = False
                 for channel, notify_result in notify_results.items():
                     if notify_result['success']:
                         print(f"  {channel}: OK")
+                    elif 'Not configured' in str(notify_result.get('error', '')):
+                        pass  # Unconfigured channels are not failures
                     else:
                         print(f"  {channel}: Failed - {notify_result.get('error', 'Unknown error')}")
-                        all_succeeded = False
-                if all_succeeded:
+                        any_failed = True
+                if not any_failed:
                     cache_data['last_notified_status'] = current_reported
                     write_cache(cache_data)
 
