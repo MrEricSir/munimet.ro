@@ -290,7 +290,7 @@ def check_status(should_write_cache=False, interval_seconds=None):
                 for channel, notify_result in notify_results.items():
                     if notify_result['success']:
                         print(f"  {channel}: OK")
-                    elif 'Not configured' in str(notify_result.get('error', '')):
+                    elif notify_result.get('skipped'):
                         pass  # Unconfigured channels are not failures
                     else:
                         print(f"  {channel}: Failed - {notify_result.get('error', 'Unknown error')}")

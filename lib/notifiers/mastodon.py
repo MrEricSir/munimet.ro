@@ -32,6 +32,7 @@ def post_to_mastodon(status, previous_status=None, delay_summaries=None):
     if not instance or not access_token:
         return {
             'success': False,
+            'skipped': True,
             'url': None,
             'error': 'MASTODON_INSTANCE and MASTODON_ACCESS_TOKEN environment variables required'
         }
@@ -64,12 +65,14 @@ def post_to_mastodon(status, previous_status=None, delay_summaries=None):
 
         return {
             'success': True,
+            'skipped': False,
             'url': result.get('url'),
             'error': None
         }
     except Exception as e:
         return {
             'success': False,
+            'skipped': False,
             'url': None,
             'error': str(e)
         }

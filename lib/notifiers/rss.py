@@ -304,6 +304,7 @@ def update_rss_feed(status, description=None, delay_summaries=None, timestamp=No
         if not _write_items(items):
             return {
                 'success': False,
+                'skipped': False,
                 'path': None,
                 'error': 'Failed to write RSS items'
             }
@@ -313,12 +314,14 @@ def update_rss_feed(status, description=None, delay_summaries=None, timestamp=No
         if write_rss_feed(xml_content):
             return {
                 'success': True,
+                'skipped': False,
                 'path': get_rss_path(),
                 'error': None
             }
         else:
             return {
                 'success': False,
+                'skipped': False,
                 'path': None,
                 'error': 'Failed to write RSS feed'
             }
@@ -326,6 +329,7 @@ def update_rss_feed(status, description=None, delay_summaries=None, timestamp=No
     except Exception as e:
         return {
             'success': False,
+            'skipped': False,
             'path': None,
             'error': str(e)
         }

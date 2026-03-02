@@ -300,9 +300,11 @@ class TestNotificationDispatcher:
 
         # Bluesky and Mastodon should report not configured
         assert result['bluesky']['success'] is False
+        assert result['bluesky']['skipped'] is True
         assert 'Not configured' in result['bluesky']['error']
 
         assert result['mastodon']['success'] is False
+        assert result['mastodon']['skipped'] is True
         assert 'Not configured' in result['mastodon']['error']
 
         # RSS should still work (no credentials needed)
@@ -545,6 +547,7 @@ class TestWebhookSending:
         with patch.dict(os.environ, {}, clear=True):
             result = send_webhooks(status='green')
         assert result['success'] is False
+        assert result['skipped'] is True
         assert result['sent'] == 0
         assert 'Not configured' in result['error']
 
@@ -558,6 +561,7 @@ class TestWebhookSending:
                 result = send_webhooks(status='green')
 
         assert result['success'] is True
+        assert result['skipped'] is False
         assert result['sent'] == 1
         assert result['failed'] == 0
 
@@ -579,7 +583,45 @@ class TestWebhookSending:
     def test_dispatcher_includes_webhooks(self):
         """Test that the dispatcher includes webhook results."""
         with patch.dict(os.environ, {}, clear=True):
-            with patch('lib.notifiers.rss.update_rss_feed', return_value={'success': True, 'path': '/test', 'error': None}):
+            with patch('lib.notifiers.rss.update_rss_feed', return_value={'success': True, 'skipped': False, 'path': '/test', 'error': None}):
                 result = notify_status_change(status='green', previous_status='yellow')
 
         assert 'webhooks' in result
+
+
+class TestSkippedField:
+    """Tests that every notification channel always returns the 'skipped' key."""
+
+    def test_skipped_field_present_in_all_channels(self):
+        """Every channel must include 'skipped' in its return dict."""
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('lib.notifiers.rss.update_rss_feed', return_value={'success': True, 'skipped': False, 'path': '/test', 'error': None}):
+                result = notify_status_change(status='green', previous_status='yellow')
+
+        for channel, channel_result in result.items():
+            assert 'skipped' in channel_result, \
+                f"Channel '{channel}' is missing the 'skipped' key"
+
+    def test_unconfigured_channels_skipped_true(self):
+        """Unconfigured channels must return skipped=True."""
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('lib.notifiers.rss.update_rss_feed', return_value={'success': True, 'skipped': False, 'path': '/test', 'error': None}):
+                result = notify_status_change(status='green', previous_status='yellow')
+
+        assert result['bluesky']['skipped'] is True
+        assert result['mastodon']['skipped'] is True
+        assert result['webhooks']['skipped'] is True
+        # RSS is always enabled
+        assert result['rss']['skipped'] is False
+
+    def test_bluesky_unconfigured_skipped(self):
+        """Bluesky returns skipped=True when credentials are missing."""
+        with patch.dict(os.environ, {}, clear=True):
+            result = post_to_bluesky(status='green')
+        assert result['skipped'] is True
+
+    def test_mastodon_unconfigured_skipped(self):
+        """Mastodon returns skipped=True when credentials are missing."""
+        with patch.dict(os.environ, {}, clear=True):
+            result = post_to_mastodon(status='green')
+        assert result['skipped'] is True

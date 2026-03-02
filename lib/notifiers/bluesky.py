@@ -32,6 +32,7 @@ def post_to_bluesky(status, previous_status=None, delay_summaries=None):
     if not handle or not app_password:
         return {
             'success': False,
+            'skipped': True,
             'uri': None,
             'error': 'BLUESKY_HANDLE and BLUESKY_APP_PASSWORD environment variables required'
         }
@@ -61,12 +62,14 @@ def post_to_bluesky(status, previous_status=None, delay_summaries=None):
 
         return {
             'success': True,
+            'skipped': False,
             'uri': post.uri,
             'error': None
         }
     except Exception as e:
         return {
             'success': False,
+            'skipped': False,
             'uri': None,
             'error': str(e)
         }

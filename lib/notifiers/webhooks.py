@@ -171,6 +171,7 @@ def send_webhooks(status, previous_status=None, delay_summaries=None, timestamp=
     if not urls:
         return {
             'success': False,
+            'skipped': True,
             'sent': 0,
             'failed': 0,
             'error': 'Not configured (WEBHOOK_URLS not set)',
@@ -206,6 +207,7 @@ def send_webhooks(status, previous_status=None, delay_summaries=None, timestamp=
 
     return {
         'success': failed == 0 and sent > 0,
+        'skipped': False,
         'sent': sent,
         'failed': failed,
         'error': first_error,

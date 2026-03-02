@@ -22,11 +22,12 @@ def notify_status_change(status, previous_status, delay_summaries=None, timestam
     Returns:
         dict: Results from each notifier channel
             {
-                'bluesky': {'success': bool, 'uri': str, 'error': str},
-                'mastodon': {'success': bool, 'url': str, 'error': str},
-                'rss': {'success': bool, 'path': str, 'error': str},
-                'webhooks': {'success': bool, 'sent': int, 'failed': int, 'error': str}
+                'bluesky': {'success': bool, 'skipped': bool, 'uri': str, 'error': str},
+                'mastodon': {'success': bool, 'skipped': bool, 'url': str, 'error': str},
+                'rss': {'success': bool, 'skipped': bool, 'path': str, 'error': str},
+                'webhooks': {'success': bool, 'skipped': bool, 'sent': int, 'failed': int, 'error': str}
             }
+            'skipped' is True when the channel is not configured (no credentials/URLs set).
     """
     results = {}
 
@@ -40,6 +41,7 @@ def notify_status_change(status, previous_status, delay_summaries=None, timestam
     else:
         results['bluesky'] = {
             'success': False,
+            'skipped': True,
             'uri': None,
             'error': 'Not configured (BLUESKY_HANDLE/BLUESKY_APP_PASSWORD not set)'
         }
@@ -54,6 +56,7 @@ def notify_status_change(status, previous_status, delay_summaries=None, timestam
     else:
         results['mastodon'] = {
             'success': False,
+            'skipped': True,
             'url': None,
             'error': 'Not configured (MASTODON_INSTANCE/MASTODON_ACCESS_TOKEN not set)'
         }
