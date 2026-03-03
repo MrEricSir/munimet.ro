@@ -26,6 +26,8 @@ from lib.notifiers import (
     generate_empty_feed,
     notify_status_change,
     send_webhooks,
+    VALID_STATUSES,
+    ALL_CHANNELS,
 )
 from lib.notifiers.webhooks import (
     _detect_webhook_type,
@@ -625,3 +627,93 @@ class TestSkippedField:
         with patch.dict(os.environ, {}, clear=True):
             result = post_to_mastodon(status='green')
         assert result['skipped'] is True
+
+
+class TestStatusValidation:
+    """Tests for status validation in the dispatcher."""
+
+    def test_valid_statuses_accepted(self):
+        """All three valid statuses should complete without raising."""
+        for status in ['green', 'yellow', 'red']:
+            with patch.dict(os.environ, {}, clear=True):
+                with patch('lib.notifiers.rss.update_rss_feed',
+                           return_value={'success': True, 'skipped': False, 'path': '/test', 'error': None}):
+                    # Should not raise
+                    result = notify_status_change(status=status, previous_status=None)
+            assert 'rss' in result
+
+    def test_invalid_status_raises_value_error(self):
+        """Invalid status string should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid status 'orange'"):
+            notify_status_change(status='orange', previous_status=None)
+
+    def test_none_status_raises(self):
+        """None status should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid status None"):
+            notify_status_change(status=None, previous_status=None)
+
+    def test_non_string_status_raises(self):
+        """Non-string status should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid status 42"):
+            notify_status_change(status=42, previous_status=None)
+
+    def test_empty_string_status_raises(self):
+        """Empty string status should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid status ''"):
+            notify_status_change(status='', previous_status=None)
+
+
+class TestChannelFiltering:
+    """Tests for the channels parameter in the dispatcher."""
+
+    def test_channels_param_limits_dispatch(self):
+        """Only specified channels should be called."""
+        mock_rss_result = {'success': True, 'skipped': False, 'path': '/test', 'error': None}
+
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('lib.notifiers.rss.update_rss_feed', return_value=mock_rss_result) as mock_rss:
+                result = notify_status_change(
+                    status='green',
+                    previous_status='yellow',
+                    channels={'rss'}
+                )
+
+        # Only RSS should be in results
+        assert 'rss' in result
+        assert 'bluesky' not in result
+        assert 'mastodon' not in result
+        assert 'webhooks' not in result
+        mock_rss.assert_called_once()
+
+    def test_channels_none_dispatches_all(self):
+        """When channels is None (default), all channels should be dispatched."""
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('lib.notifiers.rss.update_rss_feed',
+                       return_value={'success': True, 'skipped': False, 'path': '/test', 'error': None}):
+                result = notify_status_change(
+                    status='green',
+                    previous_status='yellow',
+                    channels=None
+                )
+
+        # All channels should be in results
+        assert 'rss' in result
+        assert 'bluesky' in result
+        assert 'mastodon' in result
+        assert 'webhooks' in result
+
+    def test_unknown_channel_ignored(self):
+        """Unknown channel names in the set should be silently ignored."""
+        mock_rss_result = {'success': True, 'skipped': False, 'path': '/test', 'error': None}
+
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('lib.notifiers.rss.update_rss_feed', return_value=mock_rss_result):
+                result = notify_status_change(
+                    status='green',
+                    previous_status='yellow',
+                    channels={'rss', 'telegram', 'sms'}  # telegram/sms don't exist
+                )
+
+        assert 'rss' in result
+        assert 'telegram' not in result
+        assert 'sms' not in result

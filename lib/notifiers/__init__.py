@@ -17,7 +17,7 @@ Usage:
     )
 """
 
-from .dispatcher import notify_status_change
+from .dispatcher import notify_status_change, VALID_STATUSES, ALL_CHANNELS
 from .bluesky import post_to_bluesky
 from .mastodon import post_to_mastodon
 from .rss import update_rss_feed, read_rss_feed, generate_empty_feed
@@ -25,6 +25,8 @@ from .webhooks import send_webhooks
 
 __all__ = [
     'notify_status_change',
+    'VALID_STATUSES',
+    'ALL_CHANNELS',
     'post_to_bluesky',
     'post_to_mastodon',
     'update_rss_feed',

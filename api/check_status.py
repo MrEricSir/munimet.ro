@@ -263,20 +263,40 @@ def check_status(should_write_cache=False, interval_seconds=None):
             else:
                 print(f"  Badge cache failed")
 
-            # Notify all channels — done early so notifications aren't lost to timeouts.
-            # Determines whether to notify due to a new transition or a missed previous notification.
-            should_notify = False
+            # Notify channels — done early so notifications aren't lost to timeouts.
+            # Per-channel tracking: each channel independently tracks its last notified status.
             current_reported = reported_status['status']
             previous_reported = None
 
+            # Backward compatibility: migrate string to per-channel dict
+            if isinstance(previous_last_notified, str):
+                from lib.notifiers import ALL_CHANNELS
+                previous_last_notified = {ch: previous_last_notified for ch in ALL_CHANNELS}
+            elif previous_last_notified is None:
+                previous_last_notified = {}
+
+            notified_status = dict(previous_last_notified)
+            notify_channels = None  # None means all channels
+
             if hysteresis_result['status_changed'] and previous_reported_status is not None:
-                should_notify = True
+                # Full transition — dispatch to ALL channels
                 previous_reported = previous_reported_status['status']
                 print(f"\nReported status changed: {previous_reported} -> {current_reported}")
-            elif previous_last_notified is not None and previous_last_notified != current_reported:
-                should_notify = True
-                previous_reported = previous_last_notified
-                print(f"\nRecovering missed notification: {previous_reported} -> {current_reported}")
+            else:
+                # Recovery — only dispatch to channels that are tracked but stale.
+                # Channels absent from the dict are not tracked (unconfigured).
+                stale_channels = set()
+                from lib.notifiers import ALL_CHANNELS
+                for ch in ALL_CHANNELS:
+                    if ch in notified_status and notified_status[ch] != current_reported:
+                        stale_channels.add(ch)
+                if stale_channels:
+                    previous_reported = notified_status.get(next(iter(stale_channels)))
+                    print(f"\nRecovering missed notification for channels: {sorted(stale_channels)}")
+                    notify_channels = stale_channels
+
+            should_notify = (hysteresis_result['status_changed'] and previous_reported_status is not None) or \
+                            (notify_channels is not None and len(notify_channels) > 0)
 
             if should_notify:
                 delay_summaries = reported_status.get('detection', {}).get('delay_summaries', [])
@@ -284,20 +304,23 @@ def check_status(should_write_cache=False, interval_seconds=None):
                     status=current_reported,
                     previous_status=previous_reported,
                     delay_summaries=delay_summaries,
-                    timestamp=reported_status['timestamp']
+                    timestamp=reported_status['timestamp'],
+                    channels=notify_channels
                 )
-                any_failed = False
                 for channel, notify_result in notify_results.items():
                     if notify_result['success']:
                         print(f"  {channel}: OK")
+                        notified_status[channel] = current_reported
                     elif notify_result.get('skipped'):
-                        pass  # Unconfigured channels are not failures
+                        # Unconfigured channels: remove from tracking so they
+                        # don't appear stale and trigger infinite retries
+                        notified_status.pop(channel, None)
                     else:
                         print(f"  {channel}: Failed - {notify_result.get('error', 'Unknown error')}")
-                        any_failed = True
-                if not any_failed:
-                    cache_data['last_notified_status'] = current_reported
-                    write_cache(cache_data)
+                        # Leave unchanged — will retry next cycle
+
+            cache_data['last_notified_status'] = notified_status
+            write_cache(cache_data)
 
             # Archive image for debugging/auditing (cloud only, best-effort)
             archive_reasons = []

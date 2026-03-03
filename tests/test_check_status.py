@@ -4,10 +4,11 @@ Tests for check_status interval handling.
 Tests interval detection, environment-specific behavior, and configuration.
 """
 
+import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -298,11 +299,13 @@ class TestNotificationIdempotency:
 
         saved_caches = self._run_check_status(cache_before, notify_results)
 
-        # The final cache write should have last_notified_status updated to 'red'
+        # The final cache write should have last_notified_status updated for successful channels
         # Bug behavior: last_notified_status stays 'green' because all_succeeded=False
         final_cache = saved_caches[-1]
-        assert final_cache['last_notified_status'] == 'red', \
-            "last_notified_status should be updated even when unconfigured channels return success=False"
+        assert isinstance(final_cache['last_notified_status'], dict), \
+            "last_notified_status should be a per-channel dict"
+        assert final_cache['last_notified_status']['rss'] == 'red', \
+            "RSS succeeded, so its entry should be updated to 'red'"
 
     def test_real_failure_blocks_last_notified(self):
         """A genuine notification failure SHOULD prevent last_notified_status update.
@@ -322,10 +325,14 @@ class TestNotificationIdempotency:
 
         saved_caches = self._run_check_status(cache_before, notify_results)
 
-        # last_notified_status should NOT be updated because Bluesky actually failed
+        # Bluesky failed, so its entry should NOT be updated; RSS succeeded
         final_cache = saved_caches[-1]
-        assert final_cache.get('last_notified_status') != 'red', \
-            "last_notified_status should NOT be updated when a real channel failure occurs"
+        notified = final_cache['last_notified_status']
+        assert isinstance(notified, dict)
+        assert notified.get('bluesky') != 'red', \
+            "Bluesky failed, so its entry should NOT be updated to 'red'"
+        assert notified['rss'] == 'red', \
+            "RSS succeeded, so its entry should be updated to 'red'"
 
 
 class TestNotificationMultiRun:
@@ -439,8 +446,10 @@ class TestNotificationMultiRun:
         )
         assert notify_called_run1, "Run 1 should fire notification (recovering missed)"
         final_run1 = saved_run1[-1]
-        assert final_run1['last_notified_status'] == 'red', \
-            "Run 1 should update last_notified_status to 'red'"
+        notified = final_run1['last_notified_status']
+        assert isinstance(notified, dict), "last_notified_status should be a per-channel dict"
+        assert notified['rss'] == 'red', \
+            "Run 1 should update rss entry to 'red'"
 
         # Run 2: feed run 1's output — last_notified_status='red', reported='red' → no fire
         saved_run2, notify_called_run2 = self._run_check_status(
@@ -518,5 +527,326 @@ class TestNotificationMultiRun:
         assert notify_called_run2, \
             "Run 2 should fire notification (transition red -> green)"
         final_run2 = saved_run2[-1]
-        assert final_run2['last_notified_status'] == 'green', \
-            "Run 2 should update last_notified_status to 'green'"
+        notified = final_run2['last_notified_status']
+        assert isinstance(notified, dict), "last_notified_status should be a per-channel dict"
+        assert notified['rss'] == 'green', \
+            "Run 2 should update rss entry to 'green'"
+
+
+class TestAtomicCacheWrites:
+    """Tests for atomic local cache writes via temp file + os.replace()."""
+
+    def test_normal_write_produces_valid_json(self, tmp_path):
+        """Write + read roundtrip produces valid JSON."""
+        from lib.muni_lib import write_cache, read_cache
+
+        cache_path = str(tmp_path / "cache" / "latest_status.json")
+        data = {'status': 'green', 'cached_at': '2026-03-01T12:00:00'}
+
+        with patch('lib.muni_lib.get_cache_path', return_value=cache_path):
+            assert write_cache(data) is True
+            result = read_cache()
+
+        assert result == data
+
+    def test_no_temp_file_left_after_success(self, tmp_path):
+        """After a successful write, only the target file should remain."""
+        from lib.muni_lib import write_cache
+
+        cache_dir = tmp_path / "cache"
+        cache_path = str(cache_dir / "latest_status.json")
+        data = {'status': 'green'}
+
+        with patch('lib.muni_lib.get_cache_path', return_value=cache_path):
+            write_cache(data)
+
+        files = list(cache_dir.iterdir())
+        assert len(files) == 1
+        assert files[0].name == "latest_status.json"
+
+    def test_failed_write_preserves_original(self, tmp_path):
+        """If json.dump raises mid-write, the original file should be intact."""
+        from lib.muni_lib import write_cache, read_cache
+
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        cache_path = str(cache_dir / "latest_status.json")
+
+        # Write initial data
+        original_data = {'status': 'green', 'version': 1}
+        with open(cache_path, 'w') as f:
+            json.dump(original_data, f)
+
+        # Attempt a write that fails mid-way
+        bad_data = {'status': 'red', 'version': 2}
+        with patch('lib.muni_lib.get_cache_path', return_value=cache_path), \
+             patch('json.dump', side_effect=IOError("disk full")):
+            result = write_cache(bad_data)
+
+        assert result is False  # write_cache catches and returns False
+
+        # Original file should be intact
+        with open(cache_path, 'r') as f:
+            preserved = json.load(f)
+        assert preserved == original_data
+
+    def test_temp_file_cleaned_up_on_failure(self, tmp_path):
+        """No .cache_tmp_* files should remain after a failed write."""
+        from lib.muni_lib import write_cache
+
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        cache_path = str(cache_dir / "latest_status.json")
+
+        with patch('lib.muni_lib.get_cache_path', return_value=cache_path), \
+             patch('json.dump', side_effect=IOError("disk full")):
+            write_cache({'status': 'red'})
+
+        tmp_files = [f for f in cache_dir.iterdir() if f.name.startswith('.cache_tmp_')]
+        assert tmp_files == [], f"Temp files left behind: {tmp_files}"
+
+    def test_gcs_path_unchanged(self):
+        """GCS writes should still go through gcs_upload_from_string directly."""
+        from lib.muni_lib import write_cache
+
+        with patch('lib.muni_lib.get_cache_path', return_value='gs://bucket/latest_status.json'), \
+             patch('lib.gcs_utils.parse_gcs_path', return_value=('bucket', 'latest_status.json')), \
+             patch('lib.gcs_utils.gcs_upload_from_string') as mock_upload:
+            result = write_cache({'status': 'green'})
+
+        assert result is True
+        mock_upload.assert_called_once()
+
+
+class TestPerChannelTracking:
+    """Tests for per-channel notification tracking in check_status."""
+
+    def _make_status(self, status, timestamp='2026-03-01T12:00:00'):
+        return {
+            'status': status,
+            'description': f'{status} description',
+            'confidence': 0.99,
+            'probabilities': {'green': 0.99, 'yellow': 0.005, 'red': 0.005},
+            'detection': {'trains': [{'id': 'TT', 'x': 500}], 'delays_platforms': [],
+                          'delays_segments': [], 'delays_bunching': [], 'delay_summaries': []},
+            'image_path': '/tmp/test.jpg',
+            'image_dimensions': {'width': 1860, 'height': 800},
+            'timestamp': timestamp,
+        }
+
+    def _run_check_status(self, cache_before, notify_side_effect, detection_status='red'):
+        """Run check_status and return (saved_caches, notify_calls).
+
+        notify_side_effect is a callable that receives kwargs and returns results.
+        notify_calls accumulates the kwargs from each invocation.
+        """
+        from api import check_status as cs_module
+
+        saved_caches = []
+        notify_calls = []
+
+        def fake_write_cache(data):
+            saved_caches.append(data.copy())
+            return True
+
+        def fake_notify(**kwargs):
+            notify_calls.append(kwargs)
+            return notify_side_effect(kwargs)
+
+        download_result = {
+            'success': True,
+            'filepath': '/tmp/test.jpg',
+            'width': 1860,
+            'height': 800,
+        }
+        detection_result = {
+            'status': detection_status,
+            'description': f'{detection_status} description',
+            'status_confidence': 0.99,
+            'probabilities': {'green': 0.005, 'yellow': 0.005, 'red': 0.99},
+            'detection': {'trains': [], 'delays_platforms': [],
+                          'delays_segments': [], 'delays_bunching': [], 'delay_summaries': []},
+        }
+
+        with patch.object(cs_module, 'download_muni_image', return_value=download_result), \
+             patch.object(cs_module, 'detect_muni_status', return_value=detection_result), \
+             patch.object(cs_module, 'read_cache', return_value=cache_before), \
+             patch.object(cs_module, 'write_cache', side_effect=fake_write_cache), \
+             patch.object(cs_module, 'write_cached_image', return_value=True), \
+             patch.object(cs_module, 'write_cached_badge', return_value=True), \
+             patch.object(cs_module, 'notify_status_change', side_effect=fake_notify), \
+             patch.object(cs_module, 'log_status_check', return_value=1), \
+             patch('lib.analytics.check_database_health', return_value={'exists': True, 'has_data': True, 'check_count': 1}), \
+             patch.object(cs_module, 'archive_image', return_value=False), \
+             patch.object(cs_module, 'should_archive_baseline', return_value=False):
+            cs_module.check_status(should_write_cache=True)
+
+        return saved_caches, notify_calls
+
+    def _make_cache(self, reported='red', last_notified=None):
+        """Build a cache with hysteresis already transitioned to `reported`."""
+        status = self._make_status(reported, '2026-03-01T12:06:00')
+        return {
+            'statuses': [
+                self._make_status(reported, '2026-03-01T12:06:00'),
+                self._make_status(reported, '2026-03-01T12:03:00'),
+                self._make_status(reported, '2026-03-01T12:00:00'),
+            ],
+            'reported_status': status,
+            'best_status': status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'cached_at': '2026-03-01T12:06:00',
+            'last_successful_check': '2026-03-01T12:06:00',
+            'consecutive_failures': 0,
+            'last_error': None,
+            'last_notified_status': last_notified,
+        }
+
+    def test_all_channels_succeed_all_updated(self):
+        """When all channels succeed, all dict entries should be set to current status."""
+        cache = self._make_cache(reported='red', last_notified={'rss': 'green', 'bluesky': 'green', 'mastodon': 'green', 'webhooks': 'green'})
+
+        def fake_notify(kwargs):
+            return {
+                'rss': {'success': True, 'skipped': False},
+                'bluesky': {'success': True, 'skipped': False},
+                'mastodon': {'success': True, 'skipped': False},
+                'webhooks': {'success': True, 'skipped': False},
+            }
+
+        saved, calls = self._run_check_status(cache, fake_notify)
+        notified = saved[-1]['last_notified_status']
+        assert notified == {'rss': 'red', 'bluesky': 'red', 'mastodon': 'red', 'webhooks': 'red'}
+
+    def test_one_channel_fails_others_updated(self):
+        """Failed channel stays at old value, others updated."""
+        cache = self._make_cache(reported='red', last_notified={'rss': 'green', 'bluesky': 'green', 'mastodon': 'green', 'webhooks': 'green'})
+
+        def fake_notify(kwargs):
+            return {
+                'rss': {'success': True, 'skipped': False},
+                'bluesky': {'success': False, 'skipped': False, 'error': 'HTTP 500'},
+                'mastodon': {'success': True, 'skipped': False},
+                'webhooks': {'success': True, 'skipped': False},
+            }
+
+        saved, calls = self._run_check_status(cache, fake_notify)
+        notified = saved[-1]['last_notified_status']
+        assert notified['rss'] == 'red'
+        assert notified['mastodon'] == 'red'
+        assert notified['webhooks'] == 'red'
+        assert notified['bluesky'] == 'green', "Failed channel should keep old value"
+
+    def test_failed_channel_retries_next_cycle(self):
+        """Run 1: mastodon fails; Run 2: only mastodon dispatched, succeeds."""
+        # Run 1: mastodon fails
+        cache = self._make_cache(reported='red', last_notified={'rss': 'green', 'bluesky': 'green', 'mastodon': 'green', 'webhooks': 'green'})
+
+        def fake_notify_run1(kwargs):
+            return {
+                'rss': {'success': True, 'skipped': False},
+                'bluesky': {'success': True, 'skipped': False},
+                'mastodon': {'success': False, 'skipped': False, 'error': 'Timeout'},
+                'webhooks': {'success': True, 'skipped': False},
+            }
+
+        saved_run1, calls_run1 = self._run_check_status(cache, fake_notify_run1)
+        final_run1 = saved_run1[-1]
+        assert final_run1['last_notified_status']['mastodon'] == 'green'  # still old
+
+        # Run 2: only mastodon should be dispatched
+        def fake_notify_run2(kwargs):
+            # Should only be called with channels={'mastodon'}
+            return {
+                'mastodon': {'success': True, 'skipped': False},
+            }
+
+        saved_run2, calls_run2 = self._run_check_status(final_run1, fake_notify_run2)
+        assert len(calls_run2) == 1, "Run 2 should fire notification for stale channels"
+        assert calls_run2[0]['channels'] is not None, "Should pass specific channels, not None"
+        assert 'mastodon' in calls_run2[0]['channels']
+        assert saved_run2[-1]['last_notified_status']['mastodon'] == 'red'
+
+    def test_backward_compat_string_migrated_to_dict(self):
+        """Old string format should be migrated to per-channel dict."""
+        cache = self._make_cache(reported='red', last_notified='green')  # string format
+
+        def fake_notify(kwargs):
+            return {
+                'rss': {'success': True, 'skipped': False},
+                'bluesky': {'success': True, 'skipped': False},
+                'mastodon': {'success': True, 'skipped': False},
+                'webhooks': {'success': True, 'skipped': False},
+            }
+
+        saved, calls = self._run_check_status(cache, fake_notify)
+        notified = saved[-1]['last_notified_status']
+        assert isinstance(notified, dict), "String should be migrated to dict"
+        assert all(v == 'red' for v in notified.values()), "All channels should be updated"
+
+    def test_skipped_channels_not_tracked(self):
+        """Skipped channels don't get entries added to the dict."""
+        # rss is tracked but stale → recovery fires → skipped channels in results should not be added
+        cache = self._make_cache(reported='red', last_notified={'rss': 'green'})
+
+        def fake_notify(kwargs):
+            return {
+                'rss': {'success': True, 'skipped': False},
+                'bluesky': {'success': False, 'skipped': True, 'error': 'Not configured'},
+                'mastodon': {'success': False, 'skipped': True, 'error': 'Not configured'},
+                'webhooks': {'success': False, 'skipped': True, 'error': 'Not configured'},
+            }
+
+        saved, calls = self._run_check_status(cache, fake_notify)
+        notified = saved[-1]['last_notified_status']
+        assert 'rss' in notified
+        assert notified['rss'] == 'red'
+        assert 'bluesky' not in notified, "Skipped channels should not get entries"
+
+    def test_multi_run_stable_no_notify(self):
+        """When all channels match current status, no dispatch should occur."""
+        cache = self._make_cache(
+            reported='red',
+            last_notified={'rss': 'red', 'bluesky': 'red', 'mastodon': 'red', 'webhooks': 'red'}
+        )
+
+        def fake_notify(kwargs):
+            raise AssertionError("Should not be called when all channels are up to date")
+
+        saved, calls = self._run_check_status(cache, fake_notify)
+        assert len(calls) == 0, "No notification should fire when all channels match"
+
+    def test_new_transition_dispatches_all_channels(self):
+        """A hysteresis transition should pass channels=None (dispatch to all)."""
+        # Set up: reported is red, but hysteresis is about to flip to green
+        red_status = self._make_status('red', '2026-03-01T12:06:00')
+        cache = {
+            'statuses': [
+                self._make_status('green', '2026-03-01T12:18:00'),
+                self._make_status('green', '2026-03-01T12:15:00'),
+                self._make_status('green', '2026-03-01T12:12:00'),
+            ],
+            'reported_status': red_status,
+            'best_status': red_status,
+            'pending_status': 'green',
+            'pending_streak': 2,
+            'cached_at': '2026-03-01T12:18:00',
+            'last_successful_check': '2026-03-01T12:18:00',
+            'consecutive_failures': 0,
+            'last_error': None,
+            'last_notified_status': {'rss': 'red', 'bluesky': 'red', 'mastodon': 'red', 'webhooks': 'red'},
+        }
+
+        def fake_notify(kwargs):
+            return {
+                'rss': {'success': True, 'skipped': False},
+                'bluesky': {'success': True, 'skipped': False},
+                'mastodon': {'success': True, 'skipped': False},
+                'webhooks': {'success': True, 'skipped': False},
+            }
+
+        saved, calls = self._run_check_status(cache, fake_notify, detection_status='green')
+        assert len(calls) == 1
+        assert calls[0]['channels'] is None, \
+            "Hysteresis transition should pass channels=None to dispatch to all"

@@ -12,6 +12,7 @@ Contains reusable functions for:
 import os
 import requests
 import json
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from PIL import Image
@@ -131,10 +132,20 @@ def write_cache(data):
             )
             return True
         else:
-            # Write to local file
-            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-            with open(cache_path, 'w') as f:
-                json.dump(data, f, indent=2)
+            # Write to local file atomically via temp file + os.replace()
+            cache_dir = os.path.dirname(cache_path)
+            os.makedirs(cache_dir, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(dir=cache_dir, prefix='.cache_tmp_', suffix='.json')
+            try:
+                with os.fdopen(fd, 'w') as f:
+                    json.dump(data, f, indent=2)
+                os.replace(tmp_path, cache_path)  # atomic on POSIX
+            except:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             return True
     except Exception as e:
         print(f"Error writing cache: {e}")
