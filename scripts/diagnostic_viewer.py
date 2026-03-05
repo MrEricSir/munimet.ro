@@ -91,35 +91,32 @@ HTML_TEMPLATE = '''
         .nav-buttons button:hover { background: #6a6a8a; }
         .nav-buttons button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-        /* Image area — takes most of the screen */
+        /* Image area — scrollable, accounts for sidebar */
         .image-area {
             position: relative;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
+            overflow: auto;
             padding: 8px;
-            /* Fill available space between header and summary bar */
             height: calc(100vh - 80px);
+            margin-right: 280px;  /* space for corrections sidebar */
         }
-        .image-area img {
-            max-width: 100%;
-            max-height: 100%;
+        .image-wrap {
+            position: relative;
+            display: inline-block;
+            transform-origin: 0 0;
+        }
+        .image-wrap img {
             display: block;
             cursor: crosshair;
         }
         .overlay {
             position: absolute;
-            top: 8px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 0; left: 0;
             pointer-events: none;
         }
         .overlay svg { pointer-events: all; cursor: crosshair; }
         .mask-overlay {
             position: absolute;
-            top: 8px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 0; left: 0;
             pointer-events: none;
             opacity: 0.5;
         }
@@ -257,14 +254,12 @@ HTML_TEMPLATE = '''
         .anno-btn.active-add { background: #2a4a2a; color: #4f4; border-color: #4f4; }
         .anno-btn.active-flag { background: #4a2a2a; color: #f66; border-color: #f66; }
 
-        /* Corrections panel */
+        /* Corrections panel — always visible */
         .corrections-panel {
             position: fixed; right: 0; top: 40px; bottom: 40px;
             width: 280px; background: #16213e; border-left: 1px solid #444;
             display: flex; flex-direction: column; z-index: 200;
-            transform: translateX(100%); transition: transform 0.2s;
         }
-        .corrections-panel.open { transform: translateX(0); }
         .corrections-panel h3 {
             padding: 10px 14px; font-size: 0.85em; color: #8af;
             border-bottom: 1px solid #333; flex-shrink: 0;
@@ -307,12 +302,41 @@ HTML_TEMPLATE = '''
             word-break: break-all; color: #8af;
         }
 
-        /* Add-train inline form */
-        .add-form {
+        /* Add-train inline form & label popup */
+        .add-form, .label-popup {
             position: absolute; z-index: 150;
-            background: rgba(20, 20, 40, 0.95); border: 1px solid #4f4;
+            background: rgba(20, 20, 40, 0.95);
             border-radius: 6px; padding: 8px 10px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .add-form { border: 1px solid #4f4; }
+        .label-popup {
+            border: 1px solid #666; min-width: 220px;
+            pointer-events: all;
+        }
+        .label-popup .popup-header {
+            font-size: 0.85em; font-weight: bold; margin-bottom: 6px;
+        }
+        .label-popup .popup-info {
+            font-size: 0.78em; color: #aaa; margin-bottom: 8px; line-height: 1.5;
+        }
+        .label-popup .popup-actions {
+            display: flex; gap: 6px; flex-wrap: wrap;
+        }
+        .label-popup .popup-actions button {
+            background: #2a2a4a; color: #ccc; border: 1px solid #555;
+            padding: 4px 10px; border-radius: 3px; cursor: pointer;
+            font-size: 0.8em;
+        }
+        .label-popup .popup-actions button:hover { background: #3a3a5a; color: #fff; }
+        .label-popup .popup-actions .btn-danger { color: #f66; border-color: #f66; }
+        .label-popup .popup-actions .btn-danger:hover { background: #4a2a2a; }
+        .label-popup .popup-actions .btn-primary { color: #4f4; border-color: #4f4; }
+        .label-popup .popup-actions .btn-primary:hover { background: #2a4a2a; }
+        .label-popup .inline-input {
+            background: #1a1a3e; border: 1px solid #555; color: #fff;
+            padding: 4px 6px; border-radius: 3px; width: 100px;
+            font-family: monospace; font-size: 0.85em;
         }
         .add-form input {
             background: #1a1a3e; border: 1px solid #555; color: #fff;
@@ -362,19 +386,22 @@ HTML_TEMPLATE = '''
 
     <!-- Image (fills the screen) -->
     <div class="image-area" id="imageArea">
-        <img src="data:image/jpeg;base64,{{ image_data }}" id="mainImage"
-             onload="setupOverlay()">
-        <img id="maskOverlay" class="mask-overlay" style="display:none;">
-        <div class="overlay" id="overlay"></div>
+        <div class="image-wrap" id="imageWrap">
+            <img src="data:image/jpeg;base64,{{ image_data }}" id="mainImage"
+                 onload="setupOverlay()">
+            <img id="maskOverlay" class="mask-overlay" style="display:none;">
+            <div class="overlay" id="overlay"></div>
+        </div>
         <div class="pixel-tooltip" id="pixelTooltip"></div>
         <div style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
             background:rgba(20,20,40,0.92);padding:10px 16px;border-radius:6px;
             font-size:0.8em;color:#ccc;pointer-events:none;line-height:1.7;
-            border:1px solid #444;max-width:480px;" id="helpHint">
+            border:1px solid #444;max-width:480px;z-index:50;" id="helpHint">
             <div style="color:#8af;font-weight:bold;margin-bottom:4px;">How to use</div>
             <div><span style="color:#fc4;">Extra train?</span> Click the train label to see why it was detected</div>
-            <div><span style="color:#fc4;">Missing train?</span> Use "+ Add Missing" then draw boxes around the icon and label</div>
+            <div><span style="color:#fc4;">Missing train?</span> Use "+ Add Missing" then draw boxes around the label and icon</div>
             <div><span style="color:#fc4;">Curious about a spot?</span> Click it to see its HSV values and filter status</div>
+            <div><span style="color:#8af;">Zoom:</span> Scroll wheel to zoom, drag to scroll</div>
         </div>
     </div>
 
@@ -429,7 +456,6 @@ HTML_TEMPLATE = '''
         <button class="anno-btn" id="btnAddMissing" onclick="setAnnotationMode('add')">+ Add Missing</button>
         <span class="add-status" id="addStatus"></span>
         <button class="anno-btn" id="btnFlagExtra" onclick="setAnnotationMode('flag')">Flag Extra</button>
-        <button class="toggle-btn" id="btnCorrections" onclick="toggleCorrections()">Corrections (0)</button>
 
         <!-- Overlay controls (right-aligned) -->
         <div class="overlay-controls">
@@ -479,8 +505,10 @@ HTML_TEMPLATE = '''
                         <th onclick="sortTable(5)">Aspect</th>
                         <th onclick="sortTable(6)">Rect</th>
                         <th onclick="sortTable(7)">Fill</th>
-                        <th onclick="sortTable(8)">Track</th>
-                        <th onclick="sortTable(9)">Status</th>
+                        <th onclick="sortTable(8)">Dist</th>
+                        <th onclick="sortTable(9)">Near</th>
+                        <th onclick="sortTable(10)">Track</th>
+                        <th onclick="sortTable(11)">Status</th>
                         <th>Reason</th>
                     </tr>
                 </thead>
@@ -499,6 +527,8 @@ HTML_TEMPLATE = '''
                         <td>{{ '%.2f' % c.aspect_ratio }}</td>
                         <td>{{ '%.2f' % c.rectangularity }}</td>
                         <td>{{ '%.2f' % c.fill_ratio }}</td>
+                        <td>{{ c.track_distance if c.track_distance >= 0 else '-' }}</td>
+                        <td>{{ c.nearest_track or '-' }}</td>
                         <td>{{ c.track }}</td>
                         <td class="{{ 'pass' if c.accepted else 'fail' }}">{{ 'PASS' if c.accepted else 'FAIL' }}</td>
                         <td class="reason">{{ c.rejection_reason }}</td>
@@ -517,14 +547,16 @@ HTML_TEMPLATE = '''
         let annotationMode = null;  // null, 'add', or 'flag'
         let corrections = [];       // [{type: 'add'|'remove', id, x, y}, ...]
         let addFormEl = null;       // current inline add form element
+        let labelPopupEl = null;    // current label popup element
 
         // Bounding-box add flow state
-        let addStep = null;         // null, 'icon', 'label'
+        let addStep = null;         // null, 'label', 'icon'
         let dragStart = null;       // {x, y} in image coords
         let iconBox = null;         // {x, y, w, h} in image coords
         let labelBox = null;        // {x, y, w, h} in image coords
         let isDragging = false;
 
+        let zoomLevel = 1;
         let _setupRetries = 0;
         function setupOverlay() {
             const img = document.getElementById('mainImage');
@@ -549,6 +581,21 @@ HTML_TEMPLATE = '''
             updateOverlay();
         }
 
+        function setZoom(newZoom, centerX, centerY) {
+            const area = document.getElementById('imageArea');
+            const wrap = document.getElementById('imageWrap');
+            const oldZoom = zoomLevel;
+            zoomLevel = Math.max(0.5, Math.min(newZoom, 8));
+            wrap.style.transform = zoomLevel === 1 ? '' : `scale(${zoomLevel})`;
+
+            // Keep the point under the cursor fixed
+            if (centerX !== undefined) {
+                const ratio = zoomLevel / oldZoom;
+                area.scrollLeft = (area.scrollLeft + centerX) * ratio - centerX;
+                area.scrollTop = (area.scrollTop + centerY) * ratio - centerY;
+            }
+        }
+
         function updateOverlay(dragCurrent) {
             const showTrains = document.getElementById('showTrains').checked;
             const showRejected = document.getElementById('showRejected').checked;
@@ -560,6 +607,25 @@ HTML_TEMPLATE = '''
             if (pipeline.track_band) {
                 svg += `<rect x="0" y="${pipeline.track_band[0]}" width="${imgWidth}" height="${pipeline.track_band[1] - pipeline.track_band[0]}"
                     fill="none" stroke="rgba(100,100,255,0.25)" stroke-width="1" stroke-dasharray="8,4"/>`;
+            }
+
+            // Detected track lines with proximity zones
+            if (pipeline.track_lines) {
+                const proxDist = 5;
+                ['upper', 'lower'].forEach(name => {
+                    if (!pipeline.track_lines[name]) return;
+                    const [tTop, tBot] = pipeline.track_lines[name];
+                    const tH = tBot - tTop;
+                    // Track line itself (semi-transparent cyan)
+                    svg += `<rect x="0" y="${tTop}" width="${imgWidth}" height="${tH}"
+                        fill="rgba(0,200,200,0.15)" stroke="rgba(0,200,200,0.4)" stroke-width="0.5"/>`;
+                    // Proximity zone above (dashed)
+                    svg += `<rect x="0" y="${tTop - proxDist}" width="${imgWidth}" height="${proxDist}"
+                        fill="none" stroke="rgba(0,200,200,0.25)" stroke-width="0.5" stroke-dasharray="4,4"/>`;
+                    // Proximity zone below (dashed)
+                    svg += `<rect x="0" y="${tBot}" width="${imgWidth}" height="${proxDist}"
+                        fill="none" stroke="rgba(0,200,200,0.25)" stroke-width="0.5" stroke-dasharray="4,4"/>`;
+                });
             }
 
             // Rejected contours (red outlines)
@@ -580,15 +646,20 @@ HTML_TEMPLATE = '''
                     style="cursor:pointer" onclick="selectContourByIndex(${i})"/>`;
             });
 
+            // Hide train and baseline labels while actively drawing/confirming bounding boxes
+            // (but not when first entering add mode before any box is drawn)
+            const hidingLabels = annotationMode === 'add' && (labelBox || iconBox || addStep === 'confirm' || isDragging);
+
             // Train labels
-            if (showTrains && diagData.detection.trains) {
+            if (showTrains && !hidingLabels && diagData.detection.trains) {
                 diagData.detection.trains.forEach(t => {
                     let fill, stroke;
                     if (t.confidence === 'high') { fill = 'rgba(0,100,0,0.85)'; stroke = '#4f4'; }
                     else if (t.confidence === 'medium') { fill = 'rgba(100,100,0,0.85)'; stroke = '#fc4'; }
                     else { fill = 'rgba(100,50,0,0.85)'; stroke = '#f84'; }
                     const label = t.id.length > 9 ? t.id.substring(0, 9) : t.id;
-                    svg += `<g style="cursor:pointer">
+                    const esc = s => s.replace(/'/g, "\\'").replace(/</g, '&lt;');
+                    svg += `<g style="cursor:pointer" onclick="event.stopPropagation(); showLabelPopup('train', {id:'${esc(t.id)}', x:${t.x}, y:${t.y}, confidence:'${t.confidence}'}, event)">
                         <rect x="${t.x - 28}" y="${t.y - 9}" width="56" height="18" rx="3"
                               fill="${fill}" stroke="${stroke}" stroke-width="1"/>
                         <text x="${t.x}" y="${t.y + 4}" text-anchor="middle" fill="#fff"
@@ -598,7 +669,7 @@ HTML_TEMPLATE = '''
             }
 
             // Baseline-only trains (in baseline but not detected — includes manually-added)
-            if (showTrains && diagData.baseline_comparison && diagData.baseline_comparison.missing) {
+            if (showTrains && !hidingLabels && diagData.baseline_comparison && diagData.baseline_comparison.missing) {
                 const detTrains = diagData.detection.trains || [];
                 const bc = diagData.baseline_comparison;
                 const bandTop = pipeline.track_band ? pipeline.track_band[0] : imgHeight * 0.48;
@@ -610,6 +681,11 @@ HTML_TEMPLATE = '''
                 const matchedDetX = new Set((bc.matched || []).map(m => m.detected_x));
 
                 diagData.baseline_comparison.missing.forEach(t => {
+                    // Check if this baseline entry has a pending removal correction
+                    const isRemoved = corrections.some(c =>
+                        c.type === 'remove' && c.source === 'baseline' &&
+                        c.id === t.id && Math.abs(c.x - t.x) <= 30);
+
                     // Find nearest UNMATCHED (extra) detected train to infer track
                     let labelY = null;
                     let bestDx = Infinity;
@@ -643,7 +719,8 @@ HTML_TEMPLATE = '''
                     const lineStart = aboveBand ? offsetY + 9 : offsetY - 9;
                     const lineEnd = aboveBand ? labelY : labelY;
 
-                    svg += `<g style="cursor:pointer">
+                    const escM = s => s.replace(/'/g, "\\'").replace(/</g, '&lt;');
+                    svg += `<g style="cursor:pointer" onclick="event.stopPropagation(); showLabelPopup('missing', {id:'${escM(t.id)}', x:${t.x}}, event)">
                         <line x1="${t.x}" y1="${lineEnd}" x2="${t.x}" y2="${lineStart}"
                               stroke="rgba(160,100,255,0.4)" stroke-width="1" stroke-dasharray="2,2"/>
                         <rect x="${t.x - 28}" y="${offsetY - 9}" width="56" height="18" rx="3"
@@ -653,6 +730,14 @@ HTML_TEMPLATE = '''
                         <text x="${t.x}" y="${offsetY + 14}" text-anchor="middle" fill="#86a"
                               font-size="7">baseline</text>
                     </g>`;
+
+                    // Red strikethrough on the purple label if marked for removal
+                    if (isRemoved) {
+                        svg += `<rect x="${t.x - 30}" y="${offsetY - 10}" width="60" height="20" rx="3"
+                            fill="rgba(180,0,0,0.5)" stroke="#f44" stroke-width="1.5"/>`;
+                        svg += `<line x1="${t.x - 28}" y1="${offsetY}" x2="${t.x + 28}" y2="${offsetY}"
+                            stroke="#f44" stroke-width="2"/>`;
+                    }
                 });
             }
 
@@ -665,8 +750,9 @@ HTML_TEMPLATE = '''
                         fill="rgba(255,160,0,0.7)" stroke="#fc4" stroke-width="1.5"/>`;
                     svg += `<text x="${c.x}" y="${cy-14}" text-anchor="middle" fill="#fc4"
                         font-size="9" font-weight="bold">+ ${c.id}</text>`;
-                } else if (c.type === 'remove') {
-                    // Red strikethrough over the train label
+                } else if (c.type === 'remove' && c.source !== 'baseline') {
+                    // Red strikethrough over the detected train label
+                    // (baseline removals are rendered in the missing label loop)
                     const train = (diagData.detection.trains || []).find(t => t.id === c.id && t.x === c.x);
                     if (train) {
                         svg += `<rect x="${train.x - 30}" y="${train.y - 10}" width="60" height="20" rx="3"
@@ -707,7 +793,7 @@ HTML_TEMPLATE = '''
                 const by = Math.min(dragStart.y, dragCurrent.y);
                 const bw = Math.abs(dragCurrent.x - dragStart.x);
                 const bh = Math.abs(dragCurrent.y - dragStart.y);
-                const color = addStep === 'icon' ? '#f90' : '#58f';
+                const color = addStep === 'label' ? '#58f' : '#f90';
                 svg += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}"
                     fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4,4" opacity="0.8"/>`;
             }
@@ -736,11 +822,24 @@ HTML_TEMPLATE = '''
             return { contours, trains };
         }
 
+        function areaPos(event) {
+            // Position relative to image-area content (accounting for scroll)
+            const area = document.getElementById('imageArea');
+            const rect = area.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left + area.scrollLeft,
+                y: event.clientY - rect.top + area.scrollTop,
+                areaW: area.clientWidth,
+                areaH: area.clientHeight,
+            };
+        }
+
         function getImageCoords(event) {
             const img = document.getElementById('mainImage');
             const imgRect = img.getBoundingClientRect();
-            const sx = imgWidth / img.clientWidth;
-            const sy = imgHeight / img.clientHeight;
+            // Use imgRect (visual size, accounts for zoom) for both offset and scale
+            const sx = imgWidth / imgRect.width;
+            const sy = imgHeight / imgRect.height;
             return {
                 x: Math.round((event.clientX - imgRect.left) * sx),
                 y: Math.round((event.clientY - imgRect.top) * sy),
@@ -810,12 +909,12 @@ HTML_TEMPLATE = '''
                     h: Math.abs(coords.y - dragStart.y),
                 });
 
-                if (addStep === 'icon') {
-                    iconBox = box;
-                    addStep = 'label';
-                    updateAddStatus();
-                } else if (addStep === 'label') {
+                if (addStep === 'label') {
                     labelBox = box;
+                    addStep = 'icon';
+                    updateAddStatus();
+                } else if (addStep === 'icon') {
+                    iconBox = box;
                     addStep = 'confirm';
                     updateAddStatus();
                     showBBoxConfirmForm(event);
@@ -829,15 +928,19 @@ HTML_TEMPLATE = '''
 
             // Non-add-drag clicks: dispatch normally
             if (dragStart) { dragStart = null; isDragging = false; return; }
+
+            // If click landed on a label <g> with a popup handler, let the
+            // SVG onclick fire instead of the pixel tooltip
+            if (event.target.closest && event.target.closest('[onclick*="showLabelPopup"]')) return;
+
             handleClick(event);
         }
 
         function showTapHint(event) {
             const tooltip = document.getElementById('pixelTooltip');
-            const area = document.getElementById('imageArea');
-            const areaRect = area.getBoundingClientRect();
-            tooltip.style.left = (event.clientX - areaRect.left + 16) + 'px';
-            tooltip.style.top = (event.clientY - areaRect.top + 8) + 'px';
+            const pos = areaPos(event);
+            tooltip.style.left = (pos.x + 16) + 'px';
+            tooltip.style.top = (pos.y + 8) + 'px';
             tooltip.style.display = 'block';
             tooltip.innerHTML = '<span style="color:#f90;">Drag to draw a box (click and hold, then drag)</span>';
             setTimeout(() => { tooltip.style.display = 'none'; }, 2000);
@@ -854,6 +957,12 @@ HTML_TEMPLATE = '''
                 addFormEl = null;
             }
 
+            // Dismiss any open label popup if clicking elsewhere
+            if (labelPopupEl && !labelPopupEl.contains(event.target)) {
+                labelPopupEl.remove();
+                labelPopupEl = null;
+            }
+
             if (annotationMode === 'flag') {
                 flagNearestTrain(x, y);
                 return;
@@ -861,14 +970,13 @@ HTML_TEMPLATE = '''
 
             // Default: pixel inspection
             const tooltip = document.getElementById('pixelTooltip');
-            const area = document.getElementById('imageArea');
-            const areaRect = area.getBoundingClientRect();
-            let tipLeft = event.clientX - areaRect.left + 16;
-            if (tipLeft + 220 > area.clientWidth) {
-                tipLeft = event.clientX - areaRect.left - 230;
+            const pos = areaPos(event);
+            let tipLeft = pos.x + 16;
+            if (tipLeft + 220 > pos.areaW + document.getElementById('imageArea').scrollLeft) {
+                tipLeft = pos.x - 230;
             }
             tooltip.style.left = tipLeft + 'px';
-            tooltip.style.top = (event.clientY - areaRect.top + 8) + 'px';
+            tooltip.style.top = (pos.y + 8) + 'px';
             tooltip.style.display = 'block';
 
             // Find nearby context (client-side, instant)
@@ -935,6 +1043,197 @@ HTML_TEMPLATE = '''
                 });
         }
 
+        // --- Label popup ---
+
+        function showLabelPopup(type, data, event) {
+            // Dismiss any existing popup
+            if (labelPopupEl) { labelPopupEl.remove(); labelPopupEl = null; }
+
+            const area = document.getElementById('imageArea');
+
+            let header, headerColor, info, actions;
+
+            if (type === 'train' && data.id.startsWith('UNKNOWN@')) {
+                // Unknown train
+                headerColor = '#f84';
+                header = 'Unknown Train';
+                info = `Detected at x=${data.x} by symbol shape &mdash; no OCR match`;
+                actions = `
+                    <button class="btn-danger" onclick="popupFlagExtra(${data.x}, ${data.y})">Flag as False Positive</button>
+                    <button onclick="popupIdentify(${data.x}, ${data.y})">Identify (Draw Label Box)</button>`;
+            } else if (type === 'train') {
+                // Known detected train
+                const confColor = data.confidence === 'high' ? '#4f4' : data.confidence === 'medium' ? '#fc4' : '#f84';
+                headerColor = confColor;
+                header = 'Detected Train';
+                info = `<b>${data.id}</b> at x=${data.x}, confidence: <span style="color:${confColor}">${data.confidence}</span>`;
+                actions = `
+                    <button class="btn-danger" onclick="popupFlagExtra(${data.x}, ${data.y})">Flag as Extra</button>
+                    <button onclick="popupCorrectId('${data.id.replace(/'/g, "\\'")}', ${data.x}, ${data.y})">Correct ID</button>`;
+            } else if (type === 'missing') {
+                // Baseline missing — find nearest contour to show context
+                headerColor = '#a6f';
+                header = 'Missing from Detection';
+                let nearestInfo = '';
+                let nearestContour = null, nearestDist = Infinity;
+                diagData.symbol_contours.forEach(c => {
+                    if (!c.accepted) return;
+                    const cx = c.x + c.width / 2;
+                    const dx = Math.abs(cx - data.x);
+                    if (dx < nearestDist) { nearestDist = dx; nearestContour = c; }
+                });
+                if (nearestContour && nearestDist < 60) {
+                    nearestInfo = `<br><span style="color:#6a6;">Nearest contour: ${nearestContour.width}x${nearestContour.height} at x=${nearestContour.x} (${Math.round(nearestDist)}px away)</span>`;
+                }
+                info = `Expected <b>${data.id}</b> at x=${data.x} (from test baseline)${nearestInfo}`;
+                const escId = data.id.replace(/'/g, "\\'");
+                actions = `
+                    <button class="btn-primary" onclick="popupConfirmBaseline('${escId}', ${data.x})">Confirm at Baseline Position</button>
+                    <button onclick="popupAddMissingWithContext('${escId}', ${data.x})">Draw Bounding Box</button>
+                    <button class="btn-danger" onclick="popupRemoveBaseline('${escId}', ${data.x})">Remove from Baseline</button>`;
+            }
+
+            const popup = document.createElement('div');
+            popup.className = 'label-popup';
+            popup.innerHTML = `
+                <div class="popup-header" style="color:${headerColor}">${header}</div>
+                <div class="popup-info">${info}</div>
+                <div class="popup-actions">${actions}</div>`;
+            popup.onclick = e => e.stopPropagation();
+            popup.onmousedown = e => e.stopPropagation();
+
+            // Position near click, clamped to visible area
+            const pos = areaPos(event);
+            let tipLeft = pos.x + 16;
+            if (tipLeft + 240 > pos.areaW + area.scrollLeft) tipLeft = pos.x - 250;
+            let tipTop = pos.y + 8;
+            if (tipTop + 100 > pos.areaH + area.scrollTop) tipTop = pos.y - 110;
+
+            popup.style.left = Math.max(8, tipLeft) + 'px';
+            popup.style.top = Math.max(8, tipTop) + 'px';
+
+            area.appendChild(popup);
+            labelPopupEl = popup;
+        }
+
+        function dismissLabelPopup() {
+            if (labelPopupEl) { labelPopupEl.remove(); labelPopupEl = null; }
+        }
+
+        function popupFlagExtra(x, y) {
+            dismissLabelPopup();
+            flagNearestTrain(x, y);
+        }
+
+        function popupRemoveBaseline(id, x) {
+            dismissLabelPopup();
+            // Push a remove correction for this baseline entry
+            if (!corrections.some(c => c.type === 'remove' && c.id === id && c.x === x)) {
+                corrections.push({type: 'remove', id, x, y: 0, source: 'baseline'});
+                updateCorrectionsUI();
+                updateOverlay();
+            }
+        }
+
+        function popupConfirmBaseline(id, x) {
+            dismissLabelPopup();
+            // Quick-accept: add this train at its baseline position without drawing boxes
+            // Find nearest contour to get the y coordinate
+            let y = imgHeight * 0.55;
+            let bestDist = Infinity;
+            diagData.symbol_contours.forEach(c => {
+                if (!c.accepted) return;
+                const cx = c.x + c.width / 2;
+                const dx = Math.abs(cx - x);
+                if (dx < bestDist) { bestDist = dx; y = c.y + c.height / 2; }
+            });
+            if (!corrections.some(c => c.type === 'add' && c.id === id && Math.abs(c.x - x) <= 30)) {
+                corrections.push({type: 'add', id, x, y});
+                updateCorrectionsUI();
+                updateOverlay();
+            }
+        }
+
+        function popupAddMissing() {
+            dismissLabelPopup();
+            setAnnotationMode('add');
+        }
+
+        function popupAddMissingWithContext(id, x) {
+            dismissLabelPopup();
+            // Enter add mode with icon box pre-seeded from nearest contour
+            setAnnotationMode('add');
+
+            let best = null, bestDist = Infinity;
+            diagData.symbol_contours.forEach(c => {
+                if (!c.accepted) return;
+                const cx = c.x + c.width / 2;
+                const dx = Math.abs(cx - x);
+                if (dx < bestDist) { bestDist = dx; best = c; }
+            });
+            if (best && bestDist < 60) {
+                // Icon contour found — pre-seed it, user just draws the label box
+                iconBox = {x: best.x, y: best.y, w: best.width, h: best.height};
+                updateOverlay();
+            }
+        }
+
+        function popupIdentify(x, y) {
+            dismissLabelPopup();
+            // Enter add mode with icon box pre-seeded from nearest accepted contour
+            setAnnotationMode('add');
+
+            let best = null, bestDist = Infinity;
+            diagData.symbol_contours.forEach(c => {
+                if (!c.accepted) return;
+                const cx = c.x + c.width / 2, cy = c.y + c.height / 2;
+                const d = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2);
+                if (d < bestDist) { bestDist = d; best = c; }
+            });
+            if (best && bestDist < 60) {
+                iconBox = {x: best.x, y: best.y, w: best.width, h: best.height};
+                updateOverlay();
+            }
+        }
+
+        function popupCorrectId(oldId, x, y) {
+            // Replace popup content with inline input for new ID
+            if (!labelPopupEl) return;
+            labelPopupEl.innerHTML = `
+                <div class="popup-header" style="color:#fc4">Correct Train ID</div>
+                <div class="popup-info">Change <b>${oldId}</b> at x=${x}</div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" class="inline-input" id="correctIdInput" value="${oldId}" placeholder="New ID">
+                    <button class="btn-primary" style="background:#2a4a2a;color:#4f4;border:1px solid #4f4;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.8em;"
+                        onclick="confirmCorrectId('${oldId.replace(/'/g, "\\'")}', ${x}, ${y})">OK</button>
+                    <button style="background:#4a2a2a;color:#f66;border:1px solid #f66;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.8em;"
+                        onclick="dismissLabelPopup()">Cancel</button>
+                </div>`;
+            setTimeout(() => {
+                const input = document.getElementById('correctIdInput');
+                if (input) {
+                    input.focus(); input.select();
+                    input.addEventListener('keydown', e => {
+                        if (e.key === 'Enter') confirmCorrectId(oldId, x, y);
+                        if (e.key === 'Escape') dismissLabelPopup();
+                    });
+                }
+            }, 50);
+        }
+
+        function confirmCorrectId(oldId, x, y) {
+            const input = document.getElementById('correctIdInput');
+            const newId = input ? input.value.trim() : '';
+            if (!newId || newId === oldId) { if (input) input.focus(); return; }
+
+            // Remove old, add new
+            corrections.push({type: 'remove', id: oldId, x, y});
+            corrections.push({type: 'add', id: newId, x, y});
+            dismissLabelPopup();
+            updateCorrectionsUI();
+            updateOverlay();
+        }
+
         // --- Annotation mode ---
 
         function setAnnotationMode(mode) {
@@ -956,7 +1255,7 @@ HTML_TEMPLATE = '''
                 img.style.cursor = 'crosshair';
                 svgs.forEach(s => s.style.cursor = 'crosshair');
                 area.classList.add('dragging');
-                addStep = 'icon';
+                addStep = 'label';
                 updateAddStatus();
             } else if (annotationMode === 'flag') {
                 img.style.cursor = 'not-allowed';
@@ -984,10 +1283,10 @@ HTML_TEMPLATE = '''
 
         function updateAddStatus() {
             const el = document.getElementById('addStatus');
-            if (addStep === 'icon') {
-                el.textContent = 'Step 1: Draw a box around the train icon on the track';
-            } else if (addStep === 'label') {
-                el.textContent = 'Step 2: Draw a box around the train\\'s text label';
+            if (addStep === 'label') {
+                el.textContent = 'Step 1: Draw a box around the train\\'s text label';
+            } else if (addStep === 'icon') {
+                el.textContent = 'Step 2: Draw a box around the train icon on the track';
             } else if (addStep === 'confirm') {
                 el.textContent = 'Step 3: Review and confirm';
             } else {
@@ -1004,9 +1303,9 @@ HTML_TEMPLATE = '''
             const imgRect = img.getBoundingClientRect();
             const scaleX = img.clientWidth / imgWidth;
 
-            // Position form near the label box
-            const formX = imgRect.left - areaRect.left + (labelBox.x + labelBox.w) * scaleX + 12;
-            const formY = imgRect.top - areaRect.top + labelBox.y * (img.clientHeight / imgHeight) - 10;
+            // Position form near the label box (accounting for scroll)
+            const formX = imgRect.left - areaRect.left + area.scrollLeft + (labelBox.x + labelBox.w) * scaleX + 12;
+            const formY = imgRect.top - areaRect.top + area.scrollTop + labelBox.y * (img.clientHeight / imgHeight) - 10;
 
             const trackX = iconBox.x + Math.round(iconBox.w / 2);
             const trackY = iconBox.y + Math.round(iconBox.h / 2);
@@ -1132,10 +1431,10 @@ HTML_TEMPLATE = '''
             corrections.push({type: 'add', id, x, y});
             if (addFormEl) { addFormEl.remove(); addFormEl = null; }
 
-            // Reset add flow and go back to icon step for next train
+            // Reset add flow and go back to label step for next train
             iconBox = null;
             labelBox = null;
-            addStep = 'icon';
+            addStep = 'label';
             updateAddStatus();
             updateCorrectionsUI();
             updateOverlay();
@@ -1152,13 +1451,13 @@ HTML_TEMPLATE = '''
         }
 
         function redrawStep(step) {
-            if (step === 'icon') {
+            if (step === 'label') {
+                labelBox = null;
                 iconBox = null;
-                labelBox = null;
-                addStep = 'icon';
-            } else {
-                labelBox = null;
                 addStep = 'label';
+            } else {
+                iconBox = null;
+                addStep = 'icon';
             }
             if (addFormEl) { addFormEl.remove(); addFormEl = null; }
             updateAddStatus();
@@ -1170,14 +1469,14 @@ HTML_TEMPLATE = '''
             const candidates = [];
             (diagData.detection.trains || []).forEach(t => {
                 const d = Math.sqrt((t.x - x) ** 2 + ((t.y || imgHeight * 0.55) - y) ** 2);
-                if (d <= 80) candidates.push({id: t.id, x: t.x, y: t.y || 0, _dist: d});
+                if (d <= 80) candidates.push({id: t.id, x: t.x, y: t.y || 0, _dist: d, source: 'detected'});
             });
             if (diagData.baseline_comparison && diagData.baseline_comparison.missing) {
                 // Use a generous radius — baseline labels may be offset from where user clicks
                 diagData.baseline_comparison.missing.forEach(t => {
                     // Match by x proximity only (within tolerance) since y is approximate
                     const dx = Math.abs(t.x - x);
-                    if (dx <= 40) candidates.push({id: t.id, x: t.x, y: 0, _dist: dx});
+                    if (dx <= 40) candidates.push({id: t.id, x: t.x, y: 0, _dist: dx, source: 'baseline'});
                 });
             }
             candidates.sort((a, b) => a._dist - b._dist);
@@ -1187,7 +1486,7 @@ HTML_TEMPLATE = '''
             // Don't flag the same train twice
             if (corrections.some(c => c.type === 'remove' && c.id === t.id && c.x === t.x)) return;
 
-            corrections.push({type: 'remove', id: t.id, x: t.x, y: t.y});
+            corrections.push({type: 'remove', id: t.id, x: t.x, y: t.y, source: t.source});
             updateCorrectionsUI();
             updateOverlay();
         }
@@ -1207,11 +1506,6 @@ HTML_TEMPLATE = '''
         }
 
         function updateCorrectionsUI() {
-            const btn = document.getElementById('btnCorrections');
-            btn.textContent = 'Corrections (' + corrections.length + ')';
-            if (corrections.length > 0) btn.classList.add('active');
-            else btn.classList.remove('active');
-
             const list = document.getElementById('correctionsList');
             if (corrections.length === 0) {
                 list.innerHTML = '<div style="color:#666;padding:20px 10px;text-align:center;font-size:0.82em;">No corrections yet.<br>Use "+ Add Missing" or "Flag Extra" to annotate.</div>';
@@ -1220,16 +1514,12 @@ HTML_TEMPLATE = '''
 
             list.innerHTML = corrections.map((c, i) => {
                 const prefix = c.type === 'add' ? '+' : '\u2212';
+                const note = c.source === 'baseline' ? ' <span style="color:#a6f;font-size:0.85em;">(baseline)</span>' : '';
                 return `<div class="corr-item ${c.type}">
-                    <span>${prefix} ${c.id} at x=${c.x}</span>
+                    <span>${prefix} ${c.id} at x=${c.x}${note}</span>
                     <button onclick="removeCorrection(${i})" title="Remove">\u00d7</button>
                 </div>`;
             }).join('');
-        }
-
-        function toggleCorrections() {
-            const panel = document.getElementById('correctionsPanel');
-            panel.classList.toggle('open');
         }
 
         function saveCorrections() {
@@ -1308,7 +1598,7 @@ HTML_TEMPLATE = '''
             btn.classList.toggle('active', contourOpen);
             btn.textContent = contourOpen ? 'Hide' : 'Show';
             // Shrink image area when drawer is open
-            area.style.height = contourOpen ? 'calc(100vh - 80px - 40vh)' : 'calc(100vh - 80px)';
+            area.style.height = contourOpen ? 'calc(60vh - 80px)' : 'calc(100vh - 80px)';
             setupOverlay();
         }
 
@@ -1369,16 +1659,30 @@ HTML_TEMPLATE = '''
         imageArea.addEventListener('mousemove', onImageMouseMove);
         imageArea.addEventListener('mouseup', onImageMouseUp);
 
+        // Pinch-to-zoom (ctrlKey distinguishes trackpad pinch from two-finger scroll)
+        imageArea.addEventListener('wheel', e => {
+            if (!e.ctrlKey) return;  // let normal two-finger scroll pan naturally
+            e.preventDefault();
+            const rect = imageArea.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            const cy = e.clientY - rect.top;
+            // Use deltaY proportionally — trackpad pinch sends small deltas (~1-3)
+            const factor = 1 - e.deltaY * 0.01;
+            setZoom(zoomLevel * factor, cx, cy);
+        }, {passive: false});
+
         // Dismiss tooltip on click outside image
         document.addEventListener('click', e => {
             if (!document.getElementById('imageArea').contains(e.target))
                 document.getElementById('pixelTooltip').style.display = 'none';
         });
 
-        // Escape key: cancel add flow or annotation mode
+        // Escape key: cancel add flow, annotation mode, or label popup
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
-                if (annotationMode === 'add') {
+                if (labelPopupEl) {
+                    dismissLabelPopup();
+                } else if (annotationMode === 'add') {
                     cancelBBoxAdd();
                 } else if (annotationMode === 'flag') {
                     setAnnotationMode('flag'); // toggles off

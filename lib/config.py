@@ -199,6 +199,12 @@ SYMBOL_MAX_HEIGHT = 20
 SYMBOL_MIN_RECTANGULARITY = 0.5
 SYMBOL_MIN_ASPECT = 1.5
 SYMBOL_MAX_ASPECT = 3.5
+SYMBOL_FILL_MIN = 0.7
+
+# Track line detection (for proximity filtering)
+TRACK_LINE_MIN_CYAN_PIXELS = 500  # Min cyan pixels per row to qualify as track
+TRACK_LINE_GAP_THRESHOLD = 15     # Min row gap between upper/lower track groups
+TRACK_PROXIMITY_MAX_DISTANCE = 5  # Max px from track edge for valid train symbol
 
 # Cluster detection for pileups
 CLUSTER_MIN_TRAINS = 3

@@ -170,6 +170,43 @@
       "delay_summaries": [
         "Southbound delay at Chinatown"
       ]
+    },
+    "muni_snapshot_20260211_094211.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260224_131900_transition.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260225_131602_transition.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound service not running between West Portal and Forest Hill"
+      ]
+    },
+    "muni_snapshot_20260225_133704_transition.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260226_131604_transition.jpg": {
+      "status": "green",
+      "delay_summaries": []
+    },
+    "muni_snapshot_20260227_011646_transition.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay from West Portal to Church",
+        "Eastbound delay from Civic Center to Embarcadero",
+        "Westbound delay from Embarcadero to Van Ness"
+      ]
+    },
+    "muni_snapshot_20260227_014120_transition.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Westbound delay at Forest Hill",
+        "Westbound backup at West Portal (7 trains)"
+      ]
     }
   }
 }

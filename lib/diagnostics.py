@@ -57,6 +57,10 @@ def run_diagnostic(image_path: str) -> dict:
         pipeline['symbol_contour_count'] = len(sd.contours)
         pipeline['symbol_accepted_count'] = len(sd.accepted_symbols)
         pipeline['track_band'] = list(sd.track_band)
+        if sd.track_lines:
+            pipeline['track_lines'] = {
+                k: list(v) for k, v in sd.track_lines.items()
+            }
 
         for c in sd.contours:
             symbol_contours.append(dataclasses.asdict(c))

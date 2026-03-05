@@ -66,6 +66,8 @@ class ContourDiagnostic:
     accepted: bool
     rejection_reason: str
     track: str
+    track_distance: int = -1
+    nearest_track: str = ''
 
 
 @dataclasses.dataclass
@@ -74,6 +76,7 @@ class SymbolDiagnostics:
     contours: list
     track_band: tuple
     accepted_symbols: list
+    track_lines: dict = None
 
 
 @dataclasses.dataclass
@@ -1041,11 +1044,121 @@ class TrainDetector:
         except Exception:
             return None
 
-    def _detect_symbols(self, hsv, h, w, gray, diagnostics=False):
-        """Detect train symbols on tracks."""
+    def _detect_track_lines(self, hsv, h, w):
+        """Detect upper and lower track line Y positions from cyan pixel density.
+
+        Scans the broad track region for rows with high cyan pixel density,
+        groups consecutive qualifying rows, and identifies the two densest
+        groups as upper/lower track lines.
+
+        Returns {'upper': (top_y, bottom_y), 'lower': (top_y, bottom_y)}
+        or None if detection fails (e.g. overnight/dark images).
+        """
+        from lib.config import TRACK_LINE_MIN_CYAN_PIXELS, TRACK_LINE_GAP_THRESHOLD
+
         track_y_min = int(h * 0.48)
         track_y_max = int(h * 0.62)
-        upper_track_y = int(h * 0.52)
+
+        # Broad cyan range to catch all track pixels
+        cyan_mask = cv2.inRange(hsv, np.array([85, 100, 140]), np.array([105, 255, 255]))
+
+        # Count cyan pixels per row in the track region
+        row_counts = np.sum(cyan_mask[track_y_min:track_y_max, :] > 0, axis=1)
+
+        # Find rows with enough cyan pixels to be track lines
+        qualifying_rows = np.where(row_counts >= TRACK_LINE_MIN_CYAN_PIXELS)[0]
+        if len(qualifying_rows) < 2:
+            return None
+
+        # Group consecutive qualifying rows into segments
+        groups = []
+        group_start = qualifying_rows[0]
+        prev_row = group_start
+        group_density = int(row_counts[group_start])
+
+        for row in qualifying_rows[1:]:
+            if row - prev_row > 1:
+                # Gap in qualifying rows — end current group
+                groups.append((group_start, prev_row, group_density))
+                group_start = row
+                group_density = 0
+            group_density += int(row_counts[row])
+            prev_row = row
+        groups.append((group_start, prev_row, group_density))
+
+        # Require gap between groups to separate upper/lower tracks
+        # Merge groups that are too close together
+        merged = [groups[0]]
+        for start, end, density in groups[1:]:
+            prev_start, prev_end, prev_density = merged[-1]
+            if start - prev_end < TRACK_LINE_GAP_THRESHOLD:
+                # Merge with previous group
+                merged[-1] = (prev_start, end, prev_density + density)
+            else:
+                merged.append((start, end, density))
+
+        if len(merged) < 2:
+            return None
+
+        # Take the two densest groups as upper/lower tracks
+        merged.sort(key=lambda g: g[2], reverse=True)
+        top_two = sorted(merged[:2], key=lambda g: g[0])  # Sort by Y position
+
+        upper = (track_y_min + top_two[0][0], track_y_min + top_two[0][1])
+        lower = (track_y_min + top_two[1][0], track_y_min + top_two[1][1])
+
+        return {'upper': upper, 'lower': lower}
+
+    def _near_track_line(self, contour_y, contour_h, track_lines, max_distance=5):
+        """Check if a contour is near a detected track line.
+
+        Returns (is_near, nearest_track_name, distance):
+        - If contour bbox overlaps a track line, distance=0
+        - Otherwise, computes gap between contour edge and nearest track edge
+        """
+        if track_lines is None:
+            return (True, '', -1)  # No track data — skip filter
+
+        contour_top = contour_y
+        contour_bottom = contour_y + contour_h
+
+        best_distance = float('inf')
+        best_track = ''
+
+        for track_name, (track_top, track_bottom) in track_lines.items():
+            # Check overlap
+            if contour_top <= track_bottom and contour_bottom >= track_top:
+                return (True, track_name, 0)
+
+            # Compute gap
+            if contour_bottom < track_top:
+                gap = track_top - contour_bottom
+            else:
+                gap = contour_top - track_bottom
+
+            if gap < best_distance:
+                best_distance = gap
+                best_track = track_name
+
+        return (best_distance <= max_distance, best_track, best_distance)
+
+    def _detect_symbols(self, hsv, h, w, gray, diagnostics=False):
+        """Detect train symbols on tracks."""
+        from lib.config import TRACK_PROXIMITY_MAX_DISTANCE
+
+        track_y_min = int(h * 0.48)
+        track_y_max = int(h * 0.62)
+
+        # Detect track lines dynamically for proximity filtering
+        track_lines = self._detect_track_lines(hsv, h, w)
+
+        # Compute upper_track_y dynamically as midpoint between detected track lines
+        if track_lines:
+            upper_bottom = track_lines['upper'][1]
+            lower_top = track_lines['lower'][0]
+            upper_track_y = (upper_bottom + lower_top) // 2
+        else:
+            upper_track_y = int(h * 0.52)
 
         # Track band mask
         track_band = np.zeros((h, w), dtype=np.uint8)
@@ -1085,7 +1198,16 @@ class TrainDetector:
             pre_pixels = cv2.countNonZero(pre_close_mask[y:y+ch, x:x+cw])
             fill_ratio = pre_pixels / max(bounding_area, 1)
             cx, cy = x + cw // 2, y + ch // 2
-            track = 'upper' if cy < upper_track_y else 'lower'
+
+            # Compute proximity to track lines (used for both filtering and track assignment)
+            is_near, nearest_track, track_dist = self._near_track_line(
+                y, ch, track_lines, TRACK_PROXIMITY_MAX_DISTANCE)
+
+            # Track assignment: use proximity-based if available, else threshold
+            if nearest_track:
+                track = nearest_track
+            else:
+                track = 'upper' if cy < upper_track_y else 'lower'
 
             # Apply filters, recording rejection reason for diagnostics
             rejection = ''
@@ -1101,6 +1223,8 @@ class TrainDetector:
                 rejection = f'aspect({aspect:.2f})'
             elif fill_ratio < 0.7:
                 rejection = f'fill({fill_ratio:.2f}<0.7)'
+            elif track_lines is not None and not is_near:
+                rejection = f'proximity(d={track_dist}>{TRACK_PROXIMITY_MAX_DISTANCE})'
 
             if diagnostics:
                 diag_contours.append(ContourDiagnostic(
@@ -1108,7 +1232,8 @@ class TrainDetector:
                     bounding_area=bounding_area, aspect_ratio=aspect,
                     rectangularity=rectangularity, fill_ratio=fill_ratio,
                     accepted=not rejection, rejection_reason=rejection,
-                    track=track
+                    track=track, track_distance=track_dist,
+                    nearest_track=nearest_track
                 ))
 
             if rejection:
@@ -1121,7 +1246,8 @@ class TrainDetector:
             })
 
         # Add train-colored rectangles
-        symbols.extend(self._detect_train_colors(hsv, h, w, track_y_min, track_y_max, upper_track_y))
+        symbols.extend(self._detect_train_colors(
+            hsv, h, w, track_y_min, track_y_max, upper_track_y, track_lines))
 
         # Deduplicate
         symbols = sorted(symbols, key=lambda s: s['x'])
@@ -1134,13 +1260,16 @@ class TrainDetector:
             return unique, SymbolDiagnostics(
                 contours=diag_contours,
                 track_band=(track_y_min, track_y_max),
-                accepted_symbols=unique
+                accepted_symbols=unique,
+                track_lines=track_lines
             )
 
         return unique
 
-    def _detect_train_colors(self, hsv, h, w, track_y_min, track_y_max, upper_track_y):
+    def _detect_train_colors(self, hsv, h, w, track_y_min, track_y_max, upper_track_y, track_lines=None):
         """Detect train-colored rectangles."""
+        from lib.config import TRACK_PROXIMITY_MAX_DISTANCE
+
         symbols = []
         # Only detect yellow/gold train colors - exclude orange (used for track signals)
         train_colors = [
@@ -1165,8 +1294,15 @@ class TrainDetector:
                 aspect = cw / max(ch, 1)
                 if aspect < 1.5 or aspect > 4.0:
                     continue
+
+                # Proximity filter
+                is_near, nearest_track, _ = self._near_track_line(
+                    y, ch, track_lines, TRACK_PROXIMITY_MAX_DISTANCE)
+                if track_lines is not None and not is_near:
+                    continue
+
                 cx, cy = x + cw // 2, y + ch // 2
-                track = 'upper' if cy < upper_track_y else 'lower'
+                track = nearest_track if nearest_track else ('upper' if cy < upper_track_y else 'lower')
                 symbols.append({'x': cx, 'y': cy, 'track': track})
 
         return symbols
