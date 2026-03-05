@@ -461,6 +461,8 @@ HTML_TEMPLATE = '''
         <div class="overlay-controls">
             <label><input type="checkbox" id="showTrains" checked onchange="updateOverlay()"> Trains</label>
             <label><input type="checkbox" id="showRejected" onchange="updateOverlay()"> Rejected</label>
+            <label><input type="checkbox" id="showStations" onchange="updateOverlay()"> Stations</label>
+            <label><input type="checkbox" id="showSegments" onchange="updateOverlay()"> Segments</label>
             <select id="maskSelect" onchange="toggleMask()">
                 <option value="">No mask</option>
                 <option value="saturation">Saturation</option>
@@ -625,6 +627,53 @@ HTML_TEMPLATE = '''
                     // Proximity zone below (dashed)
                     svg += `<rect x="0" y="${tBot}" width="${imgWidth}" height="${proxDist}"
                         fill="none" stroke="rgba(0,200,200,0.25)" stroke-width="0.5" stroke-dasharray="4,4"/>`;
+                });
+            }
+
+            // Track segments (red/disabled segments highlighted)
+            const showSegments = document.getElementById('showSegments').checked;
+            if (showSegments && diagData.detection.segments && diagData.detection.stations) {
+                const stationMap = {};
+                diagData.detection.stations.forEach(s => { stationMap[s.code] = s; });
+                diagData.detection.segments.forEach(seg => {
+                    if (seg.color !== 'red') return;
+                    const fromSt = stationMap[seg.from_code];
+                    const toSt = stationMap[seg.to_code];
+                    if (!fromSt || !toSt) return;
+                    const x1 = Math.min(fromSt.x, toSt.x);
+                    const x2 = Math.max(fromSt.x, toSt.x);
+                    const isUpper = seg.key.endsWith('_upper');
+                    const trackY = isUpper
+                        ? (pipeline.track_lines ? pipeline.track_lines.upper : null)
+                        : (pipeline.track_lines ? pipeline.track_lines.lower : null);
+                    if (trackY) {
+                        const [tTop, tBot] = trackY;
+                        svg += `<rect x="${x1}" y="${tTop - 2}" width="${x2 - x1}" height="${tBot - tTop + 4}"
+                            fill="rgba(255,40,40,0.25)" stroke="rgba(255,60,60,0.7)" stroke-width="1.5"/>`;
+                    }
+                });
+            }
+
+            // Station platform indicators
+            const showStations = document.getElementById('showStations').checked;
+            if (showStations && diagData.detection.stations) {
+                diagData.detection.stations.forEach(st => {
+                    const colorMap = {
+                        'yellow': {fill: 'rgba(255,220,0,0.5)', stroke: '#fd0', text: '#fd0'},
+                        'blue':   {fill: 'rgba(60,120,255,0.25)', stroke: 'rgba(80,140,255,0.5)', text: 'rgba(80,140,255,0.6)'},
+                    };
+                    // Upper platform
+                    const uc = colorMap[st.upper_color] || colorMap['blue'];
+                    svg += `<rect x="${st.x - 14}" y="${st.upper_y - 6}" width="28" height="12" rx="2"
+                        fill="${uc.fill}" stroke="${uc.stroke}" stroke-width="${st.upper_color === 'yellow' ? 1.5 : 0.5}"/>`;
+                    // Lower platform
+                    const lc = colorMap[st.lower_color] || colorMap['blue'];
+                    svg += `<rect x="${st.x - 14}" y="${st.lower_y - 6}" width="28" height="12" rx="2"
+                        fill="${lc.fill}" stroke="${lc.stroke}" stroke-width="${st.lower_color === 'yellow' ? 1.5 : 0.5}"/>`;
+                    // Station code label (between tracks)
+                    svg += `<text x="${st.x}" y="${(st.upper_y + st.lower_y) / 2 + 3}" text-anchor="middle"
+                        fill="${(st.upper_color === 'yellow' || st.lower_color === 'yellow') ? '#fd0' : 'rgba(100,140,255,0.6)'}"
+                        font-size="8" font-weight="bold">${st.code}</text>`;
                 });
             }
 
