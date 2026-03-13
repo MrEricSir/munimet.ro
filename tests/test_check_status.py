@@ -618,6 +618,291 @@ class TestAtomicCacheWrites:
         mock_upload.assert_called_once()
 
 
+class TestImageDetectionSync:
+    """Tests that cached image and detection data always stay in sync.
+
+    Regression test for a bug where hysteresis held back the status string but
+    the cached image was always updated to the latest download. This caused the
+    dashboard to overlay old detection labels (train positions, station indicators)
+    onto a newer image, making labels appear offset.
+
+    The fix ensures reported_status.detection and reported_status.image_path are
+    always updated to match the latest image, even when hysteresis holds back the
+    status change.
+    """
+
+    def _make_status(self, status, timestamp='2026-03-01T12:00:00',
+                     image_path='/tmp/test.jpg', trains=None):
+        """Helper to build a status dict with configurable image_path and trains."""
+        return {
+            'status': status,
+            'description': f'{status} description',
+            'confidence': 0.99,
+            'probabilities': {'green': 0.99, 'yellow': 0.005, 'red': 0.005},
+            'detection': {
+                'trains': trains or [{'id': 'TT', 'x': 500}],
+                'delays_platforms': [],
+                'delays_segments': [],
+                'delays_bunching': [],
+                'delay_summaries': [],
+            },
+            'image_path': image_path,
+            'image_dimensions': {'width': 1860, 'height': 800},
+            'timestamp': timestamp,
+        }
+
+    def _run_check_status(self, cache_before, detection_status='green',
+                          download_filepath='/tmp/new_image.jpg',
+                          detection_trains=None):
+        """Run check_status and return (saved_caches, write_cached_image_calls)."""
+        from api import check_status as cs_module
+
+        saved_caches = []
+        image_calls = []
+
+        def fake_write_cache(data):
+            # Deep copy to capture the exact state at write time
+            saved_caches.append(json.loads(json.dumps(data)))
+            return True
+
+        def fake_write_cached_image(path):
+            image_calls.append(path)
+            return True
+
+        download_result = {
+            'success': True,
+            'filepath': download_filepath,
+            'width': 1860,
+            'height': 800,
+        }
+        detection_result = {
+            'status': detection_status,
+            'description': f'{detection_status} description',
+            'status_confidence': 0.99,
+            'probabilities': {'green': 0.005, 'yellow': 0.005, 'red': 0.99},
+            'detection': {
+                'trains': detection_trains or [{'id': 'NW', 'x': 700}],
+                'delays_platforms': [],
+                'delays_segments': [],
+                'delays_bunching': [],
+                'delay_summaries': [],
+            },
+        }
+
+        with patch.object(cs_module, 'download_muni_image', return_value=download_result), \
+             patch.object(cs_module, 'detect_muni_status', return_value=detection_result), \
+             patch.object(cs_module, 'read_cache', return_value=cache_before), \
+             patch.object(cs_module, 'write_cache', side_effect=fake_write_cache), \
+             patch.object(cs_module, 'write_cached_image', side_effect=fake_write_cached_image), \
+             patch.object(cs_module, 'write_cached_badge', return_value=True), \
+             patch.object(cs_module, 'notify_status_change', return_value={}), \
+             patch.object(cs_module, 'log_status_check', return_value=1), \
+             patch('lib.analytics.check_database_health', return_value={'exists': True, 'has_data': True, 'check_count': 1}), \
+             patch.object(cs_module, 'archive_image', return_value=False), \
+             patch.object(cs_module, 'should_archive_baseline', return_value=False):
+            cs_module.check_status(should_write_cache=True)
+
+        return saved_caches, image_calls
+
+    def test_hysteresis_hold_syncs_detection_with_latest_image(self):
+        """When hysteresis holds back a status change, detection data must
+        still be updated to match the latest image.
+
+        Scenario: reported=green, new detection=yellow, hysteresis holds green.
+        The cached reported_status should keep status='green' but have the
+        latest detection data (train positions from the new image).
+        """
+        old_trains = [{'id': 'TT', 'x': 500}]
+        new_trains = [{'id': 'NW', 'x': 700}, {'id': 'TT', 'x': 520}]
+
+        green_status = self._make_status(
+            'green', '2026-03-01T12:00:00',
+            image_path='/tmp/old_image.jpg', trains=old_trains,
+        )
+        cache = {
+            'statuses': [
+                self._make_status('green', '2026-03-01T12:00:00',
+                                  image_path='/tmp/old_image.jpg', trains=old_trains),
+            ],
+            'reported_status': green_status,
+            'best_status': green_status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'cached_at': '2026-03-01T12:00:00',
+            'last_successful_check': '2026-03-01T12:00:00',
+            'consecutive_failures': 0,
+            'last_error': None,
+            'last_notified_status': None,
+        }
+
+        saved, image_calls = self._run_check_status(
+            cache,
+            detection_status='yellow',
+            download_filepath='/tmp/new_image.jpg',
+            detection_trains=new_trains,
+        )
+
+        final = saved[-1]
+        reported = final['reported_status']
+
+        # Hysteresis should hold the status at green
+        assert reported['status'] == 'green', \
+            "Hysteresis should hold reported status at green"
+
+        # But detection data must match the new image
+        assert reported['image_path'] == '/tmp/new_image.jpg', \
+            "reported_status.image_path must match the latest cached image"
+        assert reported['detection']['trains'] == new_trains, \
+            "reported_status.detection must have the latest train positions"
+
+    def test_stable_status_uses_latest_detection(self):
+        """When status hasn't changed, reported_status should use latest
+        detection data (the common path via best_status)."""
+        old_trains = [{'id': 'TT', 'x': 500}]
+        new_trains = [{'id': 'TT', 'x': 510}]
+
+        green_status = self._make_status(
+            'green', '2026-03-01T12:00:00',
+            image_path='/tmp/old_image.jpg', trains=old_trains,
+        )
+        cache = {
+            'statuses': [
+                self._make_status('green', '2026-03-01T12:00:00',
+                                  image_path='/tmp/old_image.jpg', trains=old_trains),
+                self._make_status('green', '2026-03-01T11:57:00',
+                                  image_path='/tmp/older_image.jpg', trains=old_trains),
+            ],
+            'reported_status': green_status,
+            'best_status': green_status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'cached_at': '2026-03-01T12:00:00',
+            'last_successful_check': '2026-03-01T12:00:00',
+            'consecutive_failures': 0,
+            'last_error': None,
+            'last_notified_status': None,
+        }
+
+        saved, image_calls = self._run_check_status(
+            cache,
+            detection_status='green',
+            download_filepath='/tmp/new_image.jpg',
+            detection_trains=new_trains,
+        )
+
+        final = saved[-1]
+        reported = final['reported_status']
+
+        assert reported['status'] == 'green'
+        assert reported['image_path'] == '/tmp/new_image.jpg', \
+            "Stable status should use latest image"
+        assert reported['detection']['trains'] == new_trains, \
+            "Stable status should use latest detection data"
+
+    def test_image_and_reported_detection_stay_paired_across_runs(self):
+        """Multi-run test: detection data in reported_status must always
+        match the cached image, even across consecutive hysteresis holds.
+
+        Run 1: green → yellow detected, hysteresis holds green
+        Run 2: another yellow detected, hysteresis still holds green
+        Each run must sync detection data with the latest image.
+        """
+        # Initial state: stable green
+        green_status = self._make_status(
+            'green', '2026-03-01T12:00:00',
+            image_path='/tmp/image_0.jpg',
+            trains=[{'id': 'TT', 'x': 500}],
+        )
+        cache = {
+            'statuses': [
+                green_status,
+                self._make_status('green', '2026-03-01T11:57:00',
+                                  image_path='/tmp/image_prev.jpg'),
+            ],
+            'reported_status': green_status,
+            'best_status': green_status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'cached_at': '2026-03-01T12:00:00',
+            'last_successful_check': '2026-03-01T12:00:00',
+            'consecutive_failures': 0,
+            'last_error': None,
+            'last_notified_status': None,
+        }
+
+        # Run 1: detect yellow, hysteresis holds green
+        run1_trains = [{'id': 'NW', 'x': 700}]
+        saved_run1, _ = self._run_check_status(
+            cache,
+            detection_status='yellow',
+            download_filepath='/tmp/image_1.jpg',
+            detection_trains=run1_trains,
+        )
+        final_run1 = saved_run1[-1]
+        reported_run1 = final_run1['reported_status']
+
+        assert reported_run1['status'] == 'green', "Run 1: hysteresis holds green"
+        assert reported_run1['image_path'] == '/tmp/image_1.jpg', \
+            "Run 1: detection must match latest image"
+        assert reported_run1['detection']['trains'] == run1_trains
+
+        # Run 2: detect yellow again, hysteresis may still hold
+        run2_trains = [{'id': 'NW', 'x': 720}]
+        saved_run2, _ = self._run_check_status(
+            final_run1,
+            detection_status='yellow',
+            download_filepath='/tmp/image_2.jpg',
+            detection_trains=run2_trains,
+        )
+        final_run2 = saved_run2[-1]
+        reported_run2 = final_run2['reported_status']
+
+        # Detection data must match image_2, not image_1 or image_0
+        assert reported_run2['image_path'] == '/tmp/image_2.jpg', \
+            "Run 2: detection must match latest image, not stale"
+        assert reported_run2['detection']['trains'] == run2_trains, \
+            "Run 2: train positions must be from the latest detection"
+
+    def test_cached_image_path_matches_reported_detection(self):
+        """The image uploaded via write_cached_image must be the same one
+        whose detection data is in reported_status."""
+        old_trains = [{'id': 'TT', 'x': 500}]
+        new_trains = [{'id': 'NW', 'x': 700}]
+
+        green_status = self._make_status(
+            'green', '2026-03-01T12:00:00',
+            image_path='/tmp/old_image.jpg', trains=old_trains,
+        )
+        cache = {
+            'statuses': [green_status],
+            'reported_status': green_status,
+            'best_status': green_status,
+            'pending_status': None,
+            'pending_streak': 0,
+            'cached_at': '2026-03-01T12:00:00',
+            'last_successful_check': '2026-03-01T12:00:00',
+            'consecutive_failures': 0,
+            'last_error': None,
+            'last_notified_status': None,
+        }
+
+        saved, image_calls = self._run_check_status(
+            cache,
+            detection_status='yellow',
+            download_filepath='/tmp/new_image.jpg',
+            detection_trains=new_trains,
+        )
+
+        final = saved[-1]
+        reported = final['reported_status']
+
+        # The image that was cached must match what reported_status references
+        assert len(image_calls) == 1
+        assert image_calls[0] == reported['image_path'], \
+            f"Cached image ({image_calls[0]}) must match " \
+            f"reported_status.image_path ({reported['image_path']})"
+
+
 class TestPerChannelTracking:
     """Tests for per-channel notification tracking in check_status."""
 

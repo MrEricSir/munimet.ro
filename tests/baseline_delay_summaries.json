@@ -207,6 +207,17 @@
         "Westbound delay at Forest Hill",
         "Westbound backup at West Portal (7 trains)"
       ]
+    },
+    "muni_snapshot_20260227_133407_transition.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay at Castro",
+        "Eastbound service not running between Montgomery and Embarcadero"
+      ]
+    },
+    "muni_snapshot_20260227_134304_transition.jpg": {
+      "status": "green",
+      "delay_summaries": []
     }
   }
 }

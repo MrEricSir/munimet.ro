@@ -216,6 +216,16 @@ def check_status(should_write_cache=False, interval_seconds=None):
         pending_status = hysteresis_result['pending_status']
         pending_streak = hysteresis_result['pending_streak']
 
+        # Always sync reported_status detection data with the latest image.
+        # Hysteresis may hold back the status string (green/yellow/red), but
+        # the detection overlay (train positions, labels) must match the
+        # currently cached image to avoid label/image mismatch on the dashboard.
+        if reported_status.get('image_path') != new_status['image_path']:
+            reported_status = dict(reported_status)
+            reported_status['detection'] = new_status['detection']
+            reported_status['image_path'] = new_status['image_path']
+            reported_status['image_dimensions'] = new_status['image_dimensions']
+
         # Log the smoothing calculation
         all_statuses_str = ', '.join(s['status'] for s in statuses[:3])
         best_str = best_status['status']
