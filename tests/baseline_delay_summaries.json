@@ -218,6 +218,12 @@
     "muni_snapshot_20260227_134304_transition.jpg": {
       "status": "green",
       "delay_summaries": []
+    },
+    "muni_snapshot_20260304_191023.jpg": {
+      "status": "yellow",
+      "delay_summaries": [
+        "Eastbound delay from Powell to Embarcadero"
+      ]
     }
   }
 }

@@ -43,6 +43,7 @@ KNOWN_STATUSES = [
     ("IMG_9794.jpg", "yellow", "Multiple platforms in hold"),
     ("muni-westbound-castro-red-track.jpg", "yellow", "Westbound red track segment at Castro"),
     ("muni_snapshot_20260223_004333_baseline.jpg", "yellow", "2 platforms in hold - Van Ness and Embarcadero"),
+    ("muni_snapshot_20260304_191023.jpg", "yellow", "3 eastbound holds (Powell, Montgomery, Embarcadero) + Chinatown northbound hold"),
 
     # Not operating (red)
     ("muni_snapshot_20251207_021407.jpg", "red", "Late night - not operating"),
@@ -525,6 +526,7 @@ class TestDelaySummaryBaseline:
         ("muni_snapshot_20260223_000434_baseline.jpg", ["Southbound delay at Chinatown"]),
         ("muni_snapshot_20260223_004333_baseline.jpg", ["Eastbound delay at Van Ness", "Westbound delay at Embarcadero"]),
         ("muni_snapshot_20260223_011620_baseline.jpg", ["Southbound delay at Chinatown"]),
+        ("muni_snapshot_20260304_191023.jpg", ["Eastbound delay from Powell to Embarcadero"]),
     ])
     def test_delay_summaries_match_baseline(self, image_name, expected):
         """Test that delay summaries match baseline for images with delays.
