@@ -44,6 +44,7 @@ KNOWN_STATUSES = [
     ("muni-westbound-castro-red-track.jpg", "yellow", "Westbound red track segment at Castro"),
     ("muni_snapshot_20260223_004333_baseline.jpg", "yellow", "2 platforms in hold - Van Ness and Embarcadero"),
     ("muni_snapshot_20260304_191023.jpg", "yellow", "3 eastbound holds (Powell, Montgomery, Embarcadero) + Chinatown northbound hold"),
+    ("muni_snapshot_20260603_175712_backup.jpg", "yellow", "Train backup at CCL/POL/MOL - holds at West Portal, Van Ness, Embarcadero, Powell"),
 
     # Not operating (red)
     ("muni_snapshot_20251207_021407.jpg", "red", "Late night - not operating"),

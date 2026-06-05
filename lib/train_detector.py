@@ -911,7 +911,6 @@ class TrainDetector:
         if len(colored_cols) == 0:
             return trains
 
-        # Group into regions
         groups = self._group_columns(colored_cols)
 
         for x1, x2 in groups:
@@ -1343,6 +1342,8 @@ class TrainDetector:
         combined = combined.replace('|', '1').replace('!', '1')
         combined = combined.replace('O', '0').replace('Q', '0')
         combined = combined.replace('Z', '7')
+        combined = combined.replace('IF', '7')  # 7 misread as 'if' by Tesseract in vertical text
+        combined = re.sub(r'(?<=\d)\)(?=[A-Z])', '5', combined)  # ) misread of 5 only between digit and letter
         combined = combined.replace('(', '').replace(')', '').replace(' ', '')
 
         # OCR sometimes reads digits as 'RE' - could be 5 or 7
@@ -1529,4 +1530,10 @@ class TrainDetector:
             diff = sum(c1 != c2 for c1, c2 in zip(id1, id2))
             if diff <= 2:
                 return True
+        # Strip optional prefix letter and check if one is a prefix of the other's core
+        # (handles cases where suffix is missing or prefix letter is misread, e.g. E2075 vs F2075NN)
+        core1 = id1[1:] if id1 and id1[0].isalpha() else id1
+        core2 = id2[1:] if id2 and id2[0].isalpha() else id2
+        if core1 and core2 and (core1.startswith(core2) or core2.startswith(core1)):
+            return True
         return False
