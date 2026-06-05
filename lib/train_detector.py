@@ -1530,10 +1530,4 @@ class TrainDetector:
             diff = sum(c1 != c2 for c1, c2 in zip(id1, id2))
             if diff <= 2:
                 return True
-        # Strip optional prefix letter and check if one is a prefix of the other's core
-        # (handles cases where suffix is missing or prefix letter is misread, e.g. E2075 vs F2075NN)
-        core1 = id1[1:] if id1 and id1[0].isalpha() else id1
-        core2 = id2[1:] if id2 and id2[0].isalpha() else id2
-        if core1 and core2 and (core1.startswith(core2) or core2.startswith(core1)):
-            return True
         return False

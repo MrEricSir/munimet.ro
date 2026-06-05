@@ -88,7 +88,7 @@ if [ -f "$PID_DIR/api.pid" ]; then
 
         # Test health endpoint
         echo "  Testing /health..."
-        if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+        if curl -sf http://localhost:8001/health > /dev/null 2>&1; then
             echo "  ✓ Health check passed"
         else
             echo "  ❌ Health check failed"
@@ -97,16 +97,16 @@ if [ -f "$PID_DIR/api.pid" ]; then
 
         # Test status endpoint
         echo "  Testing /status..."
-        if curl -sf http://localhost:8000/status > /dev/null 2>&1; then
+        if curl -sf http://localhost:8001/status > /dev/null 2>&1; then
             echo "  ✓ Status endpoint responding"
         else
             echo "  ⚠️  Status endpoint error (cache may be empty)"
         fi
 
         # Show port binding
-        PORT_INFO=$(lsof -nP -iTCP:8000 -sTCP:LISTEN 2>/dev/null | tail -1 || echo "")
+        PORT_INFO=$(lsof -nP -iTCP:8001 -sTCP:LISTEN 2>/dev/null | tail -1 || echo "")
         if [ -n "$PORT_INFO" ]; then
-            echo "  ✓ Listening on port 8000"
+            echo "  ✓ Listening on port 8001"
         fi
     else
         echo "❌ API server not running (stale PID)"
@@ -150,10 +150,10 @@ echo ""
 
 # Summary
 if ps -p $(cat "$PID_DIR/api.pid" 2>/dev/null || echo "0") > /dev/null 2>&1; then
-    echo "🌐 Local Dashboard: http://localhost:8000"
+    echo "🌐 Local Dashboard: http://localhost:8001"
     echo ""
     echo "Quick commands:"
-    echo "  Test API:       curl http://localhost:8000/status"
+    echo "  Test API:       curl http://localhost:8001/status"
     echo "  View logs:      tail -f $RUNTIME_DIR/api-error.log"
     echo "  Stop services:  ./deploy/local/stop.sh"
 fi

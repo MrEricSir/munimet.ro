@@ -50,8 +50,8 @@ cd deploy/local
 ./start.sh   # Starts cache writer + API server
 
 # Access services
-open http://localhost:8000              # Landing page
-open http://localhost:8000/dashboard    # Status dashboard
+open http://localhost:8001              # Landing page
+open http://localhost:8001/dashboard    # Status dashboard
 
 # Cloud deployment (Google Cloud Run)
 cd deploy/cloud

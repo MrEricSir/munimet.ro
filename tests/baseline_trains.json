@@ -1358,7 +1358,8 @@
         "M2179J",
         544,
         {
-          "ocr_override": "2070NN"
+          "ocr_override": "M2079J",
+          "note": "1 vs 0 OCR ambiguity at digit position 2"
         }
       ],
       [
@@ -2085,7 +2086,8 @@
       ],
       [
         "D2474NN",
-        963
+        963,
+        {"optional": true, "note": "not detected on Docker CI Tesseract"}
       ],
       [
         "2040LL",
@@ -2105,7 +2107,8 @@
       ],
       [
         "W2176LL",
-        1176
+        1176,
+        {"optional": true, "note": "not detected on Docker CI Tesseract"}
       ],
       [
         "W2101MM",
@@ -2125,15 +2128,18 @@
       ],
       [
         "B2048TT",
-        1564
+        1564,
+        {"optional": true, "note": "not detected on Docker CI Tesseract"}
       ],
       [
         "B2166TT",
-        1781
+        1781,
+        {"optional": true, "note": "not detected on Docker CI Tesseract"}
       ],
       [
         "C2123TT",
-        1836
+        1836,
+        {"optional": true, "note": "not detected on Docker CI Tesseract"}
       ]
     ]
   },

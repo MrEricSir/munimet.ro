@@ -59,7 +59,7 @@ sleep 5
 echo "[2/2] Starting API server..."
 # Start API in cache-only mode (fast responses)
 ENABLE_FALLBACK=false nohup python -m gunicorn api.api:app \
-    --bind 0.0.0.0:8000 \
+    --bind 0.0.0.0:8001 \
     --timeout 120 \
     --workers 2 \
     --access-logfile artifacts/runtime/api-access.log \
@@ -75,7 +75,7 @@ echo ""
 # Wait for API to be ready
 echo "  Waiting for API to be ready..."
 for i in {1..10}; do
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+    if curl -sf http://localhost:8001/health > /dev/null 2>&1; then
         echo "  ✓ API is responding"
         break
     fi
@@ -95,9 +95,9 @@ echo "  Cache Writer: PID $CACHE_WRITER_PID"
 echo "  API Server:   PID $API_PID"
 echo ""
 echo "Access points:"
-echo "  Dashboard:    http://localhost:8000"
-echo "  Health:       http://localhost:8000/health"
-echo "  Status API:   http://localhost:8000/status"
+echo "  Dashboard:    http://localhost:8001"
+echo "  Health:       http://localhost:8001/health"
+echo "  Status API:   http://localhost:8001/status"
 echo ""
 echo "Management:"
 echo "  View status:  ./deploy/local/verify.sh"

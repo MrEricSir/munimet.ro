@@ -50,14 +50,14 @@ python check_status.py
 python check_status.py --continuous --interval 60
 
 # Run API server (standalone mode, ~11s per request)
-gunicorn api:app --bind 0.0.0.0:8000 --timeout 120
+gunicorn api:app --bind 0.0.0.0:8001 --timeout 120
 
 # Recommended: Cache writer + lightweight API
 # Terminal 1: Start cache writer
 python check_status.py --continuous --write-cache --interval 60
 
 # Terminal 2: Start lightweight API (cache-only mode)
-ENABLE_FALLBACK=false gunicorn api:app --bind 0.0.0.0:8000 --timeout 120
+ENABLE_FALLBACK=false gunicorn api:app --bind 0.0.0.0:8001 --timeout 120
 ```
 
 ## API Endpoints
@@ -305,8 +305,8 @@ tail -f artifacts/runtime/api-error.log
 ./deploy/local/verify.sh
 
 # Test endpoints
-curl http://localhost:8000/health
-curl http://localhost:8000/status
+curl http://localhost:8001/health
+curl http://localhost:8001/status
 ```
 
 ### Cloud Run
@@ -338,7 +338,7 @@ curl https://munimetro-api-438243686292.us-west1.run.app/status
 - `CLOUD_RUN`: `true` - Use Google Cloud Storage cache
 - `GCS_BUCKET`: `munimetro-cache` - Cache bucket name
 - `ENABLE_FALLBACK`: `false` - Cache-only mode (no fallback)
-- `PORT`: `8000` - HTTP server port
+- `PORT`: `8001` - HTTP server port
 
 ### Webhooks
 
@@ -377,8 +377,8 @@ tail -20 artifacts/runtime/api-error.log
 ### Port Already in Use
 
 ```bash
-# Find process using port 8000
-lsof -i :8000
+# Find process using port 8001
+lsof -i :8001
 
 # Terminate process
 kill PID

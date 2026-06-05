@@ -25,7 +25,7 @@ See [CONFIGURATION.md](../CONFIGURATION.md) for actual deployment configuration 
 ./deploy/local/run-reports.sh  # Regenerate analytics reports
 ```
 
-Access: http://localhost:8000
+Access: http://localhost:8001
 
 ### Cloud Run (Production)
 
@@ -61,7 +61,7 @@ artifacts/runtime/cache/latest_status.json
   ↑ reads JSON (~30ms)
 Terminal 2: API Server (gunicorn)
   ↓ serves to users
-Browser: http://localhost:8000
+Browser: http://localhost:8001
 ```
 
 ### Prerequisites
@@ -138,9 +138,9 @@ tail -f artifacts/runtime/api-error.log
 ./deploy/local/setup.sh
 ```
 
-**Port 8000 already in use:**
+**Port 8001 already in use:**
 ```bash
-lsof -i :8000
+lsof -i :8001
 kill <PID>
 ```
 
