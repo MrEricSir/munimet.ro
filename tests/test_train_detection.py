@@ -61,6 +61,11 @@ TRAIN_FREE_IMAGES = [
     for name, data in BASELINE_DATA["train_free_images"].items()
 ]
 
+# Human-readable test IDs (filename stem) so you can run a single image with:
+#   pytest -k "muni_snapshot_20260603"
+IMAGES_WITH_TRAINS_IDS = [p.stem for p, _ in IMAGES_WITH_TRAINS]
+TRAIN_FREE_IMAGES_IDS = [p.stem for p, _ in TRAIN_FREE_IMAGES]
+
 
 @pytest.fixture
 def detector():
@@ -72,7 +77,7 @@ class TestTrainDetectionBaseline:
     """Tests to ensure we don't regress from current detection baseline."""
 
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
-    @pytest.mark.parametrize("img_path,baseline", IMAGES_WITH_TRAINS)
+    @pytest.mark.parametrize("img_path,baseline", IMAGES_WITH_TRAINS, ids=IMAGES_WITH_TRAINS_IDS)
     def test_baseline_trains_detected(self, detector, img_path, baseline):
         """Ensure all baseline trains are detected (including via OCR overrides).
 
@@ -118,7 +123,7 @@ class TestTrainDetectionBaseline:
         assert not missing, f"Missing baseline trains in {img_path.name}: {missing}"
 
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
-    @pytest.mark.parametrize("img_path,baseline", IMAGES_WITH_TRAINS)
+    @pytest.mark.parametrize("img_path,baseline", IMAGES_WITH_TRAINS, ids=IMAGES_WITH_TRAINS_IDS)
     def test_baseline_train_positions(self, detector, img_path, baseline):
         """Ensure baseline trains are detected at approximately correct positions."""
         if not img_path.exists():
@@ -176,7 +181,7 @@ class TestFalsePositives:
     """Tests to ensure false positives don't increase."""
 
     @pytest.mark.skipif(not TESSERACT_AVAILABLE, reason="Tesseract not installed")
-    @pytest.mark.parametrize("img_path,max_allowed", TRAIN_FREE_IMAGES)
+    @pytest.mark.parametrize("img_path,max_allowed", TRAIN_FREE_IMAGES, ids=TRAIN_FREE_IMAGES_IDS)
     def test_false_positives_bounded(self, detector, img_path, max_allowed):
         """Ensure false positives in train-free images stay within bounds."""
         if not img_path.exists():
@@ -268,6 +273,62 @@ class TestConfidenceLevels:
                 assert train["confidence"] == "low", (
                     f"UNKNOWN train should be low confidence: {train}"
                 )
+
+
+class TestOCRExtraction:
+    """Unit tests for _extract_train_ids — fast, no image loading or Tesseract needed.
+
+    These directly test the string-manipulation logic and catch OCR correction
+    regressions immediately, without running the slow full-image test suite.
+    Add a test here whenever you add or change an OCR correction rule.
+    """
+
+    @pytest.fixture
+    def detector(self):
+        return TrainDetector()
+
+    def test_basic_double_suffix(self, detector):
+        assert detector._extract_train_ids("M\n2\n0\n3\n4\nL\nL\n") == ["M2034LL"]
+
+    def test_basic_single_suffix(self, detector):
+        assert detector._extract_train_ids("D\n2\n0\n7\n3\nJ\n") == ["D2073J"]
+
+    def test_if_to_7(self, detector):
+        """Tesseract misreads 7 as 'IF' in vertical text; combined with ) → 5 gives F2075NN."""
+        result = detector._extract_train_ids("VNR\nF\n2\n0\nIF\n)\nN\nN\n")
+        assert "F2075NN" in result
+
+    def test_paren_to_5_between_digit_and_letter(self, detector):
+        """Close-paren immediately after a digit and before a letter converts to 5."""
+        result = detector._extract_train_ids("F\n2\n0\n7\n)\nN\nN\n")
+        assert "F2075NN" in result
+
+    def test_paren_stripped_when_preceded_by_letter(self, detector):
+        """Close-paren NOT preceded by a digit is stripped, not converted to 5.
+
+        Regression: the old blanket ) → 5 replacement turned M2171M's OCR
+        ('M21TI)M') into 'M21TI5M', which couldn't be parsed correctly.
+        """
+        # Raw OCR: '.\nWER\nM\n2\n1\nT\ni)\nM\n' — ) follows 'I', not a digit
+        result = detector._extract_train_ids(".\nWER\nM\n2\n1\nT\ni)\nM\n")
+        assert any("2171" in r for r in result)
+        assert not any("5" in r for r in result)
+
+    def test_station_label_stripped(self, detector):
+        """Station labels (VNR, WER, etc.) are removed before ID extraction."""
+        result = detector._extract_train_ids("VNR\nD\n2\n0\n7\n3\nJ\n")
+        assert "D2073J" in result
+        assert not any("VNR" in r for r in result)
+
+    def test_double_leading_letter_corrected(self, detector):
+        """OCR sometimes doubles the prefix letter in vertical text."""
+        result = detector._extract_train_ids("MM\n2\n0\n3\n4\nL\nL\n")
+        assert "M2034LL" in result
+
+    def test_o_to_zero(self, detector):
+        """Letter O is corrected to digit 0 in the numeric part."""
+        result = detector._extract_train_ids("M\n2\nO\n3\n4\nL\nL\n")
+        assert "M2034LL" in result
 
 
 if __name__ == "__main__":

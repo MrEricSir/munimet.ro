@@ -192,6 +192,7 @@ munimet.ro/
 - **[Deployment Guide](deploy/README.md)** - Local and cloud deployment instructions
 - **[API Documentation](api/README.md)** - API endpoints and configuration
 - **[Testing](tests/README.md)** - Automated test suite
+- **[Detection Fix Workflow](docs/detection-fix-workflow.md)** - How to investigate detection failures, add test images, and fix OCR/symbol issues
 
 ## Architecture
 
@@ -303,10 +304,15 @@ Follow [@munimetro.bsky.social](https://bsky.app/profile/munimetro.bsky.social) 
 ## Development Workflow
 
 1. **Collect Data** - Run `download_muni_image.py` periodically
-2. **Test Detection** - Use `scripts/detection_viewer.py` to visualize detection
-3. **Run Tests** - Execute `pytest tests/` to verify detection accuracy
-4. **Test Locally** - Deploy with `./deploy/local/setup.sh && ./deploy/local/start.sh`
-5. **Deploy Cloud** - Deploy to Cloud Run with `./deploy/cloud/deploy-services.sh`
+2. **Test Detection** - Use `scripts/diagnostic_viewer.py` to visualize and diagnose detection
+3. **Inspect OCR** - Use `scripts/inspect-ocr.py <image> <x>` to see raw Tesseract output at a position
+4. **Run Tests** - Execute `pytest tests/` to verify detection accuracy
+   - Target a single image: `pytest tests/test_train_detection.py -k "snapshot_name"`
+   - Fast OCR unit tests only: `pytest tests/test_train_detection.py::TestOCRExtraction`
+5. **Test Locally** - Deploy with `./deploy/local/setup.sh && ./deploy/local/start.sh`
+6. **Deploy Cloud** - Deploy to Cloud Run with `./deploy/cloud/deploy-services.sh`
+
+See **[Detection Fix Workflow](docs/detection-fix-workflow.md)** for the full process of investigating failures, adding test images, and fixing detection bugs.
 
 ## Technology Stack
 
