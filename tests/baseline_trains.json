@@ -2145,6 +2145,19 @@
         1836,
         {"optional": true, "note": "not detected on Docker CI Tesseract"}
       ]
+    ],
+    "muni_snapshot_colored_labels.jpg": [
+      ["2039X", 25, {"note": "green colored label - fixed 2026-06-06"}],
+      ["W2163LL", 233],
+      ["M2129LL", 246],
+      ["D2038NN", 535, {"note": "yellow colored label - fixed 2026-06-06"}],
+      ["W2027MM", 643],
+      ["W2125KK", 893],
+      ["M2074KK", 950],
+      ["M2065L", 977],
+      ["1779MM", 1054],
+      ["M2185J", 1181],
+      ["2079X", 1855, {"optional": true, "note": "right-edge train, environment-sensitive"}]
     ]
   },
   "train_free_images": {

@@ -31,6 +31,7 @@ KNOWN_STATUSES = [
     ("muni_snapshot_20260211_084511.jpg", "green", "Normal morning operation - 13+ trains including KK at Embarcadero, TT at Union Square"),
     ("muni_snapshot_20260211_094211.jpg", "green", "Normal morning operation - 16 trains, missing LL between Church and Van Ness lower"),
     ("muni_snapshot_20260211_094811.jpg", "green", "Normal morning operation - missing LL at Castro, NN+MM at Embarcadero, KK between Powell and Civic Center"),
+    ("muni_snapshot_colored_labels.jpg", "green", "Normal operation with green and yellow colored train labels"),
     ("muni_snapshot_20260223_000137_baseline.jpg", "green", "Normal late night operation - 12 trains, 1 hold at Chinatown"),
     ("muni_snapshot_20260223_000434_baseline.jpg", "green", "Normal late night operation - 13 trains, 1 hold at Chinatown"),
     ("muni_snapshot_20260223_010732_baseline.jpg", "green", "Normal late night operation - 16 trains"),

@@ -944,16 +944,16 @@ class TrainDetector:
             if height / max(width, 1) < 2.5:
                 continue
 
-            # Extract and OCR the colored mask region
+            # Extract and OCR the colored region using saturation channel
             pad = 3
             roi_x1 = max(0, x1 - pad)
             roi_x2 = min(band_gray.shape[1], x2 + pad)
-            color_roi = colored_mask[y1:y2, roi_x1:roi_x2]
+            hsv_roi = band_hsv[y1:y2, roi_x1:roi_x2]
 
-            if color_roi.size == 0:
+            if hsv_roi.size == 0:
                 continue
 
-            train_id = self._ocr_color_mask(color_roi)
+            train_id = self._ocr_colored_sat(hsv_roi, hue_lo=15, hue_hi=85)
             if train_id:
                 center_x = (x1 + x2) // 2
                 trains.append({
@@ -1042,6 +1042,58 @@ class TrainDetector:
             return self._extract_train_id(text)
         except Exception:
             return None
+
+    def _ocr_colored_sat(self, hsv_roi, hue_lo=15, hue_hi=85, scale=5):
+        """OCR colored (yellow/green) train labels using the saturation channel.
+
+        Gray-image OCR misses colored labels because yellow/green text has very
+        low grayscale contrast with the gray background. The saturation channel
+        provides clean separation: colored pixels have high S, gray background S≈0.
+
+        Method: isolate hue-range pixels → invert saturation (high S → dark) →
+        threshold → LANCZOS scale → OCR.
+
+        Multiple thresholds are tried because optimal threshold varies by color:
+        - Lower thresholds (100) preserve more pixel coverage, giving cleaner 0
+          shapes in green labels (Otsu over-thresholds, fragmenting the digit).
+        - Higher thresholds (128) separate characters better for yellow labels
+          where some digits have lower saturation.
+        Returns the first threshold that yields a valid train ID.
+        """
+        hue = hsv_roi[:, :, 0]
+        sat = hsv_roi[:, :, 1].astype(np.float32)
+
+        # Zero out pixels outside the target hue range
+        hue_ok = (hue >= hue_lo) & (hue <= hue_hi)
+        s_isolated = np.where(hue_ok, sat, 0.0)
+
+        # Invert: colored text (high S) → dark; background (S≈0) → white
+        inverted = (255.0 - s_isolated).clip(0, 255).astype(np.uint8)
+
+        # Try fixed thresholds in this order, then Otsu as fallback.
+        # thresh=None means Otsu.
+        # 128 first: yellow labels read correctly at this level (0→G, 8→3 at
+        #   higher thresholds; 8 reads correctly at 128 after G→0 correction).
+        # 100 second: green labels need lower threshold to preserve 0 digit shape
+        #   (Otsu and 128 over-threshold, fragmenting the digit into noise chars).
+        for thresh in [128, 100, None]:
+            if thresh is None:
+                _, binary = cv2.threshold(inverted, 0, 255,
+                                          cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            else:
+                _, binary = cv2.threshold(inverted, thresh, 255,
+                                          cv2.THRESH_BINARY)
+
+            large = cv2.resize(binary, None, fx=scale, fy=scale,
+                               interpolation=cv2.INTER_LANCZOS4)
+            try:
+                text = pytesseract.image_to_string(large, config=OCR_CONFIG)
+                result = self._extract_train_id(text)
+                if result:
+                    return result
+            except Exception:
+                pass
+        return None
 
     def _detect_track_lines(self, hsv, h, w):
         """Detect upper and lower track line Y positions from cyan pixel density.
@@ -1340,9 +1392,10 @@ class TrainDetector:
         combined = combined.replace('[', '7').replace(']', '7')
         combined = combined.replace('+', 'TT')
         combined = combined.replace('|', '1').replace('!', '1')
-        combined = combined.replace('O', '0').replace('Q', '0')
+        combined = combined.replace('O', '0').replace('Q', '0').replace('G', '0')
         combined = combined.replace('Z', '7')
         combined = combined.replace('IF', '7')  # 7 misread as 'if' by Tesseract in vertical text
+        combined = combined.replace('&', '8').replace('@', '8')  # saturation-channel OCR misreads 8 as & or @
         combined = re.sub(r'(?<=\d)\)(?=[A-Z])', '5', combined)  # ) misread of 5 only between digit and letter
         combined = combined.replace('(', '').replace(')', '').replace(' ', '')
 

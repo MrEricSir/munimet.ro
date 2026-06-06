@@ -330,6 +330,30 @@ class TestOCRExtraction:
         result = detector._extract_train_ids("M\n2\nO\n3\n4\nL\nL\n")
         assert "M2034LL" in result
 
+    def test_amp_to_8_yellow_label(self, detector):
+        """Saturation-channel OCR of yellow labels reads 8 as & (ampersand).
+
+        D2038NN saturation-channel OCR consistently produces D2038NN with
+        '8' misread as '&' across scales 4x-6x.
+        """
+        result = detector._extract_train_ids("D\n2\n0\n3\n&\nN\nN\n")
+        assert "D2038NN" in result
+
+    def test_at_to_8_yellow_label(self, detector):
+        """Saturation-channel OCR of yellow labels reads 8 as @ at higher scales."""
+        result = detector._extract_train_ids("D\n2\n0\n3\n@\nN\nN\n")
+        assert "D2038NN" in result
+
+    def test_green_label_ocr(self, detector):
+        """Saturation-channel OCR of green labels: lowercase x is valid suffix."""
+        result = detector._extract_train_ids("2\n0\n3\n9\nx\nx\n")
+        assert "2039X" in result
+
+    def test_g_to_zero_yellow_label(self, detector):
+        """Saturation-channel OCR at threshold 128 misreads 0 as G for yellow labels."""
+        result = detector._extract_train_ids("D\n2\nG\n3\n8\nN\nN")
+        assert "D2038NN" in result
+
 
 if __name__ == "__main__":
     # Print current detections for updating baseline

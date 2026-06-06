@@ -232,6 +232,10 @@
         "Eastbound delay at Embarcadero",
         "Westbound delay from Embarcadero to Powell"
       ]
+    },
+    "muni_snapshot_colored_labels.jpg": {
+      "status": "green",
+      "delay_summaries": []
     }
   }
 }
