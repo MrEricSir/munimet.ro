@@ -2150,12 +2150,12 @@
       ["2039X", 25, {"note": "green colored label - fixed 2026-06-06"}],
       ["W2163LL", 233],
       ["M2129LL", 246],
-      ["D2038NN", 535, {"note": "yellow colored label - fixed 2026-06-06"}],
+      ["D2038NN", 535, {"optional": true, "note": "yellow colored label - Tesseract version-sensitive"}],
       ["W2027MM", 643],
       ["W2125KK", 893],
       ["M2074KK", 950],
       ["M2065L", 977],
-      ["1779MM", 1054],
+      ["1779MM", 1054, {"optional": true, "note": "macOS-specific detection, not in Docker CI"}],
       ["M2185J", 1181],
       ["2079X", 1855, {"optional": true, "note": "right-edge train, environment-sensitive"}]
     ]

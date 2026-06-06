@@ -491,9 +491,14 @@ class TrainDetector:
 
             trains.extend(track_trains)
 
-            # Also detect colored text labels (yellow, green, blue)
+            # Also detect colored text labels (yellow, green, blue).
+            # Only add colored trains that don't overlap with existing dark-channel
+            # detections (prevents colored labels from displacing nearby dark trains).
             colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
-            trains.extend(colored_trains)
+            for ct in colored_trains:
+                if not any(ct['track'] == t['track'] and abs(ct['x'] - t['x']) < 40
+                           for t in trains):
+                    trains.append(ct)
 
         return self._deduplicate(trains)
 
@@ -738,9 +743,14 @@ class TrainDetector:
 
                     trains.extend(found_from_splits)
 
-            # Also detect colored text labels (yellow, green, blue)
+            # Also detect colored text labels (yellow, green, blue).
+            # Only add colored trains that don't overlap with existing dark-channel
+            # detections (prevents colored labels from displacing nearby dark trains).
             colored_trains = self._detect_colored_labels(band, band_hsv, band_h, y_min, track)
-            trains.extend(colored_trains)
+            for ct in colored_trains:
+                if not any(ct['track'] == t['track'] and abs(ct['x'] - t['x']) < 40
+                           for t in trains):
+                    trains.append(ct)
 
         return self._deduplicate(trains)
 
@@ -1088,6 +1098,9 @@ class TrainDetector:
                                interpolation=cv2.INTER_LANCZOS4)
             try:
                 text = pytesseract.image_to_string(large, config=OCR_CONFIG)
+                # Saturation-channel OCR misreads 0 as G at threshold 128.
+                # Apply here (not globally) so dark-channel OCR is unaffected.
+                text = text.replace('G', '0')
                 result = self._extract_train_id(text)
                 if result:
                     return result
@@ -1392,7 +1405,7 @@ class TrainDetector:
         combined = combined.replace('[', '7').replace(']', '7')
         combined = combined.replace('+', 'TT')
         combined = combined.replace('|', '1').replace('!', '1')
-        combined = combined.replace('O', '0').replace('Q', '0').replace('G', '0')
+        combined = combined.replace('O', '0').replace('Q', '0')
         combined = combined.replace('Z', '7')
         combined = combined.replace('IF', '7')  # 7 misread as 'if' by Tesseract in vertical text
         combined = combined.replace('&', '8').replace('@', '8')  # saturation-channel OCR misreads 8 as & or @

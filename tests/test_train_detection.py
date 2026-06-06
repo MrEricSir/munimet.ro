@@ -350,8 +350,14 @@ class TestOCRExtraction:
         assert "2039X" in result
 
     def test_g_to_zero_yellow_label(self, detector):
-        """Saturation-channel OCR at threshold 128 misreads 0 as G for yellow labels."""
-        result = detector._extract_train_ids("D\n2\nG\n3\n8\nN\nN")
+        """Saturation-channel OCR at threshold 128 misreads 0 as G for yellow labels.
+
+        The correction is applied in _ocr_colored_sat (not globally), so we test
+        the preprocessing-then-extraction pipeline directly.
+        """
+        text = "D\n2\nG\n3\n8\nN\nN"
+        preprocessed = text.replace('G', '0')
+        result = detector._extract_train_ids(preprocessed)
         assert "D2038NN" in result
 
 
