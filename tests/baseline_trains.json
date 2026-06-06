@@ -882,8 +882,8 @@
         "F2044",
         793,
         {
-          "ocr_override": "F2044NN",
-          "note": "suffixless detection; CI Tesseract reads full suffix F2044NN"
+          "optional": true,
+          "note": "suffixless detection 14px from E2044NN (same train); CI Tesseract reads E2044NN directly instead"
         }
       ],
       [
